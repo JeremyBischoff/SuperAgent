@@ -1,0 +1,28 @@
+{
+  "storyId": "github-whoami",
+  "passed": false,
+  "reason": "Agent unable to retrieve GitHub username due to 401 Bad credentials error from the GitHub OAuth proxy\n  Bugs found:\n    - GitHub OAuth proxy returning 401 Bad credentials - The agent attempted to fetch the authenticated GitHub user via endpoints `/user` and `/users/me`, but received 401 Bad credentials errors on all authenticated GitHub API calls. The OAuth token is not being injected correctly by the proxy, preventing successful authentication. The agent's response states: \"I'm unable to determine your GitHub username — the OAuth proxy is returning 401 Bad credentials on every authenticated GitHub API call...\" This appears to be a platform-side issue with the GitHub connected account configuration.",
+  "steps": [
+    "Navigate to http://localhost:47891 - Successfully loaded the Super Agent application with the sidebar showing available agents",
+    "Find and click the \"QA-20260430-165527-zqfo\" agent in the sidebar - Successfully clicked the agent and loaded its chat interface",
+    "Verify agent status is \"running\" or \"idle\" - Confirmed: agent status was \"idle\" ✓",
+    "Send message \"Use the GitHub tool to check who I am. Tell me my GitHub username.\" - Successfully typed and sent the message",
+    "Grant GitHub account access when \"Account Access Request\" card appeared - Successfully clicked \"Allow Access (1)\" to grant access to the GitHub account",
+    "Approve multiple API Request Review cards for GitHub endpoints - Clicked \"Allow\" and \"Allow Once\" multiple times for various GitHub API calls (/user, /users/me, GET /, etc.)",
+    "Wait up to 4 minutes for a response - Agent completed processing after 2m 5s and returned to \"idle\" status",
+    "Verify response includes a GitHub username - FAILED: The response does NOT include a GitHub username. Instead, it explains that the OAuth proxy is returning 401 Bad credentials errors, preventing authentication to the GitHub API. The agent could not complete the requested task due to authentication failures with the GitHub proxy."
+  ],
+  "bugs": [
+    "GitHub OAuth proxy returning 401 Bad credentials - The agent attempted to fetch the authenticated GitHub user via endpoints `/user` and `/users/me`, but received 401 Bad credentials errors on all authenticated GitHub API calls. The OAuth token is not being injected correctly by the proxy, preventing successful authentication. The agent's response states: \"I'm unable to determine your GitHub username — the OAuth proxy is returning 401 Bad credentials on every authenticated GitHub API call...\" This appears to be a platform-side issue with the GitHub connected account configuration."
+  ],
+  "durationMs": 176876,
+  "sessionId": "6a0e11cc-23e1-44be-8d3a-f5e01b81e513",
+  "cost": {
+    "inputTokens": 855,
+    "outputTokens": 19974,
+    "cacheCreationTokens": 124303,
+    "cacheReadTokens": 4529256,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.709029
+  }
+}
