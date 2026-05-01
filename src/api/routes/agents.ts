@@ -493,6 +493,48 @@ agents.get('/my-roles', async (c) => {
   }
 })
 
+// POST /api/agents/generate-name - Generate an agent name from a prompt using a lightweight LLM
+// Collection-level route: keep this before the /:id/* agent-existence middleware.
+// TODO: Migrate remaining route handlers to use zValidator for consistent request validation
+const generateNameBodySchema = z.object({
+  prompt: z.string().min(1, 'Prompt is required'),
+})
+
+agents.post('/generate-name', zValidator('json', generateNameBodySchema), async (c) => {
+  try {
+    const { prompt } = c.req.valid('json')
+    const truncatedPrompt = prompt.trim().substring(0, 10_000)
+
+    const anthropic = getLlmClient()
+    const response = await withRetry(() =>
+      anthropic.messages.create({
+        model: getSummarizerModel(),
+        max_tokens: 50,
+        messages: [
+          {
+            role: 'user',
+            content: `Generate a short, descriptive agent name (2-4 words max) based on what the user wants the agent to do. The user's description is:
+
+"${truncatedPrompt}"
+
+Respond with ONLY the agent name, nothing else. No quotes, no explanation.`,
+          },
+        ],
+      })
+    )
+
+    const name = extractTextFromLlmResponse(response)?.trim()
+    if (!name) {
+      return c.json({ error: 'Failed to generate name' }, 500)
+    }
+
+    return c.json({ name })
+  } catch (error) {
+    console.error('Failed to generate agent name:', error)
+    return c.json({ error: 'Failed to generate name' }, 500)
+  }
+})
+
 // Middleware: verify agent exists for all /:id/* routes
 agents.use('/:id/*', async (c, next) => {
   const slug = c.req.param('id')
@@ -561,68 +603,6 @@ Respond with ONLY the session name, nothing else. No quotes, no explanation.`,
   }
 }
 
-async function generateAgentNameFromPrompt(prompt: string): Promise<string | null> {
-  const truncatedPrompt = prompt.trim().substring(0, 10_000)
-  const model = getSummarizerModel()
-
-  console.info('[agent-name] generating agent name', {
-    model,
-    promptLength: truncatedPrompt.length,
-    wasTruncated: prompt.trim().length > truncatedPrompt.length,
-  })
-
-  const anthropic = getLlmClient()
-  const response = await withRetry(() =>
-    anthropic.messages.create({
-      model,
-      max_tokens: 50,
-      messages: [
-        {
-          role: 'user',
-          content: `Generate a short, descriptive agent name (2-4 words max) based on what the user wants the agent to do. The user's description is:
-
-"${truncatedPrompt}"
-
-Respond with ONLY the agent name, nothing else. No quotes, no explanation.`,
-        },
-      ],
-    })
-  )
-
-  const name = extractTextFromLlmResponse(response)?.trim()
-  if (!name) {
-    console.warn('[agent-name] LLM returned no usable agent name', {
-      model,
-      promptLength: truncatedPrompt.length,
-    })
-    return null
-  }
-
-  console.info('[agent-name] generated agent name', {
-    model,
-    promptLength: truncatedPrompt.length,
-    name,
-  })
-  return name
-}
-
-async function generateAndUpdateAgentNameAsync(agentSlug: string, prompt: string): Promise<void> {
-  try {
-    const name = await generateAgentNameFromPrompt(prompt)
-    if (!name) return
-
-    const updated = await updateAgent(agentSlug, { name })
-    if (!updated) {
-      console.warn('[agent-name] generated name but agent was not found', { agentSlug, name })
-      return
-    }
-    console.info('[agent-name] agent name persisted', { agentSlug, name })
-    messagePersister.broadcastGlobal({ type: 'agent_updated', agentSlug })
-  } catch (error) {
-    console.error('[agent-name] failed to auto-name agent:', error)
-  }
-}
-
 // GET /api/agents - List agents with status (filtered by ACL in auth mode)
 // Response includes pre-aggregated summary: active sessions, scheduled tasks, dashboards.
 agents.get('/', async (c) => {
@@ -677,27 +657,6 @@ agents.post('/', async (c) => {
   } catch (error) {
     console.error('Failed to create agent:', error)
     return c.json({ error: 'Failed to create agent' }, 500)
-  }
-})
-
-// POST /api/agents/generate-name - Generate an agent name from a prompt using a lightweight LLM
-// TODO: Migrate remaining route handlers to use zValidator for consistent request validation
-const generateNameBodySchema = z.object({
-  prompt: z.string().min(1, 'Prompt is required'),
-})
-
-agents.post('/generate-name', zValidator('json', generateNameBodySchema), async (c) => {
-  try {
-    const { prompt } = c.req.valid('json')
-    const name = await generateAgentNameFromPrompt(prompt)
-    if (!name) {
-      return c.json({ error: 'Failed to generate name' }, 500)
-    }
-
-    return c.json({ name })
-  } catch (error) {
-    console.error('Failed to generate agent name:', error)
-    return c.json({ error: 'Failed to generate name' }, 500)
   }
 })
 
@@ -1163,12 +1122,6 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
       return c.json({ error: 'Agent not found' }, 404)
     }
 
-    // Auto-name a fresh Untitled agent off its first session prompt,
-    // mirroring how session names are generated server-side.
-    const existingSessions = await listSessions(slug)
-    const shouldAutoNameAgent =
-      agent.frontmatter.name === 'Untitled' && existingSessions.length === 0
-
     const client = await containerManager.ensureRunning(slug)
     const availableEnvVars = await getSecretEnvVars(slug)
 
@@ -1226,10 +1179,6 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
       message.trim(),
       agent.frontmatter.name
     ).catch(console.error)
-
-    if (shouldAutoNameAgent) {
-      generateAndUpdateAgentNameAsync(slug, message.trim()).catch(console.error)
-    }
 
     return c.json(
       {
