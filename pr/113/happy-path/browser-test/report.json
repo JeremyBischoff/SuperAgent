@@ -1,0 +1,24 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Browser Use feature - agent successfully opens a browser, navigates to a URL, retrieves page title, and reports it back with preview panel visible",
+  "steps": [
+    "Navigated to http://localhost:47891 — Page loaded successfully showing Super Agent application with agent list",
+    "Clicked agent \"QA-20260501-015416-9tqw\" in sidebar — Agent interface opened showing chat input field and configuration panels",
+    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" — Message displayed in input field",
+    "Clicked Send button — Message sent successfully, agent status changed to \"working\"",
+    "Waited for agent response with timeout of 10 seconds — Agent completed task in 7 seconds with response \"The page title is \"Example Domain\".\"",
+    "Verified response contains \"Example Domain\" — Confirmed: Response explicitly states 'The page title is \"Example Domain\".' and browser preview shows Example Domain page"
+  ],
+  "bugs": [],
+  "durationMs": 85751,
+  "sessionId": "069e70c1-a0fe-464f-83bc-d849815af99e",
+  "cost": {
+    "inputTokens": 369,
+    "outputTokens": 10578,
+    "cacheCreationTokens": 62228,
+    "cacheReadTokens": 1495314,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.280575
+  }
+}
