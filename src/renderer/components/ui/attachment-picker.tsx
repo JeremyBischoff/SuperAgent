@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { Button } from '@renderer/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { Plus, FileIcon, FolderOpen, Loader2 } from 'lucide-react'
+import { Paperclip, FileIcon, FolderOpen, Loader2 } from 'lucide-react'
 import { FileTypeIcon } from '@renderer/components/ui/file-type-icon'
 
 interface RecentFile {
@@ -107,7 +107,7 @@ export function AttachmentPicker({
             title="Add files"
             aria-label="Add files"
           >
-            <Plus className="h-4 w-4" />
+            <Paperclip className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
         <PopoverContent side="top" align={popoverAlign} className={`${showRecent ? 'w-64' : 'w-40'} p-1`}>

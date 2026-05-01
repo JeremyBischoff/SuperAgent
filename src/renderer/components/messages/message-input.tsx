@@ -5,6 +5,7 @@ import { getApiBaseUrl } from '@renderer/lib/env'
 import { useSendMessage, useUploadFile, useUploadFolder, useInterruptSession } from '@renderer/hooks/use-messages'
 import { useMessageStream } from '@renderer/hooks/use-message-stream'
 import { ArrowUp, Loader2, Square, WifiOff } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useIsOnline } from '@renderer/context/connectivity-context'
 import { useUser } from '@renderer/context/user-context'
 import { useAnalyticsTracking } from '@renderer/context/analytics-context'
@@ -17,7 +18,6 @@ import { ChatComposerBox } from './chat-composer-box'
 import { EffortSelector } from './effort-selector'
 import { useRenderTracker } from '@renderer/lib/perf'
 import type { EffortLevel } from '@shared/lib/container/types'
-import { cn } from '@shared/lib/utils'
 
 interface MessageInputProps {
   sessionId: string
@@ -135,15 +135,6 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, initialEffor
     }
   }
 
-  // Auto-resize textarea
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (textarea) {
-      textarea.style.height = 'auto'
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`
-    }
-  }, [composer.message])
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Slash command menu keyboard navigation
     if (slashMenuOpen && filteredCommands.length > 0) {
@@ -237,48 +228,56 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, initialEffor
         )}
         rightActions={(
           <>
-            <VoiceInputButton
-              voiceInput={composer.voiceInput}
-              message={composer.message}
-              disabled={isDisabled}
-            />
-            <Button
-              type={isActive ? 'button' : 'submit'}
-              variant={isActive ? 'outline' : 'default'}
-              size="icon"
-              className="relative h-[34px] w-[34px] transition-colors"
-              onClick={isActive ? handleInterrupt : undefined}
-              disabled={isActive ? interruptSession.isPending : sendMessage.isPending}
-              data-testid={isActive ? 'stop-button' : 'send-button'}
-              aria-label={isActive ? 'Stop message' : 'Send message'}
-            >
-              <span
-                className={cn(
-                  'absolute inset-0 flex items-center justify-center transition-opacity duration-200',
-                  isActive ? 'opacity-0' : 'opacity-100'
-                )}
-                aria-hidden={isActive}
-              >
-                {sendMessage.isPending || composer.isUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowUp className="h-4 w-4" />
-                )}
-              </span>
-              <span
-                className={cn(
-                  'absolute inset-0 flex items-center justify-center transition-opacity duration-200',
-                  isActive ? 'opacity-100' : 'opacity-0'
-                )}
-                aria-hidden={!isActive}
+            {isActive && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-[34px] w-[34px]"
+                onClick={handleInterrupt}
+                disabled={interruptSession.isPending}
+                data-testid="stop-button"
+                aria-label="Stop message"
               >
                 {interruptSession.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Square className="h-3.5 w-3.5 fill-current" />
                 )}
-              </span>
-            </Button>
+              </Button>
+            )}
+            <VoiceInputButton
+              voiceInput={composer.voiceInput}
+              message={composer.message}
+              disabled={isDisabled}
+            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="h-[34px] w-[34px]"
+                      disabled={!composer.canSubmit || sendMessage.isPending}
+                      data-testid="send-button"
+                      aria-label="Send message"
+                    >
+                      {sendMessage.isPending || composer.isUploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ArrowUp className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {isActive && (
+                  <TooltipContent>
+                    <p>Wait for the agent to finish</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </>
         )}
         footer={(

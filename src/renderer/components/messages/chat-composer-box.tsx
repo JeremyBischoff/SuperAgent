@@ -72,7 +72,7 @@ export function ChatComposerBox({
           autoFocus={autoFocus}
           data-testid={dataTestId}
           className={cn(
-            'w-full resize-none rounded-md bg-background pl-1 pr-4 py-0 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 max-h-[200px] overflow-y-auto',
+            'w-full resize-none rounded-md bg-background pl-1 pr-4 py-0 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 max-h-[200px] overflow-y-auto [field-sizing:content]',
             textareaClassName
           )}
         />

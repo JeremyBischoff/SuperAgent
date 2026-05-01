@@ -59,11 +59,11 @@ describe('MessageInput', () => {
     expect(screen.getByPlaceholderText('Type a message...')).toBeInTheDocument()
   })
 
-  it('shows an enabled send button when idle and empty', () => {
+  it('shows a disabled send button when idle and empty', () => {
     renderWithProviders(
       <MessageInput sessionId="s-1" agentSlug="agent-1" />
     )
-    expect(screen.getByTestId('send-button')).not.toBeDisabled()
+    expect(screen.getByTestId('send-button')).toBeDisabled()
   })
 
   it('shows stop button when session is active', () => {
@@ -90,13 +90,14 @@ describe('MessageInput', () => {
     expect(screen.getByTestId('message-input')).not.toBeDisabled()
   })
 
-  it('replaces send with stop button when active', () => {
+  it('shows both send and stop buttons when active, with send disabled', () => {
     mockStreamState.isActive = true
     renderWithProviders(
       <MessageInput sessionId="s-1" agentSlug="agent-1" />
     )
     expect(screen.getByTestId('stop-button')).toBeInTheDocument()
-    expect(screen.queryByTestId('send-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('send-button')).toBeInTheDocument()
+    expect(screen.getByTestId('send-button')).toBeDisabled()
   })
 
   it('does not submit message while agent is active', async () => {
