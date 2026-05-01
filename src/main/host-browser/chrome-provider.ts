@@ -26,18 +26,20 @@ const BROWSER_CANDIDATES: Record<string, BrowserCandidate> = {
   linux: {
     browser: 'chrome',
     paths: [
-      '/usr/bin/google-chrome-stable',
       '/usr/bin/google-chrome',
       '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome-stable',
       '/usr/bin/chromium',
       '/opt/google/chrome/chrome',
+      '/snap/bin/google-chrome',
+      '/snap/bin/chromium',
     ],
   },
   win32: {
     browser: 'chrome',
     paths: [
-      path.join(WIN_LOCAL_APP_DATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      path.join(WIN_LOCAL_APP_DATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     ],
   },
