@@ -830,7 +830,7 @@ function ApiKeyWarning({ onOpenSettings }: { onOpenSettings: () => void }) {
   if (!activeKeyStatus || activeKeyStatus.isConfigured) return null
 
   return (
-    <div className="px-2 pt-2">
+    <div className="px-2 pb-2">
       <Alert
         variant="destructive"
         className="py-2 cursor-pointer hover:bg-destructive/20 transition-colors"
@@ -968,60 +968,6 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
 
-      {!isOnline && (
-        <div className="px-2 pt-2">
-          <Alert variant="destructive" className="py-2 [&>svg]:top-2.5">
-            <WifiOff className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              No internet connection. Some features may be unavailable.
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
-
-      {isRuntimeUnavailable && (
-        <div className="px-2 pt-2">
-          <Alert
-            variant="destructive"
-            className="py-2 [&>svg]:top-2.5 cursor-pointer hover:bg-destructive/20 transition-colors"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-xs">
-              {readiness?.message || 'Container runtime not available.'}{' '}
-              <span className="underline">Open settings</span>
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
-
-      {isChecking && (
-        <div className="px-2 pt-2">
-          <Alert className="py-2 [&>svg]:top-2.5">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <AlertDescription className="text-xs">
-              {readiness?.message || 'Starting runtime...'}
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
-
-      {isPullingOrBuilding && (
-        <div className="px-2 pt-2">
-          <Alert className="py-2 [&>svg]:top-2.5">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <AlertDescription className="text-xs">
-              {readiness?.message || 'Preparing agent image...'}
-              {readiness?.pullProgress?.percent != null && (
-                <span className="ml-1">({readiness.pullProgress.percent}%)</span>
-              )}
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
-
-      <ApiKeyWarning onOpenSettings={() => setSettingsOpen(true)} />
-
       <ErrorBoundary compact>
         <SidebarContent className="overflow-visible">
           <SidebarGroup className="shrink-0 p-0">
@@ -1037,6 +983,62 @@ export function AppSidebar() {
             >
               SuperAgent
             </div>
+
+            {/* Status banners — render under the wordmark so they sit inside the
+                sidebar's content area rather than pushing the wordmark down. */}
+            {!isOnline && (
+              <div className="px-2 pb-2">
+                <Alert variant="destructive" className="py-2 [&>svg]:top-2.5">
+                  <WifiOff className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    No internet connection. Some features may be unavailable.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+
+            {isRuntimeUnavailable && (
+              <div className="px-2 pb-2">
+                <Alert
+                  variant="destructive"
+                  className="py-2 [&>svg]:top-2.5 cursor-pointer hover:bg-destructive/20 transition-colors"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    {readiness?.message || 'Container runtime not available.'}{' '}
+                    <span className="underline">Open settings</span>
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+
+            {isChecking && (
+              <div className="px-2 pb-2">
+                <Alert className="py-2 [&>svg]:top-2.5">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <AlertDescription className="text-xs">
+                    {readiness?.message || 'Starting runtime...'}
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+
+            {isPullingOrBuilding && (
+              <div className="px-2 pb-2">
+                <Alert className="py-2 [&>svg]:top-2.5">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <AlertDescription className="text-xs">
+                    {readiness?.message || 'Preparing agent image...'}
+                    {readiness?.pullProgress?.percent != null && (
+                      <span className="ml-1">({readiness.pullProgress.percent}%)</span>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
+
+            <ApiKeyWarning onOpenSettings={() => setSettingsOpen(true)} />
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
