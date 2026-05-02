@@ -13,6 +13,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from '@renderer/components/ui/sidebar'
+import { SettingsPageContainer, PageTitle } from '@renderer/components/layout/settings-page'
 import { isElectron, getPlatform } from '@renderer/lib/env'
 import { useFullScreen } from '@renderer/hooks/use-fullscreen'
 
@@ -44,22 +45,19 @@ export function SettingsPage({
   navTestIdPrefix = 'settings',
   'data-testid': dataTestId,
 }: SettingsPageProps) {
-  const allSections = groups.flatMap((g) => g.sections)
-  const sectionIds = allSections.map((s) => s.id)
-  const idsKey = sectionIds.join(',')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const stableIds = React.useMemo(() => sectionIds, [idsKey])
+  const allSections = React.useMemo(() => groups.flatMap((g) => g.sections), [groups])
+  const sectionIds = React.useMemo(() => allSections.map((s) => s.id), [allSections])
 
   const [active, setActive] = React.useState(() => {
-    if (initialSection && stableIds.includes(initialSection)) return initialSection
-    return stableIds[0] ?? ''
+    if (initialSection && sectionIds.includes(initialSection)) return initialSection
+    return sectionIds[0] ?? ''
   })
 
   React.useEffect(() => {
-    if (initialSection && stableIds.includes(initialSection)) {
+    if (initialSection && sectionIds.includes(initialSection)) {
       setActive(initialSection)
     }
-  }, [initialSection, stableIds])
+  }, [initialSection, sectionIds])
 
   const activeSection = allSections.find((s) => s.id === active)
   const isFullScreen = useFullScreen()
@@ -85,8 +83,8 @@ export function SettingsPage({
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          {groups.map((group, gi) => (
-            <SidebarGroup key={gi}>
+          {groups.map((group) => (
+            <SidebarGroup key={group.label ?? '__ungrouped__'}>
               {group.label && <SidebarGroupLabel>{group.label}</SidebarGroupLabel>}
               <SidebarGroupContent>
                 <SidebarMenu>
@@ -109,14 +107,11 @@ export function SettingsPage({
         </SidebarContent>
       </Sidebar>
       <SidebarInset className="min-w-0">
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-10 py-10">
-            <h1 className="text-2xl font-normal mb-8">{activeSection?.label}</h1>
-            <div className="flex flex-col gap-6">
-              {activeSection?.render()}
-            </div>
-          </div>
-        </div>
+        <div className="h-12 shrink-0 app-drag-region" />
+        <SettingsPageContainer>
+          <PageTitle title={activeSection?.label ?? 'Settings'} />
+          {activeSection?.render()}
+        </SettingsPageContainer>
       </SidebarInset>
     </SidebarProvider>
   )

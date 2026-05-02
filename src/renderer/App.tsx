@@ -11,6 +11,7 @@ import { AppSidebar } from './components/layout/app-sidebar'
 import { MainContent } from './components/layout/main-content'
 import { WindowControls } from './components/layout/window-controls'
 import { GlobalSettingsPage } from './components/settings/global-settings-page'
+import { ContainerSetupHandler } from './components/settings/container-setup-handler'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
 import { TrayNavigationHandler } from './components/tray-navigation-handler'
@@ -84,6 +85,7 @@ function AppShell() {
   return (
     <TrayNavigationHandler>
       <GlobalNotificationHandler />
+      <ContainerSetupHandler />
       {settingsOpen ? (
         <GlobalSettingsPage
           onClose={() => setSettingsOpen(false)}
