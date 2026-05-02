@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { AudioLines, Upload, ArrowUpFromLine, FileArchive, Loader2 } from 'lucide-react'
+import { AudioLines, Upload, ArrowDownToLine, FileArchive, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@renderer/components/ui/button'
 import { OptionCard } from '@renderer/components/ui/option-card'
@@ -25,8 +25,6 @@ export interface ImportResult {
   agent: ApiAgent
   hasOnboarding?: boolean
 }
-
-export const ONBOARDING_MESSAGE = 'This agent was just set up from a template. Please run the agent-onboarding skill to help me configure it.'
 
 export interface AgentCreationAidsProps {
   /** Called after the voice agent interview completes with its tool-call args. */
@@ -211,13 +209,12 @@ export function AgentCreationAids({ onVoiceResult, onImportComplete, className }
 
   return (
     <div className={className}>
-      <div className="flex flex-wrap items-start gap-3">
+      <div className="space-y-3">
         {hasVoiceConfigured && (
           <OptionCard
             title="Talk to SuperAgent for Ideas"
             description="Answer a few questions about your job — get a detailed prompt for your agent."
             icon={<AudioLines className="h-3 w-3" />}
-            iconTone="neutral"
             pill="5 min"
             buttonLabel="Start"
             onClick={startVoiceAgent}
@@ -227,8 +224,7 @@ export function AgentCreationAids({ onVoiceResult, onImportComplete, className }
         <OptionCard
           title="Import an Agent"
           description="Import an agent via a .zip file with bundled skills and optional env. variables."
-          icon={<ArrowUpFromLine className="h-3 w-3" />}
-          iconTone="neutral"
+          icon={<ArrowDownToLine className="h-3 w-3" />}
           pill="30 sec"
           buttonLabel="Import"
           onClick={() => setShowImportDialog(true)}
@@ -257,7 +253,7 @@ export function AgentCreationAids({ onVoiceResult, onImportComplete, className }
       <Dialog open={showImportDialog} onOpenChange={(open) => { if (!open) closeImportDialog() }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-medium">Import an agent</DialogTitle>
+            <DialogTitle className="font-medium">Import an Agent</DialogTitle>
             <DialogDescription className="sr-only">
               Upload a .zip template to create a new agent.
             </DialogDescription>
@@ -378,7 +374,7 @@ export function AgentCreationAids({ onVoiceResult, onImportComplete, className }
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={importTemplate.isPending}>
+              <Button type="submit" disabled={!importFile || importTemplate.isPending}>
                 {importTemplate.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

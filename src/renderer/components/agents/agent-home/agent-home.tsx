@@ -26,7 +26,8 @@ import { HomeConnections } from './home-connections'
 import { HomeVolumes } from './home-volumes'
 import { HomeBookmarks } from './home-bookmarks'
 import { useUpdateAgent, useDeleteAgent, type ApiAgent } from '@renderer/hooks/use-agents'
-import { AgentCreationAids, ONBOARDING_MESSAGE, type ImportResult } from '@renderer/components/agents/agent-creation-aids'
+import { AgentCreationAids, type ImportResult } from '@renderer/components/agents/agent-creation-aids'
+import { useStartOnboardingSession } from '@renderer/hooks/use-start-onboarding-session'
 import {
   useTypewriterPlaceholder,
   DEFAULT_AGENT_PROMPT_EXAMPLES,
@@ -45,7 +46,8 @@ interface AgentHomeProps {
 
 export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHomeProps) {
   useRenderTracker('AgentHome')
-  const { selectScheduledTask, selectAgent, selectSession, consumePendingDraft } = useSelection()
+  const { selectScheduledTask, selectAgent, consumePendingDraft } = useSelection()
+  const startOnboardingSession = useStartOnboardingSession()
   const { canUseAgent, canAdminAgent } = useUser()
   const isViewOnly = !canUseAgent(agent.slug)
   const isOwner = canAdminAgent(agent.slug)
@@ -212,18 +214,10 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
         deleteAgent.mutate(agent.slug)
       }
       if (hasOnboarding) {
-        try {
-          const session = await createSession.mutateAsync({
-            agentSlug: imported.slug,
-            message: ONBOARDING_MESSAGE,
-          })
-          selectSession(session.id)
-        } catch {
-          // Onboarding session creation failed — user can still use agent normally
-        }
+        await startOnboardingSession(imported.slug)
       }
     },
-    [selectAgent, selectSession, agent.slug, agent.name, sessions.length, deleteAgent, createSession],
+    [selectAgent, agent.slug, agent.name, sessions.length, deleteAgent, startOnboardingSession],
   )
 
   const formatDate = useCallback(
