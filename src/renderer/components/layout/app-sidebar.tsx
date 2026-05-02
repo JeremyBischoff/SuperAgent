@@ -564,7 +564,7 @@ export const AgentMenuItem = React.forwardRef<
   { agent: ApiAgent } & React.HTMLAttributes<HTMLLIElement>
 >(({ agent, style, ...rest }, ref) => {
   useRenderTracker('AgentMenuItem')
-  const { selectedAgentSlug, setAgent } = useSelection()
+  const { selectedAgentSlug, setAgent, view } = useSelection()
   const { agentMemberCount } = useUser()
   const queryClient = useQueryClient()
   const isSelected = agent.slug === selectedAgentSlug
@@ -576,6 +576,22 @@ export const AgentMenuItem = React.forwardRef<
     (agent.chatIntegrationCount ?? 0) > 0 ||
     (agent.dashboardCount ?? 0) > 0
   const [isOpen, setIsOpen] = useState(isSelected && hasInitialContent)
+
+  // Once the user navigates into a sub-item (session / task / webhook / chat /
+  // dashboard) we want the agent's submenu open so the active row is visible.
+  // The mount-time `useState` can't catch this — sessionCount is 0 at mount on
+  // a freshly-created agent, then jumps to 1 once the first message creates a
+  // session. Reactively expand here.
+  const isViewingSubItem =
+    isSelected &&
+    (view.kind === 'session' ||
+      view.kind === 'task' ||
+      view.kind === 'webhook' ||
+      view.kind === 'chat' ||
+      view.kind === 'dashboard')
+  useEffect(() => {
+    if (isViewingSubItem) setIsOpen(true)
+  }, [isViewingSubItem])
   const [showAll, setShowAll] = useState(false)
   const [showSkeleton, setShowSkeleton] = useState(false)
   const isShared = agentMemberCount(agent.slug) > 1
