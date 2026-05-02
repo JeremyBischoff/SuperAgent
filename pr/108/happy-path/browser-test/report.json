@@ -1,24 +1,24 @@
 {
   "storyId": "browser-test",
   "passed": true,
-  "reason": "Successfully verified that the agent can open a browser, navigate to https://example.com, and return the page title \"Example Domain\"",
+  "reason": "Verified that the browser-use feature allows an agent to open a browser, navigate to a URL, retrieve page information, and return the results in chat.",
   "steps": [
-    "Navigated to http://localhost:47891 — page loaded successfully showing the SuperAgent home page with a list of agents in the sidebar",
-    "Located and clicked on the \"QA-20260502-180143-92sq\" agent in the sidebar — agent page opened showing the chat interface and agent configuration panel",
-    "Clicked on the message input box and typed the message \"Open a browser and go to https://example.com. Tell me the page title.\" — message was typed into the textbox successfully",
-    "Clicked the \"Send message\" button to send the message — message was sent and the agent status changed to \"working\"",
-    "Waited up to 3 minutes (180 seconds) for a response — agent completed the task in 6 seconds and returned a response",
-    "Verified the response content — the agent response clearly states \"The page title is Example Domain.\" with two successful browser tool calls (Open Browser and Browser Command $ get title), and a live browser preview panel showing the Example Domain webpage on the right side of the screen"
+    "Step 1: Navigated to http://localhost:47891 - Successfully loaded the SuperAgent home page with the agents sidebar displayed.",
+    "Step 2: Found and clicked on \"QA-20260502-183817-03ns\" agent in the sidebar - The agent chat interface opened, showing the message input area and agent settings.",
+    "Step 3: Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" in the input field - Message was successfully entered and ready to send.",
+    "Step 4: Clicked the \"Send message\" button - Message was sent successfully. Agent status changed to \"working\" and began processing the request.",
+    "Step 5: Waited up to 3 minutes for response - Agent completed the task in 7 seconds. Response received in chat stating \"The page title is Example Domain.\"",
+    "Step 6: Verified response and took screenshot - The screenshot confirms:"
   ],
   "bugs": [],
-  "durationMs": 88881,
-  "sessionId": "9f347bda-c4b8-44e4-835c-5bc62c949500",
+  "durationMs": 69554,
+  "sessionId": "4864b58c-f01e-421f-9c1a-67854afc1239",
   "cost": {
-    "inputTokens": 327,
-    "outputTokens": 8534,
-    "cacheCreationTokens": 128397,
-    "cacheReadTokens": 1169594,
+    "inputTokens": 207,
+    "outputTokens": 7357,
+    "cacheCreationTokens": 38472,
+    "cacheReadTokens": 723222,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.320453
+    "totalCostUsd": 0.157404
   }
 }
