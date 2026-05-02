@@ -46,7 +46,7 @@ interface AgentHomeProps {
 
 export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHomeProps) {
   useRenderTracker('AgentHome')
-  const { selectScheduledTask, selectAgent, consumePendingDraft } = useSelection()
+  const { setView, setAgent, consumePendingDraft } = useSelection()
   const startOnboardingSession = useStartOnboardingSession()
   const { canUseAgent, canAdminAgent } = useUser()
   const isViewOnly = !canUseAgent(agent.slug)
@@ -221,7 +221,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
 
   const handleImportComplete = useCallback(
     async ({ agent: imported, hasOnboarding }: ImportResult) => {
-      selectAgent(imported.slug)
+      setAgent(imported.slug)
       if (agent.name === UNTITLED_AGENT_NAME && sessions.length === 0 && agent.slug !== imported.slug) {
         deleteAgent.mutate(agent.slug)
       }
@@ -229,7 +229,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
         await startOnboardingSession(imported.slug)
       }
     },
-    [selectAgent, agent.slug, agent.name, sessions.length, deleteAgent, startOnboardingSession],
+    [setAgent, agent.slug, agent.name, sessions.length, deleteAgent, startOnboardingSession],
   )
 
   const formatDate = useCallback(
@@ -504,7 +504,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
               agentSlug={agent.slug}
               scheduledTasks={scheduledTasks}
               formatDate={formatDate}
-              onSelectTask={selectScheduledTask}
+              onSelectTask={(taskId: string) => setView({ kind: 'task', id: taskId })}
             />
             <HomeConnections agentSlug={agent.slug} />
             <HomeSkills agentSlug={agent.slug} />

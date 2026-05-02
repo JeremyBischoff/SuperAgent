@@ -153,7 +153,7 @@ function EntryDetails({ entry }: { entry: AuditLogEntry }) {
 
 export function ApiLogsView({ agentSlug }: ApiLogsViewProps) {
   useRenderTracker('ApiLogsView')
-  const { selectApiLogs } = useSelection()
+  const { setView } = useSelection()
   const [page, setPage] = useState(0)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const { track } = useAnalyticsTracking()
@@ -180,7 +180,7 @@ export function ApiLogsView({ agentSlug }: ApiLogsViewProps) {
       <PageTitle
         title="API Logs"
         back={{
-          onClick: () => selectApiLogs(false),
+          onClick: () => setView({ kind: 'home' }),
           testId: 'api-logs-back-button',
         }}
         actions={

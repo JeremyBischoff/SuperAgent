@@ -91,16 +91,15 @@ function SessionSubItem({
   agentSlug: string
 }) {
   useRenderTracker('SessionSubItem')
-  const { selectedSessionId, selectAgent, selectSession } = useSelection()
-  const isSelected = session.id === selectedSessionId
+  const { view, setAgent } = useSelection()
+  const isSelected = view.kind === 'session' && view.id === session.id
   const { isStreaming } = useMessageStream(isSelected ? session.id : null, isSelected ? agentSlug : null)
   const isWorking = (session.isActive || isStreaming) && !session.isAwaitingInput
   const isAwaitingInput = session.isAwaitingInput
   const hasUnread = !session.isActive && !session.isAwaitingInput && session.hasUnreadNotifications
 
   const handleClick = () => {
-    selectAgent(agentSlug)
-    selectSession(session.id)
+    setAgent(agentSlug, { kind: 'session', id: session.id })
   }
 
   return (
@@ -144,12 +143,11 @@ function WebhookTriggerSubItem({
   trigger: { id: string; name: string | null; triggerType: string; status: string }
   agentSlug: string
 }) {
-  const { selectedWebhookTriggerId, selectAgent, selectWebhookTrigger } = useSelection()
-  const isSelected = trigger.id === selectedWebhookTriggerId
+  const { view, setAgent } = useSelection()
+  const isSelected = view.kind === 'webhook' && view.id === trigger.id
 
   const handleClick = () => {
-    selectAgent(agentSlug)
-    selectWebhookTrigger(trigger.id)
+    setAgent(agentSlug, { kind: 'webhook', id: trigger.id })
   }
 
   const tooltip = trigger.status === 'cancelled'
@@ -250,20 +248,20 @@ function ChatIntegrationSubItem({
   integration: ChatIntegration
   agentSlug: string
 }) {
-  const { selectedChatIntegrationId, selectedChatSessionId, selectAgent, selectChatIntegration, selectChatSession } = useSelection()
+  const { view, setAgent } = useSelection()
   const { data: sessions } = useChatIntegrationSessions(integration.id)
-  const isSelected = integration.id === selectedChatIntegrationId && !selectedChatSessionId
-  const hasSelectedSession = selectedChatIntegrationId === integration.id && selectedChatSessionId != null
-  const [isOpen, setIsOpen] = useState(selectedChatIntegrationId === integration.id || hasSelectedSession)
+  const viewingThisIntegration = view.kind === 'chat' && view.integrationId === integration.id
+  const selectedChatSessionId = view.kind === 'chat' ? view.sessionId ?? null : null
+  const isSelected = viewingThisIntegration && !selectedChatSessionId
+  const hasSelectedSession = viewingThisIntegration && selectedChatSessionId != null
+  const [isOpen, setIsOpen] = useState(viewingThisIntegration || hasSelectedSession)
 
   const handleClick = () => {
-    selectAgent(agentSlug)
-    selectChatIntegration(integration.id)
+    setAgent(agentSlug, { kind: 'chat', integrationId: integration.id })
   }
 
   const handleSessionClick = (sessionId: string) => {
-    selectAgent(agentSlug)
-    selectChatSession(integration.id, sessionId)
+    setAgent(agentSlug, { kind: 'chat', integrationId: integration.id, sessionId })
   }
 
   const statusDot = integration.status === 'active' ? 'bg-green-500' :
@@ -397,13 +395,12 @@ function DashboardSubItem({
   artifact: ArtifactInfo
   agentSlug: string
 }) {
-  const { selectedDashboardSlug, selectAgent, selectDashboard } = useSelection()
-  const isSelected = artifact.slug === selectedDashboardSlug
+  const { view, setAgent } = useSelection()
+  const isSelected = view.kind === 'dashboard' && view.slug === artifact.slug
   const [isRenaming, setIsRenaming] = useState(false)
 
   const handleClick = () => {
-    selectAgent(agentSlug)
-    selectDashboard(artifact.slug)
+    setAgent(agentSlug, { kind: 'dashboard', slug: artifact.slug })
   }
 
   const handleDoubleClick = () => {
@@ -567,11 +564,18 @@ export const AgentMenuItem = React.forwardRef<
   { agent: ApiAgent } & React.HTMLAttributes<HTMLLIElement>
 >(({ agent, style, ...rest }, ref) => {
   useRenderTracker('AgentMenuItem')
-  const { selectedAgentSlug, selectAgent } = useSelection()
+  const { selectedAgentSlug, setAgent } = useSelection()
   const { agentMemberCount } = useUser()
   const queryClient = useQueryClient()
   const isSelected = agent.slug === selectedAgentSlug
-  const [isOpen, setIsOpen] = useState(isSelected)
+  // Auto-expand on selection only if the agent has content to show. Brand-new
+  // agents (no sessions / dashboards / chat integrations yet) start collapsed
+  // — the empty submenu would just be visual noise.
+  const hasInitialContent =
+    (agent.sessionCount ?? 0) > 0 ||
+    (agent.chatIntegrationCount ?? 0) > 0 ||
+    (agent.dashboardCount ?? 0) > 0
+  const [isOpen, setIsOpen] = useState(isSelected && hasInitialContent)
   const [showAll, setShowAll] = useState(false)
   const [showSkeleton, setShowSkeleton] = useState(false)
   const isShared = agentMemberCount(agent.slug) > 1
@@ -627,7 +631,7 @@ export const AgentMenuItem = React.forwardRef<
   }, [isOpen, agent.slug, queryClient])
 
   const handleClick = () => {
-    selectAgent(agent.slug)
+    setAgent(agent.slug)
   }
 
   const handleChevronClick = (e: React.MouseEvent) => {

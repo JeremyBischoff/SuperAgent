@@ -53,20 +53,20 @@ export function CreateAgentForm({ onAgentCreated, initialTemplate, className, ex
 
   const createAgent = useCreateAgent()
   const createSession = useCreateSession()
-  const { selectAgent, selectSession } = useSelection()
+  const { setAgent } = useSelection()
   const { track } = useAnalyticsTracking()
   const startOnboardingSession = useStartOnboardingSession()
 
   const finishCreatedAgent = useCallback(
     async (agent: ApiAgent, source: 'new' | 'import' | 'skillset', hasOnboarding?: boolean) => {
       track('agent_created', { source, num_skills_added_at_creation: 0 })
-      selectAgent(agent.slug)
+      setAgent(agent.slug)
       if (hasOnboarding) {
         await startOnboardingSession(agent.slug)
       }
       await onAgentCreated?.()
     },
-    [track, selectAgent, startOnboardingSession, onAgentCreated],
+    [track, setAgent, startOnboardingSession, onAgentCreated],
   )
 
   const composer = useMessageComposer({
@@ -85,8 +85,7 @@ export function CreateAgentForm({ onAgentCreated, initialTemplate, className, ex
           message: content,
         })
         track('agent_created', { source: 'new', num_skills_added_at_creation: 0 })
-        selectAgent(newAgent.slug)
-        selectSession(session.id)
+        setAgent(newAgent.slug, { kind: 'session', id: session.id })
         await onAgentCreated?.()
       } catch (error) {
         console.error('Failed to create agent:', error)
@@ -94,7 +93,7 @@ export function CreateAgentForm({ onAgentCreated, initialTemplate, className, ex
           description: error instanceof Error ? error.message : 'Please try again.',
         })
       }
-    }, [createAgent, createSession, selectAgent, selectSession, track, onAgentCreated]),
+    }, [createAgent, createSession, setAgent, track, onAgentCreated]),
   })
 
   useEffect(() => {

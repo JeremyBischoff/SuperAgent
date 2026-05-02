@@ -152,7 +152,8 @@ export function RelatedSessions({ sessions, formatDate, className, showIcon = tr
 }
 
 function SessionRow({ session, showIcon, formatDate, agentSlug: agentSlugProp, searchQuery }: { session: SessionItem; showIcon: boolean; formatDate: (date: string) => string; agentSlug?: string; searchQuery?: string }) {
-  const { selectSession, selectedAgentSlug, handleSessionDeleted } = useSelection()
+  const { setView, selectedAgentSlug, handleSessionDeleted } = useSelection()
+  const selectSession = (id: string) => setView({ kind: 'session', id })
   const agentSlug = agentSlugProp ?? selectedAgentSlug
   const { canAdminAgent } = useUser()
   const isOwner = agentSlug ? canAdminAgent(agentSlug) : false

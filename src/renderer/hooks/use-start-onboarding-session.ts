@@ -11,7 +11,7 @@ const ONBOARDING_MESSAGE =
  */
 export function useStartOnboardingSession() {
   const createSession = useCreateSession()
-  const { selectSession } = useSelection()
+  const { setView } = useSelection()
 
   return useCallback(
     async (agentSlug: string) => {
@@ -20,11 +20,11 @@ export function useStartOnboardingSession() {
           agentSlug,
           message: ONBOARDING_MESSAGE,
         })
-        selectSession(session.id)
+        setView({ kind: 'session', id: session.id })
       } catch {
         // Onboarding session creation failed — user can still use agent normally
       }
     },
-    [createSession, selectSession],
+    [createSession, setView],
   )
 }

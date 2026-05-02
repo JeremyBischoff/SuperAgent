@@ -35,7 +35,7 @@ interface ConnectionRow {
 export function HomeConnections({ agentSlug }: HomeConnectionsProps) {
   const { data: accountsData } = useAgentConnectedAccounts(agentSlug)
   const { data: mcpsData } = useAgentRemoteMcps(agentSlug)
-  const { selectConnections } = useSelection()
+  const { setView } = useSelection()
 
   const connections = useMemo<ConnectionRow[]>(() => {
     const rows: ConnectionRow[] = []
@@ -131,7 +131,7 @@ export function HomeConnections({ agentSlug }: HomeConnectionsProps) {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => selectConnections(true)}
+            onClick={() => setView({ kind: 'connections' })}
             data-testid="home-connections-open-page"
           >
             {connections.length > 0 ? <Settings2 /> : <Plus />}

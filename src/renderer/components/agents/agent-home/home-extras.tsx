@@ -11,7 +11,7 @@ interface HomeExtrasProps {
 
 export function HomeExtras({ agentSlug, onOpenSettings }: HomeExtrasProps) {
   const [error, setError] = useState<string | null>(null)
-  const { selectApiLogs } = useSelection()
+  const { setView } = useSelection()
 
   const handleOpenDirectory = async () => {
     setError(null)
@@ -48,7 +48,7 @@ export function HomeExtras({ agentSlug, onOpenSettings }: HomeExtrasProps) {
         <ExtrasButton label="System Prompt" onClick={() => onOpenSettings?.('system-prompt')} />
         <ExtrasButton label={directoryLabel} onClick={handleOpenDirectory} hoverIcon={directoryHoverIcon} />
         <ExtrasButton label="Secrets" onClick={() => onOpenSettings?.('secrets')} />
-        <ExtrasButton label="API Logs" onClick={() => selectApiLogs(true)} />
+        <ExtrasButton label="API Logs" onClick={() => setView({ kind: 'apiLogs' })} />
       </div>
       {error && (
         <p className="px-4 pt-2 text-xs text-destructive" role="alert">{error}</p>

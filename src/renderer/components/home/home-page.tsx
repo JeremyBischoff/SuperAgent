@@ -138,7 +138,7 @@ function StatusTab({ status, hasActiveSessions, hasSessionsAwaitingInput }: {
 
 function AgentCard({ agent, dailyUsage }: { agent: ApiAgent; dailyUsage?: DailyUsageEntry[] }) {
   useRenderTracker('AgentCard')
-  const { selectAgent, selectSession } = useSelection()
+  const { setAgent } = useSelection()
   const lastWorked = formatRelativeTime(agent.lastActivityAt)
   const nextRun = formatRelativeTime(agent.nextScheduledTaskAt)
   const dashboardCount = agent.dashboardCount ?? 0
@@ -178,7 +178,7 @@ function AgentCard({ agent, dailyUsage }: { agent: ApiAgent; dailyUsage?: DailyU
     <div className="flex flex-col">
       <AgentContextMenu agent={agent}>
         <button
-          onClick={() => selectAgent(agent.slug)}
+          onClick={() => setAgent(agent.slug)}
           className="relative text-left p-4 rounded-lg border bg-card hover:border-accent-foreground/20 transition-colors flex flex-col gap-3 z-10 h-24 overflow-hidden"
         >
           {/* Spark chart background */}
@@ -260,7 +260,7 @@ function AgentCard({ agent, dailyUsage }: { agent: ApiAgent; dailyUsage?: DailyU
             style={{ marginTop: -6, zIndex: visibleSessions.length + 1 - i }}
           >
             <button
-              onClick={() => { selectAgent(agent.slug); selectSession(session.id) }}
+              onClick={() => setAgent(agent.slug, { kind: 'session', id: session.id })}
               className={`w-full flex items-center gap-2 px-3 py-1.5 pt-3 text-left text-xs border rounded-b-lg transition-colors hover:brightness-95 ${colors}`}
             >
               {isAwaiting ? (
@@ -286,7 +286,7 @@ function AgentCard({ agent, dailyUsage }: { agent: ApiAgent; dailyUsage?: DailyU
           style={{ marginTop: -6, zIndex: 0 }}
         >
           <button
-            onClick={() => selectAgent(agent.slug)}
+            onClick={() => setAgent(agent.slug)}
             className="w-full flex items-center gap-2 px-3 py-1.5 pt-3 text-left text-xs border rounded-b-lg transition-colors hover:brightness-95 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800"
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
@@ -305,11 +305,10 @@ function DashboardCard({
   dashboard: ApiAgentDashboard
   agentSlug: string
 }) {
-  const { selectAgent, selectDashboard } = useSelection()
+  const { setAgent } = useSelection()
 
   const handleClick = () => {
-    selectAgent(agentSlug)
-    selectDashboard(dashboard.slug)
+    setAgent(agentSlug, { kind: 'dashboard', slug: dashboard.slug })
   }
 
   // Prefix with getApiBaseUrl() so the <img> resolves to the dynamic Electron
@@ -385,7 +384,7 @@ export function HomePage() {
     [agents, userSettings?.agentOrder]
   )
   const { createUntitledAgent, isPending: isCreatingAgent } = useCreateUntitledAgent()
-  const { selectAgent } = useSelection()
+  const { setAgent } = useSelection()
   const [templateToInstall, setTemplateToInstall] = useState<ApiDiscoverableAgent | null>(null)
   const { state: sidebarState } = useSidebar()
   const isFullScreen = useFullScreen()
@@ -477,7 +476,7 @@ export function HomePage() {
       <TemplateInstallDialog
         template={templateToInstall}
         onClose={() => setTemplateToInstall(null)}
-        onInstalled={(agent) => selectAgent(agent.slug)}
+        onInstalled={(agent) => setAgent(agent.slug)}
       />
     </div>
   )

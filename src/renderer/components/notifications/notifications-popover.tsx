@@ -22,11 +22,10 @@ function NotificationItem({
 }) {
   useRenderTracker('NotificationItem')
   const markRead = useMarkNotificationRead()
-  const { selectAgent, selectSession } = useSelection()
+  const { setAgent } = useSelection()
 
   const handleClick = () => {
-    selectAgent(notification.agentSlug)
-    selectSession(notification.sessionId)
+    setAgent(notification.agentSlug, { kind: 'session', id: notification.sessionId })
     if (!notification.isRead) {
       markRead.mutate(notification.id)
     }

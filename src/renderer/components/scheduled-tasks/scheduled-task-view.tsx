@@ -62,7 +62,7 @@ export function ScheduledTaskView({ taskId, agentSlug }: ScheduledTaskViewProps)
   const runNow = useRunScheduledTaskNow()
   const pauseTask = usePauseScheduledTask()
   const resumeTask = useResumeScheduledTask()
-  const { handleScheduledTaskDeleted, selectSession } = useSelection()
+  const { handleScheduledTaskDeleted, setView } = useSelection()
   const { canUseAgent } = useUser()
   const canCancel = canUseAgent(agentSlug)
   const humanizedCron = useHumanizedCron(task?.isRecurring ? task.scheduleExpression : null)
@@ -98,7 +98,7 @@ export function ScheduledTaskView({ taskId, agentSlug }: ScheduledTaskViewProps)
   const handleRunNow = async () => {
     try {
       const result = await runNow.mutateAsync({ taskId, agentSlug })
-      selectSession(result.sessionId)
+      setView({ kind: 'session', id: result.sessionId })
     } catch (err) {
       console.error('Failed to run scheduled task:', err)
     }

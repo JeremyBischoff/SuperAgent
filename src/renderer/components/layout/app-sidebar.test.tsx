@@ -78,19 +78,21 @@ vi.mock('@renderer/hooks/use-fullscreen', () => ({
   useFullScreen: () => false,
 }))
 
+type MockView =
+  | { kind: 'home' }
+  | { kind: 'session'; id: string }
+  | { kind: 'task'; id: string }
+  | { kind: 'webhook'; id: string }
+  | { kind: 'chat'; integrationId: string; sessionId?: string }
+  | { kind: 'dashboard'; slug: string }
+  | { kind: 'apiLogs' }
+  | { kind: 'connections' }
+
 const mockSelectionContext = {
   selectedAgentSlug: null as string | null,
-  selectedSessionId: null as string | null,
-  selectedDashboardSlug: null as string | null,
-  selectedWebhookTriggerId: null as string | null,
-  selectedChatIntegrationId: null as string | null,
-  selectedChatSessionId: null as string | null,
-  selectAgent: vi.fn(),
-  selectSession: vi.fn(),
-  selectDashboard: vi.fn(),
-  selectWebhookTrigger: vi.fn(),
-  selectChatIntegration: vi.fn(),
-  selectChatSession: vi.fn(),
+  view: { kind: 'home' } as MockView,
+  setAgent: vi.fn(),
+  setView: vi.fn(),
   clearSelection: vi.fn(),
 }
 vi.mock('@renderer/context/selection-context', () => ({
@@ -281,11 +283,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   Object.assign(mockSelectionContext, {
     selectedAgentSlug: null,
-    selectedSessionId: null,
-    selectedDashboardSlug: null,
-    selectedWebhookTriggerId: null,
-    selectedChatIntegrationId: null,
-    selectedChatSessionId: null,
+    view: { kind: 'home' } as MockView,
   })
   mockUseAgents.mockReturnValue({
     data: [makeAgent(), makeAgent({ slug: 'other-agent', name: 'Other Agent', status: 'stopped', sessionCount: 0 })],
@@ -374,7 +372,7 @@ describe('AppSidebar — agent rows', () => {
     renderWithProviders(<AppSidebar />)
     const row = screen.getByTestId('agent-item-test-agent')
     await user.click(row)
-    expect(mockSelectionContext.selectAgent).toHaveBeenCalledWith('test-agent')
+    expect(mockSelectionContext.setAgent).toHaveBeenCalledWith('test-agent')
     // Row click does NOT toggle expansion → no session sub-items rendered.
     expect(screen.queryByTestId('session-item-session-1')).not.toBeInTheDocument()
   })
@@ -388,7 +386,7 @@ describe('AppSidebar — agent rows', () => {
     const expandBtn = testAgentRow.querySelector('[aria-label="Expand"]') as HTMLButtonElement
     expect(expandBtn).not.toBeNull()
     await user.click(expandBtn)
-    expect(mockSelectionContext.selectAgent).not.toHaveBeenCalled()
+    expect(mockSelectionContext.setAgent).not.toHaveBeenCalled()
     expect(screen.getByTestId('session-item-session-1')).toBeInTheDocument()
     expect(testAgentRow.querySelector('[aria-label="Collapse"]')).not.toBeNull()
   })
@@ -404,8 +402,7 @@ describe('AppSidebar — agent rows', () => {
     const user = userEvent.setup()
     renderWithProviders(<AppSidebar />)
     await user.click(screen.getByTestId('session-item-session-1'))
-    expect(mockSelectionContext.selectAgent).toHaveBeenCalledWith('test-agent')
-    expect(mockSelectionContext.selectSession).toHaveBeenCalledWith('session-1')
+    expect(mockSelectionContext.setAgent).toHaveBeenCalledWith('test-agent', { kind: 'session', id: 'session-1' })
   })
 
   it('shows an unread dot on a session sub-item with hasUnreadNotifications', () => {

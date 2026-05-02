@@ -14,14 +14,12 @@ vi.mock('@renderer/lib/api', () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
 }))
 
-// HomeConnections calls selectConnections from selection-context for the
+// HomeConnections calls setView({ kind: 'connections' }) for the
 // "Manage Connections" button — not part of the delete flow we care about.
 vi.mock('@renderer/context/selection-context', () => ({
   useSelection: () => ({
-    selectConnections: vi.fn(),
-    selectAgent: vi.fn(),
-    selectScheduledTask: vi.fn(),
-    selectSession: vi.fn(),
+    setView: vi.fn(),
+    setAgent: vi.fn(),
     consumePendingDraft: vi.fn(() => null),
   }),
 }))
