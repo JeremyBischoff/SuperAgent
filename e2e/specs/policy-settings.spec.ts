@@ -8,10 +8,12 @@ test.describe('Policy Settings', () => {
   let accountId: string
 
   test.beforeAll(async ({ request }) => {
-    // Seed a connected account via API so the settings tab has something to show
+    // Unique per run so a retry (which re-runs beforeAll in a new worker) does
+    // not collide with the previously-seeded row on the unique connectionId.
+    const composioConnectionId = `e2e-test-connection-${Date.now()}`
     const res = await request.post('/api/connected-accounts', {
       data: {
-        composioConnectionId: 'e2e-test-connection',
+        composioConnectionId,
         toolkitSlug: 'slack',
         displayName: 'E2E Slack Account',
       },
@@ -74,8 +76,8 @@ test.describe('Policy Settings', () => {
     // Dialog should close
     await expect(page.getByText('Scope Policies')).not.toBeVisible({ timeout: 5000 })
 
-    // The pill should now show "1" for the allow count (no longer "Protected")
-    await expect(pill).not.toContainText('Protected', { timeout: 5000 })
+    // The pill flips from "Protected" to "Protected • Custom" once a policy is set.
+    await expect(pill).toContainText('Custom', { timeout: 5000 })
   })
 
   test('settings: saved policy persists after reopening editor', async ({ page }) => {
@@ -168,9 +170,10 @@ test.describe('Policy Settings', () => {
     await expect(chatWriteRow.locator('[data-testid="policy-toggle-review"]')).toHaveAttribute('data-active', 'false')
     await expect(chatWriteRow.locator('[data-testid="policy-toggle-block"]')).toHaveAttribute('data-active', 'false')
 
-    // Save and verify pill goes back to "Protected"
+    // Save and verify pill drops the "Custom" suffix (= no policies set).
     await page.locator('[data-testid="scope-policy-save"]').click()
     await expect(page.getByText('Scope Policies')).not.toBeVisible({ timeout: 5000 })
+    await expect(pill).not.toContainText('Custom', { timeout: 5000 })
     await expect(pill).toContainText('Protected', { timeout: 5000 })
   })
 
