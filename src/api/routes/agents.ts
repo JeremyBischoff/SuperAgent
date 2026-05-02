@@ -159,7 +159,11 @@ async function enrichAgentsWithSummary(agents: ApiAgent[]): Promise<ApiAgent[]> 
       const unreadSessionIds = unreadByAgent.get(agent.slug) ?? new Set<string>()
       const pendingTasks = tasksByAgent.get(agent.slug) ?? []
 
-      // Compute session flags from in-memory state (no I/O needed)
+      // Compute session flags from in-memory state (no I/O needed).
+      // `unreadByAgent` is already filtered to user-actionable notification types
+      // (session_complete / session_waiting); session_complete on automated sessions
+      // is suppressed at creation time, so any unread that lands here is one the
+      // user genuinely needs to see.
       let hasActiveSessions = false
       let hasSessionsAwaitingInput = false
       let hasUnreadNotifications = false
