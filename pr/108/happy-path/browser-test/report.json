@@ -1,24 +1,24 @@
 {
   "storyId": "browser-test",
   "passed": true,
-  "reason": "Verified that the SuperAgent can execute browser operations and successfully retrieve page titles from web pages",
+  "reason": "Browser use feature test: agent successfully opened browser, navigated to example.com, and returned page title \"Example Domain\"",
   "steps": [
-    "Navigated to http://localhost:47891 — Page loaded successfully showing SuperAgent interface with list of agents",
-    "Clicked on agent \"QA-20260428-180009-c465\" in the sidebar — Agent page opened with chat interface and configuration panel",
-    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" into the message input field — Message was entered correctly in the textbox",
-    "Clicked the \"Send message\" button — Message was sent and agent status changed to \"working\"",
-    "Waited up to 3 minutes for response — Agent completed work in 7 seconds and returned response",
-    "Verified response mentions \"Example Domain\" — Response clearly states: \"The page title is 'Example Domain'.\" with visible green checkmarks on both tool calls (Open Browser and Browser Command), and browser preview shows the actual Example Domain page content"
+    "Navigated to http://localhost:47891 — Page loaded with SuperAgent dashboard showing three agents in sidebar",
+    "Found and clicked on agent \"QA-20260502-174722-evw0\" in the main area — Agent configuration page opened with message input field ready",
+    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" in input textbox — Message text entered correctly in active input field",
+    "Clicked \"Send message\" button — Message sent successfully, agent status changed to \"working\" with timer starting at 0s",
+    "Waited up to 3 minutes for response mentioning \"Example Domain\" — Response arrived within 7 seconds showing \"The page title is \"Example Domain\"\"",
+    "Took screenshot showing the complete response — Final screenshot captured showing agent response with browser tool calls (Open Browser and Browser Command), the retrieved page title, browser preview panel on right side with \"Example Domain\" tab, and activity log of executed commands"
   ],
   "bugs": [],
-  "durationMs": 121577,
-  "sessionId": "bd85cb9d-fe57-4335-8704-ace527ecc373",
+  "durationMs": 85239,
+  "sessionId": "34c0296c-cad1-4c14-a8f9-ccbe80d7556b",
   "cost": {
-    "inputTokens": 270,
-    "outputTokens": 8812,
-    "cacheCreationTokens": 124188,
-    "cacheReadTokens": 946584,
+    "inputTokens": 300,
+    "outputTokens": 7880,
+    "cacheCreationTokens": 45630,
+    "cacheReadTokens": 1116730,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.294223
+    "totalCostUsd": 0.208411
   }
 }
