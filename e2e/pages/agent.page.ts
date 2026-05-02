@@ -12,7 +12,7 @@ export class AgentPage {
    * Click the "Create Agent" button in the sidebar
    */
   async clickCreateAgent() {
-    await this.page.locator('[data-testid="create-agent-button"]').click()
+    await this.page.locator('[data-testid="new-agent-button"]').click()
   }
 
   /**
