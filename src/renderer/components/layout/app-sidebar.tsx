@@ -867,6 +867,16 @@ export function AppSidebar() {
   const { data: runtimeStatus } = useRuntimeStatus()
   const isFullScreen = useFullScreen()
 
+  // macOS fires `enter-full-screen` only after its ~700ms zoom animation completes;
+  // by that frame, React + the CSS transition would both kick on the same paint and
+  // the collapse goes invisible. Lag the value by one rAF so the renderer paints the
+  // pre-transition state first, giving the browser a real "from" frame to animate from.
+  const [animatedFullScreen, setAnimatedFullScreen] = useState(isFullScreen)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setAnimatedFullScreen(isFullScreen))
+    return () => cancelAnimationFrame(id)
+  }, [isFullScreen])
+
   // Drag-and-drop sensors: distance threshold prevents click conflicts
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -918,19 +928,33 @@ export function AppSidebar() {
     }
   }, [isRuntimeUnavailable, userSettings?.setupCompleted])
 
-  // Add left padding for macOS traffic lights in Electron (not in full screen)
-  const needsTrafficLightPadding = isElectron() && getPlatform() === 'darwin' && !isFullScreen
+  // The header bar exists only to (a) leave room for macOS traffic lights when
+  // windowed, or (b) host the Windows app-menu chevron. In every other case
+  // (mac fullscreen, web) it collapses to 0 height so the wordmark sits flush
+  // with the top of the sidebar.
+  const needsTrafficLightPadding = isElectron() && getPlatform() === 'darwin' && !animatedFullScreen
+  const isWindowsElectron = isElectron() && getPlatform() === 'win32'
+  const showHeaderBar = needsTrafficLightPadding || isWindowsElectron
 
   return (
     <Sidebar variant="inset" data-testid="app-sidebar">
+      {/*
+        Always rendered so height/border can transition smoothly when entering
+        or leaving fullscreen on macOS. Collapses to 0 height (with no border)
+        when there's no traffic-light spacer to make room for and no Windows
+        menu chevron to host.
+      */}
       <SidebarHeader
-        className="h-12 border-b app-drag-region p-0"
+        className={cn(
+          'app-drag-region p-0 overflow-hidden transition-[height,border-bottom-width] duration-200 ease-out',
+          showHeaderBar ? 'h-12 border-b' : 'h-0 border-b-0'
+        )}
         style={{
           paddingLeft: needsTrafficLightPadding ? '80px' : undefined,
         }}
       >
-        <div className="flex items-center h-full px-2 gap-1">
-          {isElectron() && getPlatform() === 'win32' && (
+        <div className="flex items-center h-12 px-2 gap-1">
+          {isWindowsElectron && (
             <button
               className="app-no-drag p-0.5 rounded hover:bg-foreground/10 transition-colors cursor-default"
               onClick={(e) => {
@@ -1001,7 +1025,18 @@ export function AppSidebar() {
       <ErrorBoundary compact>
         <SidebarContent className="overflow-visible">
           <SidebarGroup className="shrink-0 p-0">
-            <div className="-mt-1 px-2 pb-4 text-base font-semibold select-none">SuperAgent</div>
+            {/*
+              When the header bar is present its 48px sit above the wordmark
+              (small `-4px` pull-up tightens the gap). When it's collapsed the
+              wordmark needs its own breathing room. Animated via marginTop so
+              the transition matches the header collapse on fullscreen toggle.
+            */}
+            <div
+              className="px-2 pb-4 text-base font-semibold select-none transition-[margin-top] duration-200 ease-out"
+              style={{ marginTop: showHeaderBar ? '-4px' : '12px' }}
+            >
+              SuperAgent
+            </div>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
