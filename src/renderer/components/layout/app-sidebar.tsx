@@ -934,13 +934,12 @@ export function AppSidebar() {
   const isPullingOrBuilding = readiness?.status === 'PULLING_IMAGE'
   const isChecking = readiness?.status === 'CHECKING'
 
-  // The header bar exists only to (a) leave room for macOS traffic lights when
-  // windowed, or (b) host the Windows app-menu chevron. In every other case
-  // (mac fullscreen, web) it collapses to 0 height so the wordmark sits flush
-  // with the top of the sidebar.
+  // The header bar exists only to leave room for macOS traffic lights when
+  // windowed. In every other case (mac fullscreen, windows, web) it collapses
+  // to 0 height so the wordmark sits flush with the top of the sidebar.
   const needsTrafficLightPadding = isElectron() && getPlatform() === 'darwin' && !animatedFullScreen
   const isWindowsElectron = isElectron() && getPlatform() === 'win32'
-  const showHeaderBar = needsTrafficLightPadding || isWindowsElectron
+  const showHeaderBar = needsTrafficLightPadding
 
   return (
     <Sidebar variant="inset" data-testid="app-sidebar">
@@ -959,19 +958,7 @@ export function AppSidebar() {
           paddingLeft: needsTrafficLightPadding ? '80px' : undefined,
         }}
       >
-        <div className="flex items-center h-12 px-2 gap-1">
-          {isWindowsElectron && (
-            <button
-              className="app-no-drag p-0.5 rounded hover:bg-foreground/10 transition-colors cursor-default"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect()
-                window.electronAPI?.popupAppMenu(Math.round(rect.left), Math.round(rect.bottom))
-              }}
-            >
-              <ChevronDown className="h-4 w-4 text-foreground/60" />
-            </button>
-          )}
-        </div>
+        <div className="flex items-center h-12 px-2 gap-1" />
       </SidebarHeader>
 
       <ErrorBoundary compact>
@@ -984,10 +971,24 @@ export function AppSidebar() {
               the transition matches the header collapse on fullscreen toggle.
             */}
             <div
-              className="px-2 pb-4 text-base font-semibold select-none transition-[margin-top] duration-200 ease-out"
+              className={cn(
+                'px-2 pb-4 text-base font-semibold select-none transition-[margin-top] duration-200 ease-out flex items-center gap-1',
+                isWindowsElectron && 'app-drag-region'
+              )}
               style={{ marginTop: showHeaderBar ? '-4px' : '12px' }}
             >
               SuperAgent
+              {isWindowsElectron && (
+                <button
+                  className="app-no-drag p-0.5 rounded hover:bg-foreground/10 transition-colors cursor-default"
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    window.electronAPI?.popupAppMenu(Math.round(rect.left), Math.round(rect.bottom))
+                  }}
+                >
+                  <ChevronDown className="h-4 w-4 text-foreground/60" />
+                </button>
+              )}
             </div>
 
             {/* Status banners — render under the wordmark so they sit inside the
