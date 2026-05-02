@@ -176,7 +176,7 @@ export function ApiLogsView({ agentSlug }: ApiLogsViewProps) {
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   return (
-    <SettingsPageContainer className="max-w-5xl">
+    <SettingsPageContainer fullScreen>
       <PageTitle
         title="API Logs"
         back={{
