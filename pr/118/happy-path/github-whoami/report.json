@@ -1,0 +1,32 @@
+{
+  "storyId": "github-whoami",
+  "passed": false,
+  "reason": "Agent returned error message about failed OAuth token instead of GitHub username\n  Bugs found:\n    - GitHub OAuth Token Not Valid - Agent attempted to fetch the authenticated GitHub user but received a 502 error stating \"Failed to fetch access token\". The GitHub connection does not have a usable token attached. The agent went through the account access request flow (which was granted), but the underlying OAuth token appears invalid or improperly configured. Expected: GitHub username in response. Actual: Error message about failed token.",
+  "steps": [
+    "Step 1 - Navigated to http://localhost:47891 - Page loaded successfully showing agent list",
+    "Step 2 - Clicked on \"QA-20260504-145843-ndjm\" agent in sidebar - Agent detail page opened showing the agent",
+    "Step 3 - Verified agent status - Status was \"idle\" which is a valid running/idle state",
+    "Step 4 - Typed and sent message \"Use the GitHub tool to check who I am. Tell me my GitHub username.\" - Message sent, agent status changed to \"working\"",
+    "Step 5 - Account Access Request card appeared with GitHub selected - Clicked \"Allow Access (1)\" button to grant GitHub account access",
+    "Step 6a - First API Request appeared - Clicked \"Allow\" button for first GitHub API request (GET /user)",
+    "Step 6b - Permission dialog appeared for first request - Clicked \"Allow Once\"",
+    "Step 6c - Second API Request appeared - Clicked \"Allow\" button for second GitHub API request",
+    "Step 6d - Permission dialog appeared for second request - Clicked \"Allow Once\"",
+    "Step 6e - Third API Request appeared - Clicked \"Allow\" button for third GitHub API request",
+    "Step 6f - Permission dialog appeared for third request - Clicked \"Allow Once\"",
+    "Step 7 - Agent completed with response message - Received error: \"The proxy is returning a 502 with 'Failed to fetch access token'\" instead of GitHub username"
+  ],
+  "bugs": [
+    "GitHub OAuth Token Not Valid - Agent attempted to fetch the authenticated GitHub user but received a 502 error stating \"Failed to fetch access token\". The GitHub connection does not have a usable token attached. The agent went through the account access request flow (which was granted), but the underlying OAuth token appears invalid or improperly configured. Expected: GitHub username in response. Actual: Error message about failed token."
+  ],
+  "durationMs": 231226,
+  "sessionId": "75b062cc-e4c4-438b-936c-c372691a1607",
+  "cost": {
+    "inputTokens": 581,
+    "outputTokens": 14012,
+    "cacheCreationTokens": 86196,
+    "cacheReadTokens": 2820725,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.460459
+  }
+}
