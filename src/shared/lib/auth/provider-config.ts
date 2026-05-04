@@ -204,10 +204,7 @@ export function getPublicAuthProviders(
   return getEnabledProviderDefinitions(providers).map((definition) => definition.toPublicConfig())
 }
 
-// Returns the `issuer` for the named provider (e.g., 'platform') if it is
-// configured. Falls back to the origin of `discoveryUrl` so callers using
-// only OpenID discovery can still derive the issuer base URL. Used by
-// platform-auth-service to verify env-managed PLATFORM_TOKEN signatures.
+// Issuer for the named provider, derived from `issuer` or `discoveryUrl`.
 export function getAuthProviderIssuer(id: string): string | undefined {
   const providers = resolveEnvAuthProviders()
   const found = providers.find((p) => p.id === id)

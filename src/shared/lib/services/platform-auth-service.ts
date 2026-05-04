@@ -55,14 +55,11 @@ function buildTokenPreview(token: string): string {
   return `${token.slice(0, 6)}...${token.slice(-4)}`
 }
 
-// JWKS resolver cache keyed by issuer URL. `createRemoteJWKSet` already
-// memoizes JWK fetches and rotates on cooldown, so we only build one resolver
-// per issuer for the process lifetime.
+// JWKS resolver cache, one per issuer URL.
 const jwksByIssuer = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
 
-// Test hook: tests may swap in a `createLocalJWKSet` resolver to avoid
-// needing a real /jwks endpoint.
 type RemoteJwksResolver = ReturnType<typeof createRemoteJWKSet>
+// Test-only override; lets tests swap in a local JWKS resolver.
 let injectedJwksResolver: RemoteJwksResolver | null = null
 
 export function _setOrgJwksResolverForTest(resolver: RemoteJwksResolver | null): void {
@@ -125,11 +122,8 @@ function warnInvalidEnvPlatformToken(reason: string, error?: unknown): void {
   })
 }
 
-// Cached env-managed status. `undefined` = init not yet run, `null` = not in
-// auth-mode or no PLATFORM_TOKEN, otherwise = the verified status object.
-// Async verification (`jwtVerify` against remote JWKS) cannot run inside the
-// sync `getEnvManagedStatus()` call site, so we precompute it once at startup
-// via `initEnvManagedPlatformStatus()` and read the cache on every status read.
+// Verified env-managed status, populated once at startup by
+// `initEnvManagedPlatformStatus()`. `undefined` = not initialized yet.
 let cachedEnvManagedStatus: PlatformAuthStatus | null | undefined = undefined
 
 function buildEnvManagedStatus(envToken: string, orgId: string | null): PlatformAuthStatus {
@@ -138,8 +132,6 @@ function buildEnvManagedStatus(envToken: string, orgId: string | null): Platform
     tokenPreview: buildTokenPreview(envToken),
     email: null,
     label: 'Managed by organization',
-    // `orgId` reflects a verified claim. Authoritative ownership / isolation
-    // decisions still require the proxy's active-row check on org_access_key.
     orgId,
     orgName: null,
     role: null,
@@ -149,11 +141,7 @@ function buildEnvManagedStatus(envToken: string, orgId: string | null): Platform
   }
 }
 
-// Runs once at startup (from auth-mode startup-validation). Reads the env
-// PLATFORM_TOKEN, derives the issuer from AUTH_PROVIDERS_JSON, runs a real
-// `jwtVerify` against the issuer JWKS, and caches the verified status.
-// Verification failure logs warn + Sentry and stores a status with
-// `orgId: null` so downstream callers don't trust an unverifiable token.
+// Verifies PLATFORM_TOKEN against the issuer JWKS at startup; warns on failure.
 export async function initEnvManagedPlatformStatus(): Promise<void> {
   if (!isAuthMode()) {
     cachedEnvManagedStatus = null
@@ -187,8 +175,6 @@ export async function initEnvManagedPlatformStatus(): Promise<void> {
   }
 }
 
-// Test-only reset hook. Returns the cache to "uninitialized" so the next
-// init call re-runs verification.
 export function _resetEnvManagedPlatformStatusForTest(): void {
   cachedEnvManagedStatus = undefined
 }
@@ -231,10 +217,7 @@ async function reconcileAfterAuthChange(): Promise<void> {
 
 function getEnvManagedStatus(): PlatformAuthStatus | null {
   if (cachedEnvManagedStatus !== undefined) return cachedEnvManagedStatus
-  // Fast-path defaults for callers that read status before init has run
-  // (e.g., tests, or pre-startup diagnostics). Returns a conservative status
-  // with `orgId: null` until `initEnvManagedPlatformStatus()` populates the
-  // cache with a verified value.
+  // Pre-init fallback: orgId stays null until verification completes.
   if (!isAuthMode()) return null
   const envToken = process.env.PLATFORM_TOKEN?.trim()
   if (!envToken) return null
