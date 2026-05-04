@@ -1,22 +1,25 @@
 import { captureException } from '@shared/lib/error-reporting'
+import { z } from 'zod'
 
 // Shape of each entry in the AUTH_PROVIDERS_JSON env bundle. Provider
 // secrets belong in deployment env, not user-writable settings.json — so
 // this lives next to the resolver instead of in shared settings types.
 export type AuthProviderType = 'oidc'
 
-export interface AuthProviderSettings {
-  id: string
-  type: AuthProviderType
-  enabled?: boolean
-  displayName?: string
-  discoveryUrl?: string
-  issuer?: string
-  clientId?: string
-  clientSecret?: string
-  scopes?: string[]
-  icon?: string
-}
+const AuthProviderSettingsSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal('oidc'),
+  enabled: z.boolean().optional(),
+  displayName: z.string().optional(),
+  discoveryUrl: z.string().optional(),
+  issuer: z.string().optional(),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  scopes: z.array(z.string()).optional(),
+  icon: z.string().optional(),
+})
+
+export type AuthProviderSettings = z.infer<typeof AuthProviderSettingsSchema>
 
 export interface PublicAuthProviderReadiness {
   ok: boolean
@@ -96,13 +99,16 @@ class OidcAuthProviderDefinition extends AuthProviderDefinition {
   }
 
   toGenericOAuthConfig(): GenericOAuthProviderConfig | null {
-    const readiness = this.getReadiness()
-    if (!readiness.ok) return null
+    const discoveryUrl = this.config.discoveryUrl?.trim() || undefined
+    const issuer = this.config.issuer?.trim() || undefined
+    const clientId = this.config.clientId?.trim()
+    if ((!discoveryUrl && !issuer) || !clientId) return null
+
     return {
       providerId: this.config.id,
-      discoveryUrl: this.config.discoveryUrl?.trim() || undefined,
-      issuer: this.config.issuer?.trim() || undefined,
-      clientId: this.config.clientId!.trim(),
+      discoveryUrl,
+      issuer,
+      clientId,
       clientSecret: this.config.clientSecret?.trim() || undefined,
       scopes: this.config.scopes,
       pkce: true,
@@ -118,27 +124,56 @@ function readEnv(name: string): string | undefined {
   return value ? value : undefined
 }
 
+let cachedAuthProvidersRaw: string | undefined
+let cachedAuthProviders: AuthProviderSettings[] | null = null
+
+function cacheResolvedAuthProviders(raw: string | undefined, providers: AuthProviderSettings[]): AuthProviderSettings[] {
+  cachedAuthProvidersRaw = raw
+  cachedAuthProviders = providers
+  return providers
+}
+
+function reportProviderConfigError(error: unknown, op: string, extra?: Record<string, unknown>): void {
+  captureException(error, {
+    tags: { area: 'auth', op },
+    ...(extra ? { extra } : {}),
+  })
+}
+
 // TODO: Keep OIDC providers deployment-managed for now. If we ever expose
 // admin-managed provider config, prefer deployment-time tooling over storing
 // provider secrets in app settings.
 function resolveEnvAuthProviders(): AuthProviderSettings[] {
   const raw = readEnv('AUTH_PROVIDERS_JSON')
-  if (!raw) return []
+  if (cachedAuthProvidersRaw === raw && cachedAuthProviders) {
+    return cachedAuthProviders
+  }
+  if (!raw) return cacheResolvedAuthProviders(raw, [])
 
   try {
     const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((provider): provider is AuthProviderSettings =>
-      typeof provider === 'object' &&
-      provider !== null &&
-      'id' in provider &&
-      'type' in provider &&
-      typeof provider.id === 'string' &&
-      provider.type === 'oidc'
-    )
+    if (!Array.isArray(parsed)) {
+      reportProviderConfigError(
+        new Error('AUTH_PROVIDERS_JSON must be a JSON array'),
+        'schema-env-providers',
+      )
+      return cacheResolvedAuthProviders(raw, [])
+    }
+
+    const providers: AuthProviderSettings[] = []
+    parsed.forEach((provider, index) => {
+      const result = AuthProviderSettingsSchema.safeParse(provider)
+      if (result.success) {
+        providers.push(result.data)
+        return
+      }
+      reportProviderConfigError(result.error, 'schema-env-provider', { index })
+    })
+
+    return cacheResolvedAuthProviders(raw, providers)
   } catch (error) {
-    captureException(error, { tags: { area: 'auth', op: 'parse-env-providers' } })
-    return []
+    reportProviderConfigError(error, 'parse-env-providers')
+    return cacheResolvedAuthProviders(raw, [])
   }
 }
 
@@ -167,4 +202,23 @@ export function getPublicAuthProviders(
   providers: AuthProviderSettings[] = resolveEnvAuthProviders(),
 ): PublicAuthProviderConfig[] {
   return getEnabledProviderDefinitions(providers).map((definition) => definition.toPublicConfig())
+}
+
+// Returns the `issuer` for the named provider (e.g., 'platform') if it is
+// configured. Falls back to the origin of `discoveryUrl` so callers using
+// only OpenID discovery can still derive the issuer base URL. Used by
+// platform-auth-service to verify env-managed PLATFORM_TOKEN signatures.
+export function getAuthProviderIssuer(id: string): string | undefined {
+  const providers = resolveEnvAuthProviders()
+  const found = providers.find((p) => p.id === id)
+  if (!found) return undefined
+  const issuer = found.issuer?.trim()
+  if (issuer) return issuer
+  const discovery = found.discoveryUrl?.trim()
+  if (!discovery) return undefined
+  try {
+    return new URL(discovery).origin
+  } catch {
+    return undefined
+  }
 }

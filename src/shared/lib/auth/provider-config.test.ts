@@ -95,8 +95,67 @@ describe('getPublicAuthProviders', () => {
     ])
   })
 
-  it('does not expose bundled providers before their activation env is set', () => {
+  it('returns no providers when AUTH_PROVIDERS_JSON is unset', () => {
     expect(getPublicAuthProviders()).toEqual([])
+  })
+
+  it('filters disabled providers from public and OAuth configs', () => {
+    process.env.AUTH_PROVIDERS_JSON = JSON.stringify([
+      {
+        id: 'disabled-sso',
+        type: 'oidc',
+        enabled: false,
+        issuer: 'https://disabled.example.com',
+        clientId: 'disabled-client',
+      },
+      {
+        id: 'enabled-sso',
+        type: 'oidc',
+        issuer: 'https://enabled.example.com',
+        clientId: 'enabled-client',
+      },
+    ])
+
+    expect(getPublicAuthProviders().map((provider) => provider.id)).toEqual(['enabled-sso'])
+    expect(getGenericOAuthProviderConfigs().map((provider) => provider.providerId)).toEqual(['enabled-sso'])
+  })
+
+  it('drops malformed entries while preserving valid providers', () => {
+    process.env.AUTH_PROVIDERS_JSON = JSON.stringify([
+      {
+        id: 'company-sso',
+        type: 'oidc',
+        issuer: 'https://auth.example.com',
+        clientId: 'client',
+      },
+      {
+        id: 123,
+        type: 'oidc',
+      },
+    ])
+
+    expect(getPublicAuthProviders().map((provider) => provider.id)).toEqual(['company-sso'])
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tags: expect.objectContaining({ area: 'auth', op: 'schema-env-provider' }),
+        extra: expect.objectContaining({ index: 1 }),
+      }),
+    )
+  })
+
+  it('does not expose clientSecret in public provider config', () => {
+    process.env.AUTH_PROVIDERS_JSON = JSON.stringify([
+      {
+        id: 'company-sso',
+        type: 'oidc',
+        issuer: 'https://auth.example.com',
+        clientId: 'client',
+        clientSecret: 'secret',
+      },
+    ])
+
+    expect(JSON.stringify(getPublicAuthProviders())).not.toContain('secret')
   })
 
   it('lets provider definitions produce Better Auth OAuth config', () => {

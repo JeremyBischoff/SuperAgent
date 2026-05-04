@@ -4,23 +4,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@renderer/lib/api'
 import { useUpdateSettings } from '@renderer/hooks/use-settings'
 import { prepareOAuthPopup } from '@renderer/lib/oauth-popup'
+import type {
+  PlatformAuthSource,
+  PlatformAuthStatus as SharedPlatformAuthStatus,
+} from '@shared/lib/services/platform-auth-service'
 
 export const PLATFORM_AUTH_CHOICE_STORAGE_KEY = 'superagent-auth-choice'
 
-// `env` means the active token came from an org-provisioned `PLATFORM_TOKEN`.
-export type PlatformAuthSource = 'settings' | 'env' | null
+export type { PlatformAuthSource }
 
-export interface PlatformAuthStatus {
-  connected: boolean
-  tokenPreview: string | null
-  email: string | null
-  label: string | null
-  orgId: string | null
-  orgName: string | null
-  role: string | null
-  createdAt: string | null
-  updatedAt: string | null
-  source: PlatformAuthSource
+export interface PlatformAuthStatus extends SharedPlatformAuthStatus {
   platformBaseUrl: string
 }
 
