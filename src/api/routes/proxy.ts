@@ -6,6 +6,7 @@ import { matchScopes } from '@shared/lib/proxy/scope-matcher'
 import { resolveApiPolicy } from '@shared/lib/proxy/policy-resolver'
 import { reviewManager } from '@shared/lib/proxy/review-manager'
 import { getConnectionToken } from '@shared/lib/composio/client'
+import { attribution, runWithAttribution } from '@shared/lib/platform-attribution'
 import { trackServerEvent } from '@shared/lib/analytics/server-analytics'
 import { db } from '@shared/lib/db'
 import {
@@ -265,10 +266,14 @@ proxy.all('/:agentSlug/:accountId/:rest{.+}', async (c) => {
 
   // resolvedPolicyDecision is now 'allow' (auto) or 'approved_by_user' (manual)
 
-  // 4. Fetch real token (with cache)
+  // 4. Fetch real token (with cache). Wrap in attribution for the
+  // connected_account's owner so the platform proxy sees X-Platform-Member-Id.
   let realToken: string
   try {
-    realToken = await getCachedToken(account.composioConnectionId)
+    realToken = await runWithAttribution(
+      attribution.fromResourceCreator(account.userId),
+      () => getCachedToken(account.composioConnectionId),
+    )
   } catch (error) {
     await logAuditEntry({
       agentSlug,
