@@ -1,0 +1,23 @@
+## Final Test Report
+
+[TEST_FAIL]
+
+[REASON] The agent attempted to use the GitHub tool to retrieve the authenticated user's GitHub username, but failed due to a proxy error (502) when trying to fetch the OAuth access token.
+
+[BUG_FOUND] OAuth Token Retrieval Failure - The proxy is returning a 502 error ("Failed to fetch access token") when trying to call GitHub on behalf of the user. Although the GitHub account was successfully connected during the flow, the system cannot retrieve the OAuth token to complete the API request. The agent worked for 3m 18s but ultimately could not retrieve the GitHub username due to this infrastructure issue.
+
+[STEP] Navigated to http://localhost:47891 - Success. Application loaded with sidebar visible.
+
+[STEP] Found and clicked the "QA-20260504-182508-ckxu" agent in the sidebar - Success. Agent was selected and chat view loaded.
+
+[STEP] Verified agent status is "running" or "idle" - Success. Agent status showed "idle" which is acceptable per requirements.
+
+[STEP] Sent message "Use the GitHub tool to check who I am. Tell me my GitHub username." - Success. Message was submitted and agent began processing.
+
+[STEP] Handled GitHub account access request card - Success. Card appeared asking for GitHub account access. GitHub was already selected in the checkbox. Clicked "Allow Access" button to grant access.
+
+[STEP] Waited for response (up to 4 minutes) - Partial Success. Agent processed for 3m 18s and completed, but did not provide the expected GitHub username.
+
+[STEP] Verified response includes GitHub username - FAILED. The response does not include a GitHub username. Instead, the agent reported: "The proxy is returning a 502 error ("Failed to fetch access token") when trying to call GitHub on your behalf. The connected account exists (ID `4114f643-5f73-4b92-b434-3d3a74b47299`), but the OAuth token can't be retrieved through the proxy right now."
+
+[STEP] Took final screenshot - Success. Screenshot shows the error message in the chat view, with the session summary "Worked for 3m 18s".

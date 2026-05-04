@@ -1,0 +1,23 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Browser-use feature successfully executes browser commands through agent chat interface",
+  "steps": [
+    "Step 1: Navigated to http://localhost:47891 - Application loaded successfully showing SuperAgent interface with agent list in sidebar",
+    "Step 2: Found and clicked the \"QA-20260504-182506-3gfd\" agent in the sidebar - Agent opened successfully with chat interface displayed",
+    "Step 3: Sent message \"Open a browser and go to https://example.com. Tell me the page title.\" - Message typed and sent using Cmd+Enter, agent began processing",
+    "Step 4: Waited up to 3 minutes for response - Response received within 7 seconds",
+    "Step 5: Verified response mentions \"Example Domain\" - Response clearly shows \"The page title is Example Domain\" with browser preview panel displaying the actual Example Domain page"
+  ],
+  "bugs": [],
+  "durationMs": 93747,
+  "sessionId": "1b378b8f-533c-4ebd-ba9a-cb00fc0c4115",
+  "cost": {
+    "inputTokens": 315,
+    "outputTokens": 10261,
+    "cacheCreationTokens": 126517,
+    "cacheReadTokens": 1110606,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.320827
+  }
+}
