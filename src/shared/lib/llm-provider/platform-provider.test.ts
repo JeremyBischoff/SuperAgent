@@ -43,32 +43,39 @@ describe('PlatformLlmProvider.getContainerEnvVars', () => {
     vi.clearAllMocks()
   })
 
-  it('injects ANTHROPIC_CUSTOM_HEADERS with X-Platform-Member-Id when attributed', () => {
+  it('embeds member id into ANTHROPIC_AUTH_TOKEN and sets ANTHROPIC_CUSTOM_HEADERS when attributed', () => {
     mockGetPlatformAccessToken.mockReturnValue(ORG_TOKEN)
     const provider = new PlatformLlmProvider()
 
     const env = runWithRequestUser('user_alice', () => provider.getContainerEnvVars()) as Record<string, string | undefined>
 
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBe(ORG_TOKEN)
+    // The container SDK chain doesn't honor ANTHROPIC_CUSTOM_HEADERS, so the
+    // member id is also embedded into the bearer token (`<token>::<memberId>`)
+    // for the platform proxy to pick up. The custom header is still set as
+    // belt-and-suspenders.
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe(`${ORG_TOKEN}::sub_alice`)
     expect(env.ANTHROPIC_CUSTOM_HEADERS).toBe('X-Platform-Member-Id: sub_alice')
   })
 
-  it('omits ANTHROPIC_CUSTOM_HEADERS for opaque access-key tokens', () => {
+  it('leaves ANTHROPIC_AUTH_TOKEN un-suffixed for opaque access-key tokens', () => {
     mockGetPlatformAccessToken.mockReturnValue(ACCESS_KEY)
     const provider = new PlatformLlmProvider()
 
     const env = runWithRequestUser('user_alice', () => provider.getContainerEnvVars()) as Record<string, string | undefined>
 
+    // Opaque access keys carry single-user attribution upstream; no member
+    // suffix should be added and no custom header should be set.
     expect(env.ANTHROPIC_AUTH_TOKEN).toBe(ACCESS_KEY)
     expect(env.ANTHROPIC_CUSTOM_HEADERS).toBeUndefined()
   })
 
-  it('omits ANTHROPIC_CUSTOM_HEADERS when no attribution scope is active', () => {
+  it('leaves ANTHROPIC_AUTH_TOKEN un-suffixed when no attribution scope is active', () => {
     mockGetPlatformAccessToken.mockReturnValue(ORG_TOKEN)
     const provider = new PlatformLlmProvider()
 
     const env = provider.getContainerEnvVars()
 
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe(ORG_TOKEN)
     expect(env.ANTHROPIC_CUSTOM_HEADERS).toBeUndefined()
   })
 })
