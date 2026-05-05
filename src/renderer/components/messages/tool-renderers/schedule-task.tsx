@@ -46,9 +46,9 @@ function ExpandedView({ input, result, isError }: ToolRendererProps) {
       <div className="flex items-center gap-4 text-xs">
         <div className="flex items-center gap-1.5">
           {isRecurring ? (
-            <Repeat className="h-3.5 w-3.5 text-blue-500" />
+            <Repeat className="h-3 w-3 text-foreground" />
           ) : (
-            <CalendarClock className="h-3.5 w-3.5 text-amber-500" />
+            <CalendarClock className="h-3 w-3 text-foreground" />
           )}
           <span className="font-medium">
             {isRecurring ? 'Recurring' : 'One-time'}
@@ -123,9 +123,9 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
         {parsed.scheduleType ? (
           <>
             {isRecurring ? (
-              <Repeat className="h-3.5 w-3.5 text-blue-500" />
+              <Repeat className="h-3 w-3 text-foreground" />
             ) : (
-              <CalendarClock className="h-3.5 w-3.5 text-amber-500" />
+              <CalendarClock className="h-3 w-3 text-foreground" />
             )}
             <span className="font-medium">
               {isRecurring ? 'Recurring' : 'One-time'}

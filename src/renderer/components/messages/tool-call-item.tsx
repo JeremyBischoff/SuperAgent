@@ -1,6 +1,6 @@
 
 import { cn } from '@shared/lib/utils/cn'
-import { Check, X, ChevronDown, ChevronRight, Loader2, StopCircle } from 'lucide-react'
+import { Check, X, Ban, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { useState, useRef } from 'react'
 import { getToolRenderer } from './tool-renderers'
 import { parseToolResult } from '@renderer/lib/parse-tool-result'
@@ -41,7 +41,7 @@ function isUserInputTool(name: string): boolean {
 function ToolNameWithSummary({ name, summary }: { name: string; summary?: string | null }) {
   return (
     <>
-      <span className="font-mono font-normal truncate text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+      <span className="font-mono font-normal shrink-0 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
         {name}
       </span>
       {summary && (
@@ -79,8 +79,8 @@ function StatusIndicator({ status }: { status: ToolCallStatus }) {
     )
   }
   return (
-    <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center">
-      <StopCircle className="h-3 w-3 text-gray-400" />
+    <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-muted flex items-center justify-center">
+      <Ban className="h-2.5 w-2.5 text-muted-foreground" strokeWidth={3} />
     </span>
   )
 }
@@ -109,35 +109,41 @@ export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionA
   const CustomExpandedView = renderer?.ExpandedView
 
   return (
-    <div className="text-sm" data-testid={`tool-call-${toolCall.name}`}>
+    <div className="text-sm border border-border/40 rounded-md overflow-hidden" data-testid={`tool-call-${toolCall.name}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 py-1 group"
+        className={cn('flex w-full items-center gap-2 px-3 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
         <StatusIndicator status={status} />
+        {isPendingUserInput && (
+          <span className="font-mono font-normal shrink-0 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+            Waiting for input:
+          </span>
+        )}
         <ToolNameWithSummary
           name={renderer?.displayName || formatToolName(toolCall.name)}
           summary={summary}
         />
         {renderer?.CollapsedContent && (
-          <renderer.CollapsedContent
-            input={toolCall.input}
-            result={resultStr}
-            isError={toolCall.isError ?? false}
-            agentSlug={agentSlug}
-          />
-        )}
-        {isPendingUserInput && (
-          <span className="shrink-0 text-2xs text-muted-foreground">
-            waiting for user input
-          </span>
+          <>
+            {!summary && <span aria-hidden className="shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground text-xs transition-colors">→</span>}
+            <renderer.CollapsedContent
+              input={toolCall.input}
+              result={resultStr}
+              isError={toolCall.isError ?? false}
+              agentSlug={agentSlug}
+            />
+          </>
         )}
         {elapsed && (
-          <span className="shrink-0 text-2xs text-muted-foreground tabular-nums">
+          <span className="shrink-0 text-2xs text-muted-foreground tabular-nums ml-auto">
             {elapsed}
           </span>
         )}
-        <span className="shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors">
+        <span className={cn(
+          'shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors',
+          !isPendingUserInput && !elapsed && 'ml-auto'
+        )}>
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5" />
           ) : (
@@ -147,7 +153,7 @@ export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionA
       </button>
 
       {expanded && (
-        <div className="mt-1 rounded-md bg-muted px-3 py-3">
+        <div className="border-t border-border/40 bg-muted/50 rounded-b-md px-3 py-3">
           {CustomExpandedView ? (
             <CustomExpandedView
               input={toolCall.input}
@@ -236,8 +242,8 @@ export function StreamingToolCallItem({ name, partialInput }: StreamingToolCallI
   }
 
   return (
-    <div className="text-sm">
-      <div className="flex w-full items-center gap-2 py-1">
+    <div className="text-sm border border-border/40 rounded-md overflow-hidden">
+      <div className="flex w-full items-center gap-2 px-3 py-1.5 bg-muted/50">
         <StatusIndicator status="running" />
         <ToolNameWithSummary
           name={renderer?.displayName || formatToolName(name)}
@@ -248,7 +254,7 @@ export function StreamingToolCallItem({ name, partialInput }: StreamingToolCallI
         </span>
       </div>
 
-      <div className="mt-1 rounded-md bg-muted px-3 py-3">
+      <div className="border-t border-border/40 bg-muted/50 rounded-b-md px-3 py-3">
         {CustomStreamingView ? (
           <CustomStreamingView partialInput={partialInput} />
         ) : (

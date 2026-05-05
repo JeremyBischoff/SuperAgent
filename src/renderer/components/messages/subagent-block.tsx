@@ -1,7 +1,7 @@
 
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { cn } from '@shared/lib/utils/cn'
-import { Bot, ChevronDown, ChevronRight, CheckCircle, XCircle, Loader2, StopCircle } from 'lucide-react'
+import { ChevronDown, ChevronRight, Check, X, Ban, Loader2 } from 'lucide-react'
 import { ToolCallItem, StreamingToolCallItem } from './tool-call-item'
 import { useSubagentMessages } from '@renderer/hooks/use-messages'
 import { parseToolResult } from '@renderer/lib/parse-tool-result'
@@ -131,20 +131,6 @@ export function SubAgentBlock({
   // Stats from completed subagent
   const stats = toolCall.subagent
 
-  const StatusIcon = {
-    running: Loader2,
-    completed: CheckCircle,
-    error: XCircle,
-    cancelled: StopCircle,
-  }[status]
-
-  const statusColor = {
-    running: 'text-blue-500',
-    completed: 'text-green-500',
-    error: 'text-red-500',
-    cancelled: 'text-gray-400',
-  }[status]
-
   // Flatten assistant messages into individual renderable items (text blocks + tool calls)
   type FlatItem =
     | { kind: 'text'; key: string; text: string }
@@ -188,41 +174,55 @@ export function SubAgentBlock({
     || !!(subagentStreamingToolUse && !isStreamingToolUsePersisted)
 
   return (
-    <div className="border rounded-md bg-muted/30 text-sm">
-      {/* Header */}
+    <div className="text-sm border border-border/40 rounded-md overflow-hidden">
+      {/* Header — matches ToolCallItem collapsed row */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors"
+        className={cn('flex w-full items-center gap-2 px-3 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
-        <StatusIcon
-          className={cn(
-            'h-4 w-4 shrink-0',
-            statusColor,
-            isRunning && 'animate-spin'
-          )}
-        />
-        <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="font-mono font-medium truncate">
+        {/* Status indicator */}
+        {status === 'completed' ? (
+          <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-green-100 dark:bg-green-950/60 flex items-center justify-center">
+            <Check className="h-2.5 w-2.5 text-green-600 dark:text-green-400" strokeWidth={3} />
+          </span>
+        ) : status === 'error' ? (
+          <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-muted flex items-center justify-center">
+            <X className="h-2.5 w-2.5 text-muted-foreground" strokeWidth={3} />
+          </span>
+        ) : status === 'running' ? (
+          <span className="h-3.5 w-3.5 shrink-0 flex items-center justify-center">
+            <Loader2 className="h-3 w-3 text-gray-400 animate-spin" />
+          </span>
+        ) : (
+          <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-muted flex items-center justify-center">
+            <Ban className="h-2.5 w-2.5 text-muted-foreground" strokeWidth={3} />
+          </span>
+        )}
+        <span className="font-mono font-normal shrink-0 text-xs text-muted-foreground group-hover:text-foreground transition-colors">Sub-agent:</span>
+        <span className="font-mono font-normal shrink-0 text-xs text-muted-foreground group-hover:text-foreground transition-colors">
           {subagentType}
         </span>
         {description && (
-          <span className="text-muted-foreground truncate text-xs">
-            {description}
-          </span>
+          <>
+            <span aria-hidden className="shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground text-xs transition-colors">→</span>
+            <span className="text-muted-foreground group-hover:text-foreground truncate text-xs transition-colors">
+              {description}
+            </span>
+          </>
         )}
-        <span className="shrink-0 ml-auto">
+        <span className="shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors ml-auto">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <ChevronDown className="h-3.5 w-3.5" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            <ChevronRight className="h-3.5 w-3.5" />
           )}
         </span>
       </button>
 
       {/* Body - subagent messages */}
       {expanded && (
-        <div className="px-3 pb-3">
-          <div className="border-l-2 border-blue-300 dark:border-blue-700 pl-3 space-y-3">
+        <div className="border-t border-border/40 bg-muted/50 rounded-b-md px-3 py-3">
+          <div className="space-y-3">
             {totalItems === 0 && isRunning && !hasStreamingContent && (
               <div className="text-xs text-muted-foreground italic py-2">
                 Sub-agent is working...
@@ -238,7 +238,7 @@ export function SubAgentBlock({
             {hasMore && !showAll && (
               <button
                 onClick={() => setShowAll(true)}
-                className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors py-1"
+                className="text-xs text-foreground hover:text-foreground/70 font-medium transition-colors py-1"
               >
                 Show all ({totalItems} items)
               </button>
