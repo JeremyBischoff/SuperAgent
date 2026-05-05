@@ -1,23 +1,27 @@
 {
   "storyId": "browser-test",
   "passed": true,
-  "reason": "Browser-use feature successfully executes browser commands through agent chat interface",
+  "reason": "Browser-use feature test: Agent successfully executed browser tools to navigate to example.com, retrieved page title, and returned response mentioning \"Example Domain\"",
   "steps": [
-    "Step 1: Navigated to http://localhost:47891 - Application loaded successfully showing SuperAgent interface with agent list in sidebar",
-    "Step 2: Found and clicked the \"QA-20260504-182506-3gfd\" agent in the sidebar - Agent opened successfully with chat interface displayed",
-    "Step 3: Sent message \"Open a browser and go to https://example.com. Tell me the page title.\" - Message typed and sent using Cmd+Enter, agent began processing",
-    "Step 4: Waited up to 3 minutes for response - Response received within 7 seconds",
-    "Step 5: Verified response mentions \"Example Domain\" - Response clearly shows \"The page title is Example Domain\" with browser preview panel displaying the actual Example Domain page"
+    "Navigated to http://localhost:47891 — Page loaded successfully showing SuperAgent interface with agent list in sidebar",
+    "Clicked \"QA-20260505-181646-ybb6\" agent in sidebar — Agent opened successfully with chat interface displayed",
+    "Typed message in input field: \"Open a browser and go to https://example.com. Tell me the page title.\" — Message was entered correctly in the textbox",
+    "Clicked \"Send message\" button — Message was sent successfully; agent status changed to \"working\"",
+    "Waited for response (up to 3 minutes) — Agent completed in 7 seconds",
+    "Verified response mentions \"Example Domain\" — Response clearly states: \"The page title is \"Example Domain\".\"",
+    "Verified browser tool calls are visible — Two tool call cards displayed: \"Open Browser https://example.com\" and \"Browser Command $ get title\"",
+    "Verified live browser preview appears — Right panel shows live preview of Example Domain website being visited",
+    "Verified activity log shows executed browser actions — Activity section lists both \"Open Browser\" and \"Browser Command\" tool executions"
   ],
   "bugs": [],
-  "durationMs": 93747,
-  "sessionId": "1b378b8f-533c-4ebd-ba9a-cb00fc0c4115",
+  "durationMs": 76005,
+  "sessionId": "d12b785a-a8c3-46cb-9a99-54e3be12b631",
   "cost": {
-    "inputTokens": 315,
-    "outputTokens": 10261,
-    "cacheCreationTokens": 126517,
-    "cacheReadTokens": 1110606,
+    "inputTokens": 234,
+    "outputTokens": 8240,
+    "cacheCreationTokens": 40648,
+    "cacheReadTokens": 826992,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.320827
+    "totalCostUsd": 0.174943
   }
 }
