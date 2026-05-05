@@ -232,7 +232,7 @@ export function AgentCreationAids({ onVoiceResult, onImportComplete, className }
       </div>
 
       <Dialog open={showVoiceAgent} onOpenChange={(open) => { if (!open) closeVoiceAgent() }}>
-        <DialogContent className="max-w-2xl p-0 overflow-hidden h-[420px]">
+        <DialogContent className="max-w-2xl p-0 overflow-hidden h-[420px] [grid-template-rows:minmax(0,1fr)] gap-0">
           <DialogHeader className="sr-only">
             <DialogTitle>Let&apos;s talk about your agent</DialogTitle>
             <DialogDescription>
