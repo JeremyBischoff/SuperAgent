@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSettings } from '@renderer/hooks/use-settings'
-import { EffortSelector } from './effort-selector'
-import { ModelSelector } from './model-selector'
+import { ComposerOptionsPopover } from './composer-options-popover'
 import type { EffortLevel } from '@shared/lib/container/types'
 import type { ComposerModel, ComposerModelFamily } from '@shared/lib/llm-provider'
 import type { LlmProviderId } from '@shared/lib/config/settings'
@@ -52,14 +51,21 @@ export function useComposerOptions(args: UseComposerOptionsArgs = {}): ComposerO
   const { initialEffort, initialModel, preferredFamily } = args
 
   // ---- Effort ----
-  const [effort, setEffort] = useState<EffortLevel>(initialEffort ?? DEFAULT_EFFORT)
+  const [effort, setEffortState] = useState<EffortLevel>(initialEffort ?? DEFAULT_EFFORT)
   const effortSeededRef = useRef(initialEffort !== undefined)
   useEffect(() => {
     if (!effortSeededRef.current && initialEffort !== undefined) {
-      setEffort(initialEffort)
+      setEffortState(initialEffort)
       effortSeededRef.current = true
     }
   }, [initialEffort])
+  // Wrap the setter so an explicit user pick locks out the late-arriving
+  // initial-seed effect — otherwise a slow `useSession` resolution can clobber
+  // the user's choice if they pick before session data lands.
+  const setEffort = useCallback((e: EffortLevel) => {
+    effortSeededRef.current = true
+    setEffortState(e)
+  }, [])
 
   // ---- Composer models from active provider ----
   const { data: settings } = useSettings()
@@ -81,30 +87,35 @@ export function useComposerOptions(args: UseComposerOptionsArgs = {}): ComposerO
   ), [preferredFamily, settings, composerModels])
 
   // ---- Model ----
-  const [model, setModel] = useState<string | undefined>(initialModel ?? fallbackModel)
+  const [model, setModelState] = useState<string | undefined>(initialModel ?? fallbackModel)
   const modelSeededRef = useRef(initialModel !== undefined)
   // Seed once when session data loads after mount.
   useEffect(() => {
     if (!modelSeededRef.current && initialModel !== undefined) {
-      setModel(initialModel)
+      setModelState(initialModel)
       modelSeededRef.current = true
     }
   }, [initialModel])
   // Adopt provider default if the selector is still empty by the time settings load.
   useEffect(() => {
     if (!modelSeededRef.current && model === undefined && fallbackModel) {
-      setModel(fallbackModel)
+      setModelState(fallbackModel)
     }
   }, [model, fallbackModel])
+  const setModel = useCallback((m: string) => {
+    modelSeededRef.current = true
+    setModelState(m)
+  }, [])
 
-  return {
-    effort,
-    setEffort,
-    model,
-    setModel,
-    composerModels,
-    toRuntimeOptions: () => ({ effort, ...(model ? { model } : {}) }),
-  }
+  const toRuntimeOptions = useCallback(
+    () => ({ effort, ...(model ? { model } : {}) }),
+    [effort, model]
+  )
+
+  return useMemo(
+    () => ({ effort, setEffort, model, setModel, composerModels, toRuntimeOptions }),
+    [effort, setEffort, model, setModel, composerModels, toRuntimeOptions]
+  )
 }
 
 interface ComposerOptionsProps {
@@ -113,20 +124,10 @@ interface ComposerOptionsProps {
 }
 
 /**
- * The two-button toolbar (effort + model) rendered next to the textarea in
+ * Single combined model + effort popover rendered next to the textarea in
  * both the AgentHome and in-session composers. Stateless — owned by the
  * `useComposerOptions` hook above so the parent can read the values at submit.
  */
 export function ComposerOptions({ state, disabled }: ComposerOptionsProps) {
-  return (
-    <>
-      <EffortSelector value={state.effort} onChange={state.setEffort} disabled={disabled} />
-      <ModelSelector
-        value={state.model}
-        onChange={state.setModel}
-        options={state.composerModels}
-        disabled={disabled}
-      />
-    </>
-  )
+  return <ComposerOptionsPopover state={state} disabled={disabled} />
 }

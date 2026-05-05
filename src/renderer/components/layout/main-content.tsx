@@ -187,6 +187,50 @@ export function MainContent() {
               {agent?.name || 'Loading...'}
             </button>
           </div>
+          {(() => {
+            const taskCrumbId = scheduledTaskId ?? (sessionId ? session?.scheduledTaskId ?? null : null)
+            const taskCrumbName = scheduledTask?.name ?? (sessionId ? session?.scheduledTaskName : null)
+            if (!taskCrumbId) return null
+            const isLeaf = !!scheduledTaskId
+            return (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
+                <button
+                  type="button"
+                  className={`flex items-center gap-1 transition-colors app-no-drag ${isLeaf ? 'text-muted-foreground cursor-default' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setView({ kind: 'task', id: taskCrumbId })}
+                  disabled={isLeaf}
+                >
+                  <Clock className="h-4 w-4" />
+                  <span className={`truncate text-sm font-light ${isLeaf ? 'text-foreground' : ''}`}>
+                    {taskCrumbName || 'Scheduled Task'}
+                  </span>
+                </button>
+              </div>
+            )
+          })()}
+          {(() => {
+            const webhookCrumbId = webhookTriggerId ?? (sessionId ? session?.webhookTriggerId ?? null : null)
+            const webhookCrumbName = webhookTrigger?.name ?? webhookTrigger?.triggerType ?? (sessionId ? session?.webhookTriggerName : null)
+            if (!webhookCrumbId) return null
+            const isLeaf = !!webhookTriggerId
+            return (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
+                <button
+                  type="button"
+                  className={`flex items-center gap-1 transition-colors app-no-drag ${isLeaf ? 'text-muted-foreground cursor-default' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setView({ kind: 'webhook', id: webhookCrumbId })}
+                  disabled={isLeaf}
+                >
+                  <Zap className="h-4 w-4" />
+                  <span className={`truncate text-sm font-light ${isLeaf ? 'text-foreground' : ''}`}>
+                    {webhookCrumbName || 'Webhook Trigger'}
+                  </span>
+                </button>
+              </div>
+            )
+          })()}
           {sessionId && session?.agentSlug === agentSlug && (
             <div className="flex items-center gap-1.5 min-w-0">
               <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
@@ -199,28 +243,6 @@ export function MainContent() {
                   {session?.name || 'Loading...'}
                 </span>
               </SessionContextMenu>
-            </div>
-          )}
-          {showTaskCrumb && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span className="truncate text-sm font-light text-foreground">
-                  {scheduledTask?.name || 'Scheduled Task'}
-                </span>
-              </div>
-            </div>
-          )}
-          {showWebhookCrumb && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Zap className="h-4 w-4" />
-                <span className="truncate text-sm font-light text-foreground">
-                  {webhookTrigger?.name || webhookTrigger?.triggerType || 'Webhook Trigger'}
-                </span>
-              </div>
             </div>
           )}
           {showApiLogsCrumb && (
