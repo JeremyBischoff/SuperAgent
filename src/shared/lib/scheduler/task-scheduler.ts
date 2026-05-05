@@ -9,6 +9,7 @@ import { containerManager } from '@shared/lib/container/container-manager'
 import { getEffectiveModels } from '@shared/lib/config/settings'
 import { messagePersister } from '@shared/lib/container/message-persister'
 import { notificationManager } from '@shared/lib/notifications/notification-manager'
+import { runWithRequestUser } from '@shared/lib/platform-attribution'
 import {
   getDueTasks,
   markTaskExecuted,
@@ -138,6 +139,16 @@ class TaskScheduler {
    * Execute a single scheduled task.
    */
   private async executeTask(task: ScheduledTask): Promise<void> {
+    // Run under the task creator's attribution (cold container starts bake
+    // this into the container's ANTHROPIC token).
+    const run = task.createdByUserId
+      ? <T,>(fn: () => Promise<T>) => runWithRequestUser(task.createdByUserId!, fn) as Promise<T>
+      : <T,>(fn: () => Promise<T>) => fn()
+
+    return run(() => this.executeTaskInner(task))
+  }
+
+  private async executeTaskInner(task: ScheduledTask): Promise<void> {
     console.log(
       `[TaskScheduler] Executing task ${task.id} for agent ${task.agentSlug}`
     )

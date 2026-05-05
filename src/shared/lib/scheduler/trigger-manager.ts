@@ -12,7 +12,12 @@ import { containerManager } from '@shared/lib/container/container-manager'
 import { getEffectiveModels } from '@shared/lib/config/settings'
 import { messagePersister } from '@shared/lib/container/message-persister'
 import { notificationManager } from '@shared/lib/notifications/notification-manager'
+import { runWithRequestUser } from '@shared/lib/platform-attribution'
+import { db } from '@shared/lib/db'
+import { connectedAccounts } from '@shared/lib/db/schema'
+import { eq } from 'drizzle-orm'
 import {
+  getDistinctPlatformMemberIdsForActiveTriggers,
   getWebhookTriggersByComposioId,
   markTriggerFired,
   markTriggerFailed,
@@ -30,6 +35,16 @@ import {
 } from '@shared/lib/services/webhook-events-client'
 import type { WebhookEvent } from '@shared/lib/services/webhook-events-client'
 import { SupabaseRealtimeClient } from '@shared/lib/services/supabase-realtime-client'
+
+function resolveConnectedAccountOwner(connectedAccountId: string): string | null {
+  const rows = db
+    .select({ userId: connectedAccounts.userId })
+    .from(connectedAccounts)
+    .where(eq(connectedAccounts.id, connectedAccountId))
+    .limit(1)
+    .all()
+  return rows[0]?.userId ?? null
+}
 
 function composeTriggerPrompt(trigger: WebhookTrigger, events: WebhookEvent[]): string {
   const payloads =
@@ -100,27 +115,40 @@ class TriggerManager {
     this.isProcessing = true
 
     try {
-      const result = await pollAndClaimEvents()
+      // Org JWTs need an acting member to claim per-member rows from the
+      // platform's `webhook_events` table. Iterate over distinct owners of
+      // active/paused triggers and poll each. The first realtime config
+      // returned wins — Supabase RLS scopes inserts to that member, but
+      // any missed events are picked up on the next pollAndProcess() call.
+      const memberIds = getDistinctPlatformMemberIdsForActiveTriggers()
+      if (memberIds.length === 0) return
 
-      // Process claimed events
-      if (result.events.length > 0) {
-        console.log(`[TriggerManager] Processing ${result.events.length} event(s)`)
-        await this.processEvents(result.events)
-      }
+      for (const memberId of memberIds) {
+        try {
+          const result = await pollAndClaimEvents(memberId)
 
-      // Set up Realtime subscription if we got connection info
-      if (result.realtime && !this.realtimeClient?.isActive()) {
-        await this.subscribeToRealtime(result.realtime)
+          if (result.events.length > 0) {
+            console.log(
+              `[TriggerManager] Processing ${result.events.length} event(s) for member ${memberId}`,
+            )
+            await this.processEvents(result.events, memberId)
+          }
+
+          if (result.realtime && !this.realtimeClient?.isActive()) {
+            await this.subscribeToRealtime(result.realtime, memberId)
+          }
+        } catch (error) {
+          console.error(`[TriggerManager] Poll failed for member ${memberId}:`, error)
+        }
       }
-    } catch (error) {
-      console.error('[TriggerManager] Poll failed:', error)
     } finally {
       this.isProcessing = false
     }
   }
 
   private async subscribeToRealtime(
-    config: { url: string; apikey: string; jwt: string; channel: string }
+    config: { url: string; apikey: string; jwt: string; channel: string },
+    memberId: string,
   ): Promise<void> {
     if (this.realtimeClient) {
       this.realtimeClient.disconnect()
@@ -142,16 +170,17 @@ class TriggerManager {
         },
       )
 
-      // Refresh JWT every 50 minutes (token lasts 1 hour)
+      // Refresh JWT every 50 minutes (token lasts 1 hour). Reuses the same
+      // memberId that established the subscription; other members are
+      // covered by the next pollAndProcess() iteration.
       this.jwtRefreshInterval = setInterval(async () => {
         try {
-          const freshResult = await pollAndClaimEvents()
+          const freshResult = await pollAndClaimEvents(memberId)
           if (freshResult.realtime?.jwt && this.realtimeClient) {
             await this.realtimeClient.updateToken(freshResult.realtime.jwt)
           }
-          // Also process any events that came in during the refresh
           if (freshResult.events.length > 0) {
-            await this.processEvents(freshResult.events)
+            await this.processEvents(freshResult.events, memberId)
           }
         } catch (error) {
           console.error('[TriggerManager] JWT refresh failed:', error)
@@ -164,7 +193,7 @@ class TriggerManager {
     }
   }
 
-  private async processEvents(events: WebhookEvent[]): Promise<void> {
+  private async processEvents(events: WebhookEvent[], memberId: string): Promise<void> {
     // Group events by composio_trigger_id for batching
     const grouped = new Map<string, WebhookEvent[]>()
     for (const event of events) {
@@ -179,21 +208,22 @@ class TriggerManager {
 
     for (const [composioTriggerId, groupedEvents] of grouped) {
       try {
-        await this.processEventGroup(composioTriggerId, groupedEvents)
+        await this.processEventGroup(composioTriggerId, groupedEvents, memberId)
       } catch (error) {
         console.error(
           `[TriggerManager] Failed to process events for trigger ${composioTriggerId}:`,
           error
         )
         // Ack events anyway to prevent them from piling up
-        await acknowledgeEvents(groupedEvents.map((e) => e.id)).catch(console.error)
+        await acknowledgeEvents(groupedEvents.map((e) => e.id), memberId).catch(console.error)
       }
     }
   }
 
   private async processEventGroup(
     composioTriggerId: string,
-    events: WebhookEvent[]
+    events: WebhookEvent[],
+    memberId: string,
   ): Promise<void> {
     // Look up ALL local triggers sharing this Composio trigger ID
     const triggers = await getWebhookTriggersByComposioId(composioTriggerId)
@@ -203,7 +233,7 @@ class TriggerManager {
       console.warn(
         `[TriggerManager] No active local triggers for composio ID ${composioTriggerId}, acking events`
       )
-      await acknowledgeEvents(events.map((e) => e.id))
+      await acknowledgeEvents(events.map((e) => e.id), memberId)
       return
     }
 
@@ -220,10 +250,24 @@ class TriggerManager {
     }
 
     // Ack events after all triggers have been processed
-    await acknowledgeEvents(events.map((e) => e.id))
+    await acknowledgeEvents(events.map((e) => e.id), memberId)
   }
 
   private async spawnSessionForTrigger(
+    trigger: WebhookTrigger,
+    events: WebhookEvent[]
+  ): Promise<void> {
+    // Run under the trigger creator's attribution (cold container starts
+    // bake this into the container's ANTHROPIC token). Fall back to the
+    // connected_account owner for legacy triggers without createdByUserId.
+    const ownerUserId = trigger.createdByUserId ?? resolveConnectedAccountOwner(trigger.connectedAccountId)
+    const run = ownerUserId
+      ? <T,>(fn: () => Promise<T>) => runWithRequestUser(ownerUserId, fn) as Promise<T>
+      : <T,>(fn: () => Promise<T>) => fn()
+    return run(() => this.spawnSessionInner(trigger, events))
+  }
+
+  private async spawnSessionInner(
     trigger: WebhookTrigger,
     events: WebhookEvent[]
   ): Promise<void> {
