@@ -1,24 +1,24 @@
 {
   "storyId": "browser-test",
   "passed": true,
-  "reason": "Verified that agent successfully executes browser commands, navigates to https://example.com, and retrieves the page title \"Example Domain\"",
+  "reason": "Agent successfully opened a browser, navigated to https://example.com, retrieved the page title, and returned the expected response mentioning \"Example Domain\"",
   "steps": [
-    "Navigated to http://localhost:47891 — Page loaded successfully showing SuperAgent interface with sidebar containing list of agents",
-    "Found and clicked agent \"QA-20260504-180107-keuc\" in sidebar — Agent interface opened with chat window and message input box",
-    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" into input box — Message successfully entered into the input field",
-    "Clicked \"Send message\" button — Message sent successfully, agent status changed to \"working\", and task \"Browser Page Title Retrieval Task\" appeared in sidebar",
-    "Waited up to 3 minutes for response — Response received successfully in approximately 8 seconds, showing two completed tool calls: \"Open Browser\" and \"Browser Command $ get title\"",
-    "Verified response mentions \"Example Domain\" — Response clearly displays \"The page title is Example Domain.\" confirming successful browser navigation and title retrieval. Live browser preview on right side shows actual Example Domain webpage content"
+    "Navigated to http://localhost:47891 - Successfully loaded the SuperAgent interface with the agent list visible",
+    "Clicked on the \"QA-20260505-030251-0v2c\" agent button - Successfully opened the agent chat interface with message input field ready",
+    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" - Successfully entered the message in the input box and verified the Send button became enabled",
+    "Clicked the Send message button - Successfully sent the message; the agent status changed to \"working\" and a \"Browser Page Title Lookup Session\" was created in the sidebar",
+    "Waited up to 3 minutes for response containing \"Example Domain\" - Successfully received response within the timeout period stating \"The page title is Example Domain.\"",
+    "Verified response and captured screenshot - The response clearly displays the correct page title. Screenshot shows: the user's request, two successful browser tool calls (\"Open Browser https://example.com\" and \"Browser Command $ get title\" with checkmarks), the agent's response \"The page title is Example Domain.\", a live browser preview panel on the right showing the actual example.com page with \"Example Domain\" in the browser tab, and an activity log documenting both operations. The agent completed the task in 7 seconds."
   ],
   "bugs": [],
-  "durationMs": 99927,
-  "sessionId": "f2e1ffeb-c711-4ad8-827b-2d715de4abac",
+  "durationMs": 76336,
+  "sessionId": "33f5c7fd-dd6b-44c2-80b7-9466532f5b9e",
   "cost": {
-    "inputTokens": 288,
-    "outputTokens": 9932,
-    "cacheCreationTokens": 48660,
-    "cacheReadTokens": 1065906,
+    "inputTokens": 207,
+    "outputTokens": 7008,
+    "cacheCreationTokens": 38889,
+    "cacheReadTokens": 726721,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.217364
+    "totalCostUsd": 0.15653
   }
 }
