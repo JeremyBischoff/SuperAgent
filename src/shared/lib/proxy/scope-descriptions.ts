@@ -387,6 +387,13 @@ export const SCOPE_DESCRIPTIONS: Record<string, Record<string, string>> = {
     "spreadsheets": "See, edit, create, and delete all your Google Sheets spreadsheets",
     "spreadsheets.readonly": "View your Google Sheets spreadsheets",
   },
+  "googleslides": {
+    "drive": "See, edit, create, and delete all of your Google Drive files",
+    "drive.file": "See, edit, create, and delete only the specific Google Drive files you use with this app",
+    "drive.readonly": "View the files in your Google Drive",
+    "presentations": "See, edit, create, and delete all your Google Slides presentations",
+    "presentations.readonly": "View your Google Slides presentations",
+  },
   "googletasks": {
     "tasks": "Create and edit your tasks in Google Tasks",
     "tasks.readonly": "View your tasks in Google Tasks",

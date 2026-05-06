@@ -526,6 +526,7 @@ export async function getAccountDisplayName(
     'googledrive',
     'googlesheets',
     'googledocs',
+    'googleslides',
     'googlemeet',
     'googletasks',
     'youtube',
