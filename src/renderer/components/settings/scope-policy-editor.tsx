@@ -62,19 +62,17 @@ export function ScopePolicyEditor({
       : Object.values(provider.allScopes).flat()
     : []
 
-  // Build descriptions: prefer curated per-scope descriptions, fall back to
-  // the first matching endpoint description for any scope without curation.
-  const scopeDescriptions: Record<string, string> = {
-    ...(SCOPE_DESCRIPTIONS[toolkit] ?? {}),
-  }
-  if (provider) {
-    for (const entry of provider.scopeMap) {
-      for (const scope of entry.sufficientScopes) {
-        if (!scopeDescriptions[scope] && entry.description) {
-          scopeDescriptions[scope] = entry.description
-        }
-      }
-    }
+  // For each scope, prefer the curated description; otherwise borrow the
+  // first endpoint description that mentions this scope.
+  const curated = SCOPE_DESCRIPTIONS[toolkit] ?? {}
+  const scopeDescriptions: Record<string, string> = {}
+  for (const scope of allScopes) {
+    const desc =
+      curated[scope] ??
+      provider?.scopeMap.find(
+        (e) => e.description && e.sufficientScopes.includes(scope),
+      )?.description
+    if (desc) scopeDescriptions[scope] = desc
   }
 
   // Fetch existing policies
