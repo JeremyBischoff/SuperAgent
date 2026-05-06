@@ -4224,6 +4224,7 @@ agents.get('/:id/proxy-reviews', AgentRead(), async (c) => {
 
 // POST /api/agents/:id/proxy-review/:reviewId - Submit a review decision
 agents.post('/:id/proxy-review/:reviewId', AgentUser(), async (c) => {
+  const slug = c.req.param('id')
   const reviewId = c.req.param('reviewId')
   const body = await c.req.json<{ decision: 'allow' | 'deny' }>()
 
@@ -4231,7 +4232,10 @@ agents.post('/:id/proxy-review/:reviewId', AgentUser(), async (c) => {
     return c.json({ error: 'Invalid decision. Must be "allow" or "deny".' }, 400)
   }
 
-  const success = reviewManager.submitDecision(reviewId, body.decision)
+  // Pass slug so submitDecision rejects cross-agent attempts. AgentUser()
+  // verifies the URL agent only — without this, a user with role on agent A
+  // could resolve agent B's review by sending B's reviewId to A's URL.
+  const success = reviewManager.submitDecision(reviewId, body.decision, slug)
   if (!success) {
     return c.json({ error: 'Review not found or already resolved' }, 404)
   }
@@ -4319,8 +4323,9 @@ agents.post('/:id/proxy-review/:reviewId/always', AgentUser(), async (c) => {
     )
   }
 
-  // Submit decision for this review (and any others matching the same scope)
-  reviewManager.submitDecision(reviewId, body.decision)
+  // Submit decision for this review (and any others matching the same scope).
+  // Pass slug so submitDecision rejects cross-agent attempts (see B1).
+  reviewManager.submitDecision(reviewId, body.decision, slug)
   reviewManager.resolveMatchingPending(slug, body.scope, body.decision)
 
   // For x-agent "always allow for all agents" (targetSlug=null on read/invoke),

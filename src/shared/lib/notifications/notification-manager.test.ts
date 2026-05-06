@@ -126,3 +126,75 @@ describe('triggerSessionWaitingInput — NOT gated by automated-session flag', (
     expect(mockCreateNotification).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('triggerSessionApiReviewWaiting — broadcast payload contract', () => {
+  it('broadcasts actions + actionContext with index-aligned decisions', async () => {
+    await notificationManager.triggerSessionApiReviewWaiting(
+      'sess-1',
+      'agent-x',
+      'review-1',
+      'Allow GET request to Gmail?',
+    )
+
+    expect(mockBroadcastGlobal).toHaveBeenCalledTimes(1)
+    const payload = mockBroadcastGlobal.mock.calls[0][0]
+    expect(payload).toMatchObject({
+      type: 'os_notification',
+      notificationType: 'session_waiting',
+      sessionId: 'sess-1',
+      agentSlug: 'agent-x',
+      actions: [{ text: 'Approve' }, { text: 'Deny' }],
+      actionContext: {
+        kind: 'proxy_review',
+        reviewId: 'review-1',
+        agentSlug: 'agent-x',
+        sessionId: 'sess-1',
+        decisions: ['allow', 'deny'],
+      },
+    })
+  })
+
+  // Action context must include notificationId so the renderer's dispatcher
+  // can mark the DB notification as read when the user clicks Approve/Deny
+  // on the OS notification — otherwise the in-app unread badge keeps
+  // counting events the user has clearly seen and acted on.
+  it('stamps notificationId from createNotification into the actionContext', async () => {
+    mockCreateNotification.mockResolvedValueOnce('notif-abc')
+    await notificationManager.triggerSessionApiReviewWaiting(
+      'sess-1',
+      'agent-x',
+      'review-1',
+      'Allow?',
+    )
+    const payload = mockBroadcastGlobal.mock.calls[0][0]
+    expect(payload.actionContext.notificationId).toBe('notif-abc')
+  })
+
+  it('uses "API Request Review" title for default kind', async () => {
+    await notificationManager.triggerSessionApiReviewWaiting(
+      'sess-1',
+      'agent-x',
+      'review-1',
+      'Allow?',
+    )
+    const payload = mockBroadcastGlobal.mock.calls[0][0]
+    expect(payload.title).toContain('API Request Review')
+  })
+
+  // S7: x-agent reviews aren't HTTP API requests — calling them
+  // "API Request Review" is misleading. The trigger lets review-manager
+  // pass `kind: 'agent_action'` for those, swapping the title.
+  it('uses "Agent Action Review" title when kind is agent_action', async () => {
+    await notificationManager.triggerSessionApiReviewWaiting(
+      'sess-1',
+      'agent-x',
+      'review-1',
+      'Allow agent to invoke target?',
+      undefined,
+      'agent_action',
+    )
+    const payload = mockBroadcastGlobal.mock.calls[0][0]
+    expect(payload.title).toContain('Agent Action Review')
+    expect(payload.title).not.toContain('API Request Review')
+  })
+})

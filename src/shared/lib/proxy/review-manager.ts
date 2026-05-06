@@ -1,5 +1,7 @@
 import crypto from 'crypto'
 import { broadcastReview } from './review-broadcast'
+import { messagePersister } from '@shared/lib/container/message-persister'
+import { notificationManager } from '@shared/lib/notifications/notification-manager'
 
 const REVIEW_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -155,12 +157,45 @@ export class ReviewManager {
         displayText,
         ...(details.xAgent ? { xAgent: details.xAgent } : {}),
       })
+
+      // Fire ONE OS notification per review, attributed to the first active
+      // session of this agent. The proxy call is agent-scoped (no sessionId
+      // in the request), so we pick an active session — same attribution
+      // heuristic the sidebar uses for its orange dot (agents.ts:
+      // isActive && hasAgentLevelReviews). Do NOT gate on hasActiveViewers
+      // here: an open SSE connection ≠ actively looking at the screen
+      // (the user can have the session open and be alt-tabbed away). The
+      // renderer-side gate (isAppActive && isViewingNotificationSession)
+      // is the only one that knows about real OS focus.
+      const targetSessionId = messagePersister.getActiveSessionIdsForAgent(details.agentSlug)[0]
+      if (targetSessionId) {
+        const kind = details.xAgent ? 'agent_action' : 'api_request'
+        notificationManager
+          .triggerSessionApiReviewWaiting(targetSessionId, details.agentSlug, id, displayText, undefined, kind)
+          .catch((err) => {
+            console.error('[ReviewManager] Failed to trigger API review notification:', err)
+          })
+      }
     })
   }
 
-  submitDecision(id: string, decision: 'allow' | 'deny'): boolean {
+  /**
+   * Resolve a pending review.
+   *
+   * `expectedAgentSlug` MUST be passed when the call originates from an
+   * HTTP route — it guards against a user with role on agent A submitting
+   * a decision for agent B's review by sending B's reviewId to A's URL.
+   * Internal callers (e.g. `resolveMatchingPending`, which already filters
+   * by agentSlug itself) may omit it.
+   */
+  submitDecision(id: string, decision: 'allow' | 'deny', expectedAgentSlug?: string): boolean {
     const review = this.pending.get(id)
     if (!review) return false
+    if (expectedAgentSlug !== undefined && review.details.agentSlug !== expectedAgentSlug) {
+      // Don't leak existence of the review to an unauthorized caller —
+      // return the same `false` shape as "review not found".
+      return false
+    }
 
     clearTimeout(review.timer)
     this.pending.delete(id)

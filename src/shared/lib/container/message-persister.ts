@@ -348,6 +348,20 @@ class MessagePersister {
     return false
   }
 
+  // Return the IDs of all active sessions for a given agent.
+  // Used to attribute agent-scoped events (e.g. proxy reviews) to the
+  // session(s) actually running — mirrors the sidebar heuristic in
+  // agents.ts that lights up `isActive && hasAgentLevelReviews`.
+  getActiveSessionIdsForAgent(agentSlug: string): string[] {
+    const ids: string[] = []
+    for (const [sessionId, state] of this.streamingStates) {
+      if (state.agentSlug === agentSlug && state.isActive) {
+        ids.push(sessionId)
+      }
+    }
+    return ids
+  }
+
   // Check if any session for a given agent is awaiting user input
   hasSessionsAwaitingInputForAgent(agentSlug: string): boolean {
     for (const [, state] of this.streamingStates) {

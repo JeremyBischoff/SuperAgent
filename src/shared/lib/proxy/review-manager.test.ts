@@ -310,6 +310,55 @@ describe('ReviewManager', () => {
     }
   })
 
+  // Security: a user with `user` role on agent A must not be able to resolve
+  // agent B's review by guessing/leaking B's reviewId. submitDecision must
+  // refuse to mutate the review when the caller's expected agent doesn't
+  // match the review's stored agent.
+  it('SECURITY: submitDecision rejects when expectedAgentSlug does not match review agent', async () => {
+    const promise = manager.requestReview({
+      agentSlug: 'agent-victim',
+      accountId: 'acc-1',
+      toolkit: 'gmail',
+      method: 'GET',
+      targetPath: '/path',
+      matchedScopes: ['gmail.readonly'],
+      scopeDescriptions: {},
+    })
+
+    const pending = manager.getPendingReviewsForAgent('agent-victim')
+    const reviewId = pending[0].id
+
+    // Attacker has role only on agent-attacker, calls
+    // POST /api/agents/agent-attacker/proxy-review/<victim's reviewId>
+    const success = manager.submitDecision(reviewId, 'allow', 'agent-attacker')
+    expect(success).toBe(false)
+
+    // Victim's review is still pending — not resolved
+    expect(manager.getPendingReviewsForAgent('agent-victim').length).toBe(1)
+
+    // Legit owner still resolves cleanly
+    expect(manager.submitDecision(reviewId, 'deny', 'agent-victim')).toBe(true)
+    expect(await promise).toBe('deny')
+  })
+
+  // Security: same shape for the omitted-arg call path. We keep the optional
+  // arg backwards-compatible for internal callers (resolveMatchingPending
+  // already filters by agentSlug), but any HTTP-facing caller must pass it.
+  it('SECURITY: submitDecision still works when expectedAgentSlug is omitted (internal callers)', async () => {
+    const promise = manager.requestReview({
+      agentSlug: 'agent-1',
+      accountId: 'acc-1',
+      toolkit: 'gmail',
+      method: 'GET',
+      targetPath: '/path',
+      matchedScopes: [],
+      scopeDescriptions: {},
+    })
+    const reviewId = manager.getPendingReviewsForAgent('agent-1')[0].id
+    expect(manager.submitDecision(reviewId, 'allow')).toBe(true)
+    expect(await promise).toBe('allow')
+  })
+
   it('double submitDecision for same id: second returns false', async () => {
     const promise = manager.requestReview({
       agentSlug: 'agent-1',
