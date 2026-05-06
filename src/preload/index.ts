@@ -220,7 +220,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   onUpdateStatus: (callback: (status: any) => void) => {
-    ipcRenderer.on('update-status', (_event, status) => callback(status))
+    const handler = (_event: Electron.IpcRendererEvent, status: any) => callback(status)
+    ipcRenderer.on('update-status', handler)
+    return () => {
+      ipcRenderer.removeListener('update-status', handler)
+    }
   },
 
   removeUpdateStatus: () => {
@@ -285,7 +289,7 @@ declare global {
       downloadUpdate: () => Promise<void>
       installUpdate: () => Promise<void>
       getUpdateStatus: () => Promise<any>
-      onUpdateStatus: (callback: (status: any) => void) => void
+      onUpdateStatus: (callback: (status: any) => void) => () => void
       removeUpdateStatus: () => void
     }
   }

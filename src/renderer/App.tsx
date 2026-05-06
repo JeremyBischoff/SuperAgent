@@ -6,6 +6,8 @@ import { AuthGate } from './components/auth/auth-gate'
 import { SelectionProvider } from './context/selection-context'
 import { ConnectivityProvider } from './context/connectivity-context'
 import { DialogProvider, useDialogs } from './context/dialog-context'
+import { UpdateStatusProvider } from './context/update-status-context'
+import { UpdateToastNotifier } from './components/update-toast-notifier'
 import { DraftsProvider } from './context/drafts-context'
 import { SearchProvider } from './context/search-context'
 import { AppSidebar } from './components/layout/app-sidebar'
@@ -70,12 +72,15 @@ function AppContent() {
 
   return (
     <DialogProvider onOpenWizard={() => setWizardOpen(true)}>
-      <WindowControls />
-      {wizardOpen ? (
-        <GettingStartedWizard onClose={() => setWizardOpen(false)} />
-      ) : (
-        <AppShell />
-      )}
+      <UpdateStatusProvider>
+        <WindowControls />
+        <UpdateToastNotifier />
+        {wizardOpen ? (
+          <GettingStartedWizard onClose={() => setWizardOpen(false)} />
+        ) : (
+          <AppShell />
+        )}
+      </UpdateStatusProvider>
     </DialogProvider>
   )
 }

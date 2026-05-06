@@ -249,8 +249,9 @@ function createWindow() {
   // Always set the window ref so IPC status events reach the renderer
   updateAutoUpdaterWindow(mainWindow)
 
-  // Initialize the actual updater only in production builds
-  if (!process.env.ELECTRON_RENDERER_URL) {
+  // Initialize the actual updater in production builds, or in dev when the
+  // SUPERAGENT_TEST_UPDATES=1 escape hatch is set (see auto-updater.ts).
+  if (!process.env.ELECTRON_RENDERER_URL || process.env.SUPERAGENT_TEST_UPDATES === '1') {
     initAutoUpdater(mainWindow)
   }
 
