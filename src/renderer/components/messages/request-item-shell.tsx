@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@shared/lib/utils/cn'
-import { RequestTitleChip } from './request-title-chip'
 import { RequestError } from './request-error'
 import { usePagination } from './pending-request-stack'
+import { StopSessionButton } from './stop-session-button'
 
 export type RequestTheme = 'blue' | 'orange'
 
@@ -31,8 +31,11 @@ interface ReadOnlyConfig {
 }
 
 interface RequestItemShellProps {
-  title: string
-  icon: ReactNode
+  title: ReactNode
+  /** Optional helper text rendered directly under the title with consistent
+   *  typography and spacing (text-xs muted, mt-1). Omit to skip. */
+  subtitle?: ReactNode
+  icon?: ReactNode
   theme: RequestTheme
 
   completed?: CompletedConfig | null
@@ -43,6 +46,11 @@ interface RequestItemShellProps {
   children: ReactNode
   error?: string | null
 
+  /** When provided alongside `agentSlug`, shows an X button next to the
+   *  header pagination/right area that interrupts the session. */
+  sessionId?: string
+  agentSlug?: string
+
   'data-testid'?: string
   'data-status'?: string
   'data-secret-name'?: string
@@ -50,7 +58,7 @@ interface RequestItemShellProps {
 
 export function RequestItemShell({
   title,
-  icon,
+  subtitle,
   theme,
   completed,
   readOnly,
@@ -58,6 +66,8 @@ export function RequestItemShell({
   headerRight,
   children,
   error,
+  sessionId,
+  agentSlug,
   ...dataAttrs
 }: RequestItemShellProps) {
   const themeClasses = THEME_CLASSES[theme]
@@ -77,21 +87,32 @@ export function RequestItemShell({
     )
   }
 
+  const titleNode = (
+    <div className="flex-1 min-w-0 text-sm font-medium leading-5 text-foreground whitespace-pre-line">
+      {title}
+    </div>
+  )
+
+  const subtitleNode = subtitle ? (
+    <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+  ) : null
+
   if (readOnly) {
     const roConfig = typeof readOnly === 'object' ? readOnly : {}
     return (
       <div className="border rounded-[12px] bg-muted/30 shadow-md text-sm" {...dataAttrs}>
         <div className="flex items-start gap-3 p-4">
           <div className="flex-1 min-w-0">
-            <RequestTitleChip className={themeClasses.chip} icon={icon}>
-              {title}
-            </RequestTitleChip>
+            <div className="flex items-start justify-between gap-3">
+              {titleNode}
+              <span className={cn('text-xs shrink-0', themeClasses.waitBadge)}>
+                {waitingText}
+              </span>
+            </div>
+            {subtitleNode}
             {roConfig.description}
             {roConfig.extraContent}
           </div>
-          <span className={cn('text-xs shrink-0', themeClasses.waitBadge)}>
-            {waitingText}
-          </span>
         </div>
       </div>
     )
@@ -99,7 +120,7 @@ export function RequestItemShell({
 
   const paginationControls = pagination && pagination.count > 1 ? (
     <div
-      className="inline-flex items-center gap-0.5 px-0.5 py-0.5 text-foreground"
+      className="inline-flex items-center gap-0.5 px-0.5 text-foreground"
       data-testid="request-stack-pagination"
       data-current-index={pagination.currentIndex}
       data-count={pagination.count}
@@ -134,16 +155,28 @@ export function RequestItemShell({
     </div>
   ) : null
 
+  const headerRightContent = paginationControls ?? headerRight
+  const showStopButton = !!(sessionId && agentSlug && headerRightContent)
+
   return (
     <div className="border rounded-[12px] bg-muted/30 shadow-md text-sm" {...dataAttrs}>
       <div className="p-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
-            <RequestTitleChip className={themeClasses.chip} icon={icon}>
-              {title}
-            </RequestTitleChip>
-            {paginationControls ?? headerRight}
+            {titleNode}
+            {headerRightContent && (
+              <div className="flex items-center shrink-0">
+                {headerRightContent}
+                {showStopButton && (
+                  <>
+                    <div className="ml-[5px] mr-[9px] h-4 w-px bg-border" aria-hidden />
+                    <StopSessionButton sessionId={sessionId!} agentSlug={agentSlug!} />
+                  </>
+                )}
+              </div>
+            )}
           </div>
+          {subtitleNode}
           {children}
           <RequestError message={error ?? null} />
         </div>

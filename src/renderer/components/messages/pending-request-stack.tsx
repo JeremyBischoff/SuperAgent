@@ -71,45 +71,52 @@ export function PendingRequestStack({ children }: PendingRequestStackProps) {
   if (count === 0) return null
 
   const idx = Math.min(currentIndex, count - 1)
-  const stackDepth = count > 1 ? Math.min(count - idx - 1, 3) : 0
 
   return (
     <PaginationContext.Provider value={{ currentIndex: idx, count, goNext, goPrev }}>
+      {/* The container sizes to the ACTIVE card (+ its peeks) only. Inactive
+          cards are absolutely positioned so they stay mounted — preserving
+          their internal form state — but don't contribute to the container's
+          height. Each card carries its own peek cards above, so peeks track
+          the card's top edge as you paginate. The chat layout anchors this
+          stack to the bottom of the chat column, so action rows stay put
+          across pagination even though the container resizes. */}
       <div className="relative">
-        {/* Stacked placeholder cards peeking out above */}
-        {Array.from({ length: stackDepth }, (_, i) => {
-          const depth = stackDepth - i
+        {children.map((child, i) => {
+          const peekDepth = Math.min(count - i - 1, 3)
+          const isActive = i === idx
           return (
-            <div
-              key={`stack-${depth}`}
-              className="rounded-t-[12px] border-x border-t bg-muted/20"
-              style={{
-                height: 10,
-                opacity: Math.max(0.3, 1 - depth * 0.25),
-                marginLeft: depth * 8,
-                marginRight: depth * 8,
-              }}
-            />
-          )
-        })}
-
-        {/* All cards in a grid — tallest determines height, only active is visible */}
-        <div className="grid">
-          {children.map((child, i) => (
             <div
               key={child.key ?? i}
               style={{
-                gridArea: '1 / 1',
-                visibility: i === idx ? 'visible' : 'hidden',
-                ...(i === idx && revealing
+                ...(isActive
+                  ? {}
+                  : { position: 'absolute', top: 0, left: 0, right: 0 }),
+                visibility: isActive ? 'visible' : 'hidden',
+                ...(isActive && revealing
                   ? { animation: `stack-reveal ${REVEAL_DURATION}ms cubic-bezier(0.16, 1, 0.3, 1) forwards` }
                   : {}),
               }}
             >
+              {Array.from({ length: peekDepth }, (_, j) => {
+                const depth = peekDepth - j
+                return (
+                  <div
+                    key={`peek-${depth}`}
+                    className="rounded-t-[12px] border-x border-t bg-muted/20"
+                    style={{
+                      height: 10,
+                      opacity: Math.max(0.3, 1 - depth * 0.25),
+                      marginLeft: depth * 8,
+                      marginRight: depth * 8,
+                    }}
+                  />
+                )
+              })}
               {child}
             </div>
-          ))}
-        </div>
+          )
+        })}
 
         <style>{`
           @keyframes stack-reveal {

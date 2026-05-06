@@ -182,7 +182,7 @@ export function QuestionRequestItem({
     )
   }
 
-  const titleText = questions.length === 1 ? 'Question' : 'Questions'
+  const titleText = currentQuestion?.question ?? ''
   const titleTextWithCount = questions.length === 1 ? 'Question' : `${questions.length} Questions`
 
   // Build completed config
@@ -203,21 +203,22 @@ export function QuestionRequestItem({
     : null
 
   // Build read-only config
+  // Title already shows the first question; list the remaining ones below if any.
   const readOnlyConfig = readOnly
     ? {
-        description: (
-          <div className="mt-4 space-y-2">
-            {questions.map((q, i) => (
+        description: questions.length > 1 ? (
+          <div className="mt-3 space-y-2">
+            {questions.slice(1).map((q, i) => (
               <p key={i} className="whitespace-pre-line text-sm font-medium leading-5 text-foreground">{q.question}</p>
             ))}
           </div>
-        ),
+        ) : undefined,
       }
     : false as const
 
   // Pagination controls for headerRight
   const paginationControls = questions.length > 1 ? (
-    <div className="inline-flex items-center gap-0.5 px-0.5 py-0.5 text-foreground">
+    <div className="inline-flex items-center gap-0.5 px-0.5 text-foreground">
       <button
         type="button"
         onClick={() => setCurrentQuestionIndex((i) => Math.max(0, i - 1))}
@@ -255,6 +256,8 @@ export function QuestionRequestItem({
       title={titleText}
       icon={<HelpCircle />}
       theme="blue"
+      sessionId={sessionId}
+      agentSlug={agentSlug}
       completed={completedConfig}
       readOnly={readOnlyConfig}
       waitingText="Waiting for response"
@@ -264,12 +267,8 @@ export function QuestionRequestItem({
       data-status={completedConfig ? status : undefined}
     >
       {currentQuestion && (
-        <div className="mt-6 space-y-4">
-          <div className="px-2 py-1 text-sm font-medium leading-5 text-foreground">
-            {currentQuestion.question}
-          </div>
-
-          <div className="space-y-2.5">
+        <div className="mt-4 space-y-4">
+          <div className="space-y-1.5">
             {currentQuestion.options.map((option, optionIndex) => {
               const isSelected = currentQuestion.multiSelect
                 ? ((selections[currentQuestionIndex] as string[]) || []).includes(option.label)
@@ -358,7 +357,7 @@ export function QuestionRequestItem({
           <Button
             onClick={() => setCurrentQuestionIndex((i) => Math.min(questions.length - 1, i + 1))}
             disabled={!currentQuestionAnswered || status === 'submitting'}
-            size="sm"
+            size="xs"
             className="bg-blue-600 hover:bg-blue-700 text-white"
             data-testid="question-next-btn"
           >
@@ -370,7 +369,7 @@ export function QuestionRequestItem({
             onClick={handleSubmit}
             loading={status === 'submitting'}
             disabled={!areAllQuestionsAnswered()}
-            size="sm"
+            size="xs"
             className="bg-blue-600 hover:bg-blue-700 text-white"
             data-testid="question-submit-btn"
           >
