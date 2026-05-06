@@ -1,0 +1,24 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Browser use feature successfully navigated to https://example.com and retrieved page title matching expected result",
+  "steps": [
+    "Navigated to http://localhost:47891 — Page loaded successfully showing SuperAgent interface with agent list",
+    "Found and clicked \"QA-20260506-193107-yuvm\" agent in the sidebar — Agent page opened with chat interface ready",
+    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" — Message displayed in input field",
+    "Sent message using Ctrl+Enter — Message successfully sent, agent status changed to \"working\", new session created",
+    "Waited up to 3 minutes for response — Agent completed task in 15 seconds, response received with \"The page title is \\\"Example Domain\\\"\"",
+    "Verified response mentions \"Example Domain\" — Response clearly states the page title is \"Example Domain\", browser preview panel shows the correct webpage, two tool calls executed successfully (Open Browser and Browser Command)"
+  ],
+  "bugs": [],
+  "durationMs": 89327,
+  "sessionId": "8d136635-a884-44c2-9f57-3c1c3c37c053",
+  "cost": {
+    "inputTokens": 288,
+    "outputTokens": 10010,
+    "cacheCreationTokens": 49748,
+    "cacheReadTokens": 1081544,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.220677
+  }
+}
