@@ -650,6 +650,85 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
         },
       },
     ])],
+    // Note: scenarios are matched by substring in insertion order, so
+    // longer/more-specific triggers must come first to avoid being shadowed
+    // by shorter prefixes.
+    ['ask multi parallel', new UserInputRequestScenario([
+      {
+        name: 'mcp__user-input__request_secret',
+        input: { secretName: 'DATABASE_URL', reason: 'Connection string for the database' },
+      },
+      {
+        name: 'AskUserQuestion',
+        input: {
+          questions: [
+            {
+              question: 'Which database should we use?',
+              header: 'Database',
+              options: [
+                { label: 'PostgreSQL', description: 'Reliable relational database' },
+                { label: 'MongoDB', description: 'Flexible document store' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Which cloud provider do you prefer?',
+              header: 'Cloud',
+              options: [
+                { label: 'AWS', description: 'Amazon Web Services' },
+                { label: 'GCP', description: 'Google Cloud Platform' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Preferred language?',
+              header: 'Language',
+              options: [
+                { label: 'TypeScript', description: 'Typed JavaScript' },
+                { label: 'Go', description: 'Compiled' },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      },
+    ])],
+    ['ask multi', new UserInputRequestScenario([
+      {
+        name: 'AskUserQuestion',
+        input: {
+          questions: [
+            {
+              question: 'Which database should we use?',
+              header: 'Database',
+              options: [
+                { label: 'PostgreSQL', description: 'Reliable relational database' },
+                { label: 'MongoDB', description: 'Flexible document store' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Which cloud provider do you prefer?',
+              header: 'Cloud',
+              options: [
+                { label: 'AWS', description: 'Amazon Web Services' },
+                { label: 'GCP', description: 'Google Cloud Platform' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Preferred language?',
+              header: 'Language',
+              options: [
+                { label: 'TypeScript', description: 'Typed JavaScript' },
+                { label: 'Go', description: 'Compiled' },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      },
+    ])],
     ['ask script', new UserInputRequestScenario([
       {
         name: 'mcp__user-input__request_script_run',

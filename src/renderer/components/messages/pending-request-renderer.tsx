@@ -142,6 +142,7 @@ export function renderPendingRequest(
           matchedScopes={d.matchedScopes}
           scopeDescriptions={d.scopeDescriptions}
           displayText={d.displayText}
+          sessionId={ctx.sessionId}
           agentSlug={ctx.agentSlug}
           readOnly={ctx.readOnly}
           onComplete={d.onComplete}
@@ -152,6 +153,7 @@ export function renderPendingRequest(
         <XAgentReviewRequestItem
           key={d.key}
           reviewId={d.reviewId}
+          sessionId={ctx.sessionId}
           agentSlug={ctx.agentSlug}
           xAgent={d.xAgent}
           readOnly={ctx.readOnly}
