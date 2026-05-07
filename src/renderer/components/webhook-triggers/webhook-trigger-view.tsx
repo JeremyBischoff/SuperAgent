@@ -17,6 +17,7 @@ import {
   usePauseWebhookTrigger,
   useResumeWebhookTrigger,
   useUpdateWebhookTriggerPrompt,
+  useUpdateWebhookTriggerRuntimeOptions,
 } from '@renderer/hooks/use-webhook-triggers'
 import { useSelection } from '@renderer/context/selection-context'
 import { useUser } from '@renderer/context/user-context'
@@ -38,6 +39,7 @@ import { StatusToggle } from '@renderer/components/triggers/status-toggle'
 import { RunHistorySection } from '@renderer/components/triggers/run-history-section'
 import { CollapsiblePromptText } from '@renderer/components/triggers/collapsible-prompt-text'
 import { EditPromptDialog } from '@renderer/components/triggers/edit-prompt-dialog'
+import { RuntimeOptionsCard } from '@renderer/components/triggers/runtime-options-card'
 
 interface WebhookTriggerViewProps {
   triggerId: string
@@ -51,6 +53,7 @@ export function WebhookTriggerView({ triggerId, agentSlug }: WebhookTriggerViewP
   const pauseTrigger = usePauseWebhookTrigger()
   const resumeTrigger = useResumeWebhookTrigger()
   const updatePrompt = useUpdateWebhookTriggerPrompt()
+  const updateRuntimeOptions = useUpdateWebhookTriggerRuntimeOptions()
   const { handleWebhookTriggerDeleted, setView } = useSelection()
   const { canUseAgent } = useUser()
   const { data: settings } = useSettings()
@@ -292,6 +295,15 @@ export function WebhookTriggerView({ triggerId, agentSlug }: WebhookTriggerViewP
               </div>
             </dl>
           </DetailCard>
+
+          <RuntimeOptionsCard
+            model={trigger.model ?? null}
+            effort={trigger.effort ?? null}
+            disabled={!canCancel || !isActive}
+            onUpdate={(options) => {
+              updateRuntimeOptions.mutate({ triggerId, agentSlug, ...options })
+            }}
+          />
 
           {parsedConfigEntries.length > 0 && (
             <DetailCard label="Configuration">

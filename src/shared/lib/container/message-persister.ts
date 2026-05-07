@@ -1512,6 +1512,8 @@ class MessagePersister {
           prompt: string
           name?: string
           timezone?: string
+          model?: string
+          effort?: string
         }
         try {
           input = JSON.parse(toolInput)
@@ -1542,6 +1544,8 @@ class MessagePersister {
           name: input.name,
           createdBySessionId: sessionId,
           timezone,
+          model: input.model,
+          effort: input.effort,
         })
 
         // Broadcast the scheduled task created event to session-specific SSE clients
@@ -1678,6 +1682,8 @@ class MessagePersister {
           prompt: string
           name?: string
           trigger_config?: Record<string, unknown>
+          model?: string
+          effort?: string
         }
         try {
           input = JSON.parse(toolInput)
@@ -1736,6 +1742,8 @@ class MessagePersister {
             prompt: input.prompt,
             name: input.name,
             createdBySessionId: sessionId,
+            model: input.model,
+            effort: input.effort,
           })
         } catch (dbError) {
           // Rollback Composio trigger

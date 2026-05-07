@@ -17,6 +17,7 @@ import { StatusToggle } from '@renderer/components/triggers/status-toggle'
 import { RunHistorySection } from '@renderer/components/triggers/run-history-section'
 import { CollapsiblePromptText } from '@renderer/components/triggers/collapsible-prompt-text'
 import { EditPromptDialog } from '@renderer/components/triggers/edit-prompt-dialog'
+import { RuntimeOptionsCard } from '@renderer/components/triggers/runtime-options-card'
 import {
   useScheduledTask,
   useCancelScheduledTask,
@@ -27,6 +28,7 @@ import {
   useParseSchedule,
   useUpdateSchedule,
   useUpdateScheduledTaskPrompt,
+  useUpdateScheduledTaskRuntimeOptions,
   usePauseScheduledTask,
   useResumeScheduledTask,
 } from '@renderer/hooks/use-scheduled-tasks'
@@ -69,6 +71,7 @@ export function ScheduledTaskView({ taskId, agentSlug }: ScheduledTaskViewProps)
   const pauseTask = usePauseScheduledTask()
   const resumeTask = useResumeScheduledTask()
   const updatePrompt = useUpdateScheduledTaskPrompt()
+  const updateRuntimeOptions = useUpdateScheduledTaskRuntimeOptions()
   const { handleScheduledTaskDeleted, setView } = useSelection()
   const { canUseAgent } = useUser()
   const canCancel = canUseAgent(agentSlug)
@@ -377,6 +380,15 @@ export function ScheduledTaskView({ taskId, agentSlug }: ScheduledTaskViewProps)
               ) : null}
             </dl>
           </DetailCard>
+
+          <RuntimeOptionsCard
+            model={task.model}
+            effort={task.effort}
+            disabled={!canCancel || !isActive}
+            onUpdate={(options) => {
+              updateRuntimeOptions.mutate({ taskId, agentSlug, ...options })
+            }}
+          />
 
           {/* Last execution info */}
           {task.lastExecutedAt && sessions.length === 0 && (
