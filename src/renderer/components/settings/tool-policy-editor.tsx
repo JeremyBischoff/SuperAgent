@@ -79,7 +79,7 @@ export function ToolPolicyEditor({
         setPolicies(tools.map((tool) => ({ toolName: tool.name, decision: 'default' })))
         setLoading(false)
       })
-  }, [open, mcpId])
+  }, [open, mcpId, tools])
 
   // Filtered policies
   const filteredPolicies = useMemo(() => {
