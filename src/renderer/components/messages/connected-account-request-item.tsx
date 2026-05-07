@@ -2,7 +2,7 @@ import { apiFetch } from '@renderer/lib/api'
 import { prepareOAuthPopup } from '@renderer/lib/oauth-popup'
 import { formatDistanceToNow } from 'date-fns'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Check,
   X,
@@ -68,7 +68,7 @@ export function ConnectedAccountRequestItem({
 
   const { track } = useAnalyticsTracking()
   const provider = getProvider(toolkit)
-  const accounts = data?.accounts ?? []
+  const accounts = useMemo(() => data?.accounts ?? [], [data])
 
   // Auto-select when there's exactly one account
   const hasAutoSelected = useRef(false)
