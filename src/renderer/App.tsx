@@ -19,6 +19,7 @@ import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
 import { TrayNavigationHandler } from './components/tray-navigation-handler'
 import { GlobalNotificationHandler } from './components/notifications/global-notification-handler'
+import { OnboardingProvider } from './context/onboarding-context'
 import { GettingStartedWizard } from './components/wizard/getting-started-wizard'
 import { ErrorBoundary } from './components/ui/error-boundary'
 import { useUserSettings } from './hooks/use-user-settings'
@@ -73,13 +74,15 @@ function AppContent() {
   return (
     <DialogProvider onOpenWizard={() => setWizardOpen(true)}>
       <UpdateStatusProvider>
-        <WindowControls />
-        <UpdateToastNotifier />
-        {wizardOpen ? (
-          <GettingStartedWizard onClose={() => setWizardOpen(false)} />
-        ) : (
-          <AppShell />
-        )}
+        <OnboardingProvider>
+          <WindowControls />
+          <UpdateToastNotifier />
+          {wizardOpen ? (
+            <GettingStartedWizard onClose={() => setWizardOpen(false)} />
+          ) : (
+            <AppShell />
+          )}
+        </OnboardingProvider>
       </UpdateStatusProvider>
     </DialogProvider>
   )

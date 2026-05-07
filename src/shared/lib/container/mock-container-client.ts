@@ -1139,6 +1139,12 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       timestamp: new Date().toISOString(),
     })
 
+    // Simulate container startup latency for onboarding sessions so the
+    // "Setting up your agent…" modal is visible long enough for E2E assertions.
+    if (options.initialMessage?.includes('agent-onboarding')) {
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
     const now = new Date().toISOString()
 
