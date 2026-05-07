@@ -1,0 +1,31 @@
+{
+  "storyId": "github-whoami",
+  "passed": false,
+  "reason": "Tested GitHub tool integration to retrieve GitHub username. Agent successfully requested and granted GitHub account access, but failed to retrieve the username due to OAuth token injection issues in the proxy.\n  Bugs found:\n    - GitHub API proxy authentication failure: Agent received \"401 Bad credentials\" error when calling api.github.com/user endpoint. The proxy is not properly injecting the valid OAuth token from the connected GitHub account. The CONNECTED_ACCOUNTS still showed {} (empty object) during the session, indicating the connection didn't fully complete or wasn't properly passed to the agent session context.",
+  "steps": [
+    "Step 1: Navigated to http://localhost:47891 — Application loaded successfully with sidebar showing agents.",
+    "Step 2: Found and clicked on \"QA-20260507-201330-vlat\" agent in sidebar — Agent detail page opened successfully.",
+    "Step 3: Verified agent status is \"idle\" — Status displayed as \"idle\" in the agent header, meeting the requirement.",
+    "Step 4: Sent message \"Use the GitHub tool to check who I am. Tell me my GitHub username.\" — Message successfully submitted to agent.",
+    "Step 5a: First account access request card appeared asking to grant GitHub account access — Card displayed with GitHub account already connected and checked.",
+    "Step 5b: Clicked \"Allow Access (1)\" button to grant GitHub account access — Permission granted successfully.",
+    "Step 5c: Second GitHub API permission request appeared (GET /user) — Dialog appeared asking for permission scope selection.",
+    "Step 5d: Clicked \"Allow Once\" in permission dialog — Permission granted and agent resumed processing.",
+    "Step 5e-5j: Additional permission requests appeared multiple times (6 total permission prompts) — Each time clicked \"Allow\" or \"Allow Once\" to permit the agent to make GitHub API calls.",
+    "Step 6: Waited up to 4 minutes for agent response — Agent worked for 3m 0s and provided a response.",
+    "Step 7: Verified response includes GitHub username — FAILED: Response did not include a GitHub username. Instead, agent reported: \"I was unable to retrieve your GitHub username. The connected GitHub account was granted (account ID `338c89ac-...`), but every call through the proxy to `api.github.com/user` returns `401 Bad credentials` — the proxy isn't injecting a valid OAuth token. `CONNECTED_ACCOUNTS` also still shows `{}` in this session, which suggests the connection didn't fully complete.\""
+  ],
+  "bugs": [
+    "GitHub API proxy authentication failure: Agent received \"401 Bad credentials\" error when calling api.github.com/user endpoint. The proxy is not properly injecting the valid OAuth token from the connected GitHub account. The CONNECTED_ACCOUNTS still showed {} (empty object) during the session, indicating the connection didn't fully complete or wasn't properly passed to the agent session context."
+  ],
+  "durationMs": 232018,
+  "sessionId": "3a19a536-3fd3-4819-bf2e-f639a0873d3f",
+  "cost": {
+    "inputTokens": 747,
+    "outputTokens": 17684,
+    "cacheCreationTokens": 108970,
+    "cacheReadTokens": 3762103,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.60159
+  }
+}
