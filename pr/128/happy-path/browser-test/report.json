@@ -1,24 +1,17 @@
 {
   "storyId": "browser-test",
-  "passed": true,
-  "reason": "Browser use feature successfully navigated to https://example.com and retrieved page title matching expected result",
-  "steps": [
-    "Navigated to http://localhost:47891 — Page loaded successfully showing SuperAgent interface with agent list",
-    "Found and clicked \"QA-20260506-193107-yuvm\" agent in the sidebar — Agent page opened with chat interface ready",
-    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" — Message displayed in input field",
-    "Sent message using Ctrl+Enter — Message successfully sent, agent status changed to \"working\", new session created",
-    "Waited up to 3 minutes for response — Agent completed task in 15 seconds, response received with \"The page title is \\\"Example Domain\\\"\"",
-    "Verified response mentions \"Example Domain\" — Response clearly states the page title is \"Example Domain\", browser preview panel shows the correct webpage, two tool calls executed successfully (Open Browser and Browser Command)"
-  ],
+  "passed": false,
+  "reason": "No [TEST_PASS] or [TEST_FAIL] marker found. Tail:  page\n- Browser preview showed the HTML content of the Example Domain page\n- Session was created and tracked in sidebar as \"Browser Navigation and Page Title Check\"\n- Browser session remained active with stop/expand controls available\n\nAll steps executed as specified with expected results achieved.\n",
+  "steps": [],
   "bugs": [],
-  "durationMs": 89327,
-  "sessionId": "8d136635-a884-44c2-9f57-3c1c3c37c053",
+  "durationMs": 97127,
+  "sessionId": "5377759d-65cd-4091-bfd8-a694a6828310",
   "cost": {
-    "inputTokens": 288,
-    "outputTokens": 10010,
+    "inputTokens": 315,
+    "outputTokens": 9303,
     "cacheCreationTokens": 49748,
-    "cacheReadTokens": 1081544,
+    "cacheReadTokens": 1188877,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.220677
+    "totalCostUsd": 0.227903
   }
 }
