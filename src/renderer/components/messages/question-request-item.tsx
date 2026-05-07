@@ -1,13 +1,14 @@
 import { apiFetch } from '@renderer/lib/api'
 
 import { useEffect, useRef, useState } from 'react'
-import { HelpCircle, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { HelpCircle, Check, ChevronRight } from 'lucide-react'
 import { useRequestHandler } from '@renderer/hooks/use-request-handler'
 import { Button } from '@renderer/components/ui/button'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { DeclineButton } from './decline-button'
 import { RequestItemShell } from './request-item-shell'
 import { RequestItemActions } from './request-item-actions'
+import { useSubPagination } from './pending-request-stack'
 import { cn } from '@shared/lib/utils/cn'
 
 interface Question {
@@ -44,6 +45,14 @@ export function QuestionRequestItem({
   const [otherSelected, setOtherSelected] = useState<Record<number, boolean>>({})
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const otherTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // Publish per-question pagination so the stack's header chevrons flatten
+  // across this card's questions plus any other pending-request cards.
+  useSubPagination({
+    count: questions.length,
+    index: currentQuestionIndex,
+    setIndex: setCurrentQuestionIndex,
+  })
 
   const { status, error, submit } = useRequestHandler(onComplete)
 
@@ -216,41 +225,6 @@ export function QuestionRequestItem({
       }
     : false as const
 
-  // Pagination controls for headerRight
-  const paginationControls = questions.length > 1 ? (
-    <div className="inline-flex items-center gap-0.5 px-0.5 text-foreground">
-      <button
-        type="button"
-        onClick={() => setCurrentQuestionIndex((i) => Math.max(0, i - 1))}
-        disabled={currentQuestionIndex === 0 || status === 'submitting'}
-        className={cn(
-          'inline-flex h-5 w-5 items-center justify-center rounded transition-colors',
-          currentQuestionIndex === 0 || status === 'submitting'
-            ? 'cursor-not-allowed opacity-40'
-            : 'hover:bg-muted'
-        )}
-      >
-        <ChevronLeft className="h-3.5 w-3.5" />
-      </button>
-      <span className="min-w-10 text-center text-xs font-medium">
-        {currentQuestionIndex + 1} of {questions.length}
-      </span>
-      <button
-        type="button"
-        onClick={() => setCurrentQuestionIndex((i) => Math.min(questions.length - 1, i + 1))}
-        disabled={currentQuestionIndex === questions.length - 1 || status === 'submitting'}
-        className={cn(
-          'inline-flex h-5 w-5 items-center justify-center rounded transition-colors',
-          currentQuestionIndex === questions.length - 1 || status === 'submitting'
-            ? 'cursor-not-allowed opacity-40'
-            : 'hover:bg-muted'
-        )}
-      >
-        <ChevronRight className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  ) : undefined
-
   return (
     <RequestItemShell
       title={titleText}
@@ -261,7 +235,6 @@ export function QuestionRequestItem({
       completed={completedConfig}
       readOnly={readOnlyConfig}
       waitingText="Waiting for response"
-      headerRight={paginationControls}
       error={error}
       data-testid={completedConfig ? 'question-request-completed' : 'question-request'}
       data-status={completedConfig ? status : undefined}

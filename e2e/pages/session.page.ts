@@ -281,6 +281,46 @@ export class SessionPage {
   }
 
   /**
+   * Walk through every question in a multi-question AskUserQuestion card,
+   * picking each option in order via the per-card Next button, then submit
+   * on the last. Use for `'ask multi'` and `'ask multi parallel'` scenarios.
+   */
+  async answerMultiQuestion(optionLabels: string[]) {
+    const container = this.page.locator('[data-testid="question-request"]').first()
+    await this.paginateToCard(container)
+    for (let i = 0; i < optionLabels.length; i++) {
+      await container.locator('label').filter({ hasText: optionLabels[i] }).click()
+      if (i < optionLabels.length - 1) {
+        await container.locator('[data-testid="question-next-btn"]').click()
+      } else {
+        await container.locator('[data-testid="question-submit-btn"]').click()
+      }
+    }
+  }
+
+  /**
+   * Read the visible request-stack chevrons' flat position. Returns null when
+   * no chevrons are mounted (single sub-page total).
+   */
+  async getStackPagination(): Promise<{ index: number; total: number } | null> {
+    const el = this.page.locator('[data-testid="request-stack-pagination"]:visible').first()
+    if ((await el.count()) === 0) return null
+    const idx = Number(await el.getAttribute('data-current-index'))
+    const total = Number(await el.getAttribute('data-count'))
+    return { index: idx, total }
+  }
+
+  /** Click the visible header "next" chevron in the pending-request stack. */
+  async clickStackNext() {
+    await this.page.locator('[data-testid="request-stack-next"]:visible').first().click()
+  }
+
+  /** Click the visible header "prev" chevron in the pending-request stack. */
+  async clickStackPrev() {
+    await this.page.locator('[data-testid="request-stack-prev"]:visible').first().click()
+  }
+
+  /**
    * Decline a question request. Paginates first.
    */
   async declineQuestion() {

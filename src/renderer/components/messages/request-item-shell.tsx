@@ -7,15 +7,9 @@ import { StopSessionButton } from './stop-session-button'
 
 export type RequestTheme = 'blue' | 'orange'
 
-export const THEME_CLASSES: Record<RequestTheme, { chip: string; waitBadge: string }> = {
-  blue: {
-    chip: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-    waitBadge: 'text-blue-600 dark:text-blue-400',
-  },
-  orange: {
-    chip: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-    waitBadge: 'text-orange-600 dark:text-orange-400',
-  },
+export const THEME_CLASSES: Record<RequestTheme, { waitBadge: string }> = {
+  blue: { waitBadge: 'text-blue-600 dark:text-blue-400' },
+  orange: { waitBadge: 'text-orange-600 dark:text-orange-400' },
 }
 
 interface CompletedConfig {
@@ -59,6 +53,7 @@ interface RequestItemShellProps {
 export function RequestItemShell({
   title,
   subtitle,
+  icon,
   theme,
   completed,
   readOnly,
@@ -88,8 +83,15 @@ export function RequestItemShell({
   }
 
   const titleNode = (
-    <div className="flex-1 min-w-0 text-sm font-medium leading-5 text-foreground whitespace-pre-line">
-      {title}
+    <div className="flex flex-1 min-w-0 items-start gap-2">
+      {icon && (
+        <span className="mt-0.5 shrink-0 text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">
+          {icon}
+        </span>
+      )}
+      <div className="flex-1 min-w-0 text-sm font-medium leading-5 text-foreground whitespace-pre-line">
+        {title}
+      </div>
     </div>
   )
 
@@ -156,7 +158,7 @@ export function RequestItemShell({
   ) : null
 
   const headerRightContent = paginationControls ?? headerRight
-  const showStopButton = !!(sessionId && agentSlug && headerRightContent)
+  const showStopButton = !!(sessionId && agentSlug)
 
   return (
     <div className="border rounded-[12px] bg-muted/30 shadow-md text-sm" {...dataAttrs}>
@@ -164,12 +166,14 @@ export function RequestItemShell({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
             {titleNode}
-            {headerRightContent && (
+            {(headerRightContent || showStopButton) && (
               <div className="flex items-center shrink-0">
                 {headerRightContent}
                 {showStopButton && (
                   <>
-                    <div className="ml-[5px] mr-[9px] h-4 w-px bg-border" aria-hidden />
+                    {headerRightContent && (
+                      <div className="ml-[5px] mr-[9px] h-4 w-px bg-border" aria-hidden />
+                    )}
                     <StopSessionButton sessionId={sessionId!} agentSlug={agentSlug!} />
                   </>
                 )}

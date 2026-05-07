@@ -118,6 +118,95 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
+  test('multi-question request: header chevrons flatten across all sub-questions', async ({ page }) => {
+    // "ask multi" triggers a single AskUserQuestion containing 3 questions.
+    // The header chevrons should advance through every question, not jump to
+    // the (non-existent) next card.
+    await sessionPage.sendMessage('ask multi')
+    await sessionPage.waitForQuestionRequest()
+
+    // 1 card × 3 sub-pages = 3 flat positions.
+    await expect(
+      page.locator('[data-testid="request-stack-pagination"]:visible').first()
+    ).toHaveAttribute('data-count', '3')
+
+    const container = sessionPage.getQuestionRequests().first()
+    await expect(container).toContainText('Which database should we use?')
+
+    await sessionPage.clickStackNext()
+    await expect(container).toContainText('Which cloud provider do you prefer?')
+    expect(await sessionPage.getStackPagination()).toEqual({ index: 1, total: 3 })
+
+    await sessionPage.clickStackNext()
+    await expect(container).toContainText('Preferred language?')
+    expect(await sessionPage.getStackPagination()).toEqual({ index: 2, total: 3 })
+
+    // Walking back returns to the prior question with the chevron index in sync.
+    await sessionPage.clickStackPrev()
+    await expect(container).toContainText('Which cloud provider do you prefer?')
+    expect(await sessionPage.getStackPagination()).toEqual({ index: 1, total: 3 })
+  })
+
+  test('multi-question request: bottom Next button stays in sync with header chevrons', async ({ page }) => {
+    await sessionPage.sendMessage('ask multi')
+    await sessionPage.waitForQuestionRequest()
+
+    const container = sessionPage.getQuestionRequests().first()
+    const pagination = page.locator('[data-testid="request-stack-pagination"]:visible').first()
+
+    // Pick an option and advance via the bottom Next button.
+    await container.locator('label').filter({ hasText: 'PostgreSQL' }).click()
+    await container.locator('[data-testid="question-next-btn"]').click()
+
+    // Header chevrons should reflect the same sub-page move.
+    await expect(pagination).toHaveAttribute('data-current-index', '1')
+    await expect(container).toContainText('Which cloud provider do you prefer?')
+
+    // And the reverse: clicking header prev rewinds the bottom flow too.
+    await sessionPage.clickStackPrev()
+    await expect(pagination).toHaveAttribute('data-current-index', '0')
+    await expect(container).toContainText('Which database should we use?')
+  })
+
+  test('multi-question request: submit button only renders on the last sub-page', async ({ page }) => {
+    await sessionPage.sendMessage('ask multi')
+    await sessionPage.waitForQuestionRequest()
+
+    const container = sessionPage.getQuestionRequests().first()
+    // On Q1 of 3, the bottom action is Next (not Submit).
+    await expect(container.locator('[data-testid="question-next-btn"]')).toBeVisible()
+    await expect(container.locator('[data-testid="question-submit-btn"]')).toHaveCount(0)
+
+    // Walk to the last sub-page via the header.
+    await sessionPage.clickStackNext()
+    await sessionPage.clickStackNext()
+
+    // Now the bottom action is Submit (not Next).
+    await expect(container.locator('[data-testid="question-submit-btn"]')).toBeVisible()
+    await expect(container.locator('[data-testid="question-next-btn"]')).toHaveCount(0)
+  })
+
+  test('multi-question request: answer all questions and complete', async ({ page }) => {
+    await sessionPage.sendMessage('ask multi')
+    await sessionPage.waitForQuestionRequest()
+
+    await sessionPage.answerMultiQuestion(['PostgreSQL', 'AWS', 'TypeScript'])
+
+    await expect(sessionPage.getQuestionRequests()).toHaveCount(0, { timeout: 10000 })
+    await sessionPage.waitForInputEnabled(15000)
+  })
+
+  test('multi-question + secret: header pagination flattens across the card boundary', async ({ page }) => {
+    // 1 secret + 1 AskUserQuestion (3 questions) = 4 flat positions.
+    await sessionPage.sendMessage('ask multi parallel')
+    await sessionPage.waitForSecretRequest('DATABASE_URL')
+    await sessionPage.waitForQuestionRequest()
+
+    await expect(
+      page.locator('[data-testid="request-stack-pagination"]:visible').first()
+    ).toHaveAttribute('data-count', '4')
+  })
+
   test('parallel requests: secret + question appear simultaneously', async ({ page }) => {
     // "ask parallel" triggers UserInputRequestScenario with both a secret and a question
     await sessionPage.sendMessage('ask parallel')
