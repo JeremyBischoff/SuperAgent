@@ -10,6 +10,7 @@
 import { App as SlackApp } from '@slack/bolt'
 import type { UserRequestEvent } from '@shared/lib/tool-definitions/types'
 import { ChatClientConnector, type OutgoingMessage } from './base-connector'
+import { describeUnsupportedRequest, isUnsupportedInChat } from './utils'
 import { captureException } from '@shared/lib/error-reporting'
 
 // ── Config ──────────────────────────────────────────────────────────────
@@ -424,6 +425,15 @@ export class SlackConnector extends ChatClientConnector {
   async sendUserRequestCard(chatId: string, event: UserRequestEvent): Promise<string> {
     if (!this.app) throw new Error('Slack app not connected')
 
+    if (isUnsupportedInChat(event)) {
+      const result = await this.app.client.chat.postMessage({
+        channel: chatId,
+        text: `_${describeUnsupportedRequest(event)}_`,
+        mrkdwn: true,
+      })
+      return result.ts || ''
+    }
+
     switch (event.type) {
       case 'user_question_request': {
         let lastTs = ''
@@ -523,10 +533,9 @@ export class SlackConnector extends ChatClientConnector {
       }
 
       default: {
-        // Generic card for other event types
         const result = await this.app.client.chat.postMessage({
           channel: chatId,
-          text: `*${event.type}*\n\`\`\`${JSON.stringify(event, null, 2).slice(0, 2500)}\`\`\``,
+          text: `_${describeUnsupportedRequest(event)}_`,
           mrkdwn: true,
         })
         return result.ts || ''
