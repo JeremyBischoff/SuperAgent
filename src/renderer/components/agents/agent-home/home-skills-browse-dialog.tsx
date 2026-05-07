@@ -4,6 +4,7 @@ import { Input } from '@renderer/components/ui/input'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@renderer/components/ui/dialog'
@@ -83,6 +84,7 @@ export function HomeSkillsBrowseDialog({
       <DialogContent className="max-w-3xl" onOpenAutoFocus={(e) => e.preventDefault()} data-testid="skills-browse-dialog">
         <DialogHeader>
           <DialogTitle>Browse & add skills from your team</DialogTitle>
+          <DialogDescription className="sr-only">Search and add shared skills to this agent</DialogDescription>
         </DialogHeader>
 
         <div className="flex items-center justify-between gap-2 mt-4">

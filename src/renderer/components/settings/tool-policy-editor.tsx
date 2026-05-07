@@ -14,6 +14,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@renderer/components/ui/dialog'
@@ -134,6 +135,7 @@ export function ToolPolicyEditor({
       <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>{mcpName} Tool Policies</DialogTitle>
+          <DialogDescription className="sr-only">Configure per-tool access policies for {mcpName}</DialogDescription>
         </DialogHeader>
 
         {loading ? (

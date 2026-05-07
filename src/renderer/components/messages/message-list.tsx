@@ -34,8 +34,8 @@ interface PendingMessage {
 function DeliveredFiles({ files, agentSlug }: { files: { filePath: string }[]; agentSlug: string }) {
   return (
     <div className="flex flex-wrap gap-1.5 ml-11 -mt-1 pb-1">
-      {files.map((file, idx) => (
-        <FileDownloadPill key={idx} filePath={file.filePath} agentSlug={agentSlug} />
+      {files.map((file) => (
+        <FileDownloadPill key={file.filePath} filePath={file.filePath} agentSlug={agentSlug} />
       ))}
     </div>
   )

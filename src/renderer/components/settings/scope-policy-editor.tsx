@@ -14,6 +14,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@renderer/components/ui/dialog'
@@ -174,6 +175,7 @@ export function ScopePolicyEditor({
       <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           {header ?? <DialogTitle className="capitalize">{toolkit} Scope Policies</DialogTitle>}
+          <DialogDescription className="sr-only">Configure per-scope access policies for {toolkit}</DialogDescription>
         </DialogHeader>
 
         {loading ? (

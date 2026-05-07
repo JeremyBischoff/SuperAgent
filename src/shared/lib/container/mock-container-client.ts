@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { randomUUID } from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import type {
@@ -925,6 +926,11 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
       }
+
+      // Ensure uuid/parentUuid/sessionId so entries conform to JsonlMessageEntry
+      if (!entry.uuid) entry.uuid = randomUUID()
+      if (!('parentUuid' in entry)) entry.parentUuid = null
+      if (!entry.sessionId) entry.sessionId = apiSessionId
 
       // Append the entry as a JSON line
       fs.appendFileSync(jsonlPath, JSON.stringify(entry) + '\n')

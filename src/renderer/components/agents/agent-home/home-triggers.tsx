@@ -143,9 +143,12 @@ function TriggerRow({
 
   return (
     <>
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
-        className="group relative w-full py-3 px-4 text-left hover:bg-muted/50 transition-colors"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() } }}
+        className="group relative w-full py-3 px-4 text-left hover:bg-muted/50 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-1.5">
           <div className="text-xs font-medium truncate">{name}</div>
@@ -240,7 +243,7 @@ function TriggerRow({
             </PopoverContent>
           </Popover>
         </div>
-      </button>
+      </div>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>

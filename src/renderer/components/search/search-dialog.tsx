@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { Bot, MessageSquare, Search } from 'lucide-react'
-import { Dialog, DialogContent } from '@renderer/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@renderer/components/ui/dialog'
 import { HighlightMatch } from '@renderer/components/ui/highlight-match'
 import { useAgents } from '@renderer/hooks/use-agents'
 import { useSelection } from '@renderer/context/selection-context'
@@ -104,6 +104,8 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
         onKeyDown={handleKeyDown}
         aria-label="Search agents and sessions"
       >
+        <DialogTitle className="sr-only">Search agents and sessions</DialogTitle>
+        <DialogDescription className="sr-only">Find agents and sessions by name</DialogDescription>
         <div className="flex items-center gap-2 border-b px-3 py-2.5">
           <Search className="h-4 w-4 text-muted-foreground shrink-0" />
           <input
