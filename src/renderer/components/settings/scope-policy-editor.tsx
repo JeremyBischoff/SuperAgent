@@ -56,24 +56,31 @@ export function ScopePolicyEditor({
 
   // Get scopes from the scope map for this toolkit
   const provider = SCOPE_MAPS[toolkit]
-  const allScopes = provider
-    ? Array.isArray(provider.allScopes)
-      ? provider.allScopes
-      : Object.values(provider.allScopes).flat()
-    : []
+  const allScopes = useMemo(
+    () =>
+      provider
+        ? Array.isArray(provider.allScopes)
+          ? provider.allScopes
+          : Object.values(provider.allScopes).flat()
+        : [],
+    [provider],
+  )
 
   // For each scope, prefer the curated description; otherwise borrow the
   // first endpoint description that mentions this scope.
-  const curated = SCOPE_DESCRIPTIONS[toolkit] ?? {}
-  const scopeDescriptions: Record<string, string> = {}
-  for (const scope of allScopes) {
-    const desc =
-      curated[scope] ??
-      provider?.scopeMap.find(
-        (e) => e.description && e.sufficientScopes.includes(scope),
-      )?.description
-    if (desc) scopeDescriptions[scope] = desc
-  }
+  const scopeDescriptions = useMemo(() => {
+    const curated = SCOPE_DESCRIPTIONS[toolkit] ?? {}
+    const descs: Record<string, string> = {}
+    for (const scope of allScopes) {
+      const desc =
+        curated[scope] ??
+        provider?.scopeMap.find(
+          (e) => e.description && e.sufficientScopes.includes(scope),
+        )?.description
+      if (desc) descs[scope] = desc
+    }
+    return descs
+  }, [allScopes, toolkit, provider])
 
   // Fetch existing policies
   useEffect(() => {
@@ -111,7 +118,7 @@ export function ScopePolicyEditor({
         setPolicies(allScopes.map((scope) => ({ scope, decision: 'default' })))
         setLoading(false)
       })
-  }, [open, accountId, toolkit])
+  }, [open, accountId, allScopes])
 
   // Filtered policies
   const filteredPolicies = useMemo(() => {
