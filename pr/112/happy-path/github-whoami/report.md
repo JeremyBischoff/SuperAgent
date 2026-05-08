@@ -1,25 +1,25 @@
+## Test Report
+
 [TEST_FAIL]
 
-[REASON] Agent attempted to use GitHub tool but failed to retrieve GitHub username due to invalid OAuth token
+[REASON] Agent attempted to fetch GitHub username but received "Bad credentials" error due to invalid/expired OAuth token, preventing successful username retrieval.
 
-[BUG_FOUND] The agent received "Bad credentials" error when trying to fetch the authenticated GitHub user. The OAuth token for the connected GitHub account appears to be broken or invalid. The agent requested multiple times to get the authenticated user but each attempt failed with the same error. The final response was an error message asking the user to reconnect the GitHub account, rather than providing a GitHub username.
+[BUG_FOUND] GitHub OAuth Token Invalid/Expired - The agent successfully invoked the GitHub tool and made multiple API calls to fetch the authenticated user's information, but received "Bad credentials" errors from GitHub. The response message indicates the OAuth token attached to the connected GitHub account is invalid or expired. The agent could not complete the requested task of retrieving the GitHub username due to this authentication failure.
 
-[STEP] Navigated to http://localhost:47891 — Page loaded successfully with the SuperAgent app showing 3 agents in the sidebar
+[STEP] Navigated to http://localhost:47891 — Page loaded successfully with sidebar showing three agents including "QA-20260508-205631-m8o0"
 
-[STEP] Clicked on "QA-20260508-171648-mec2" agent in the sidebar — Agent page loaded showing the idle status
+[STEP] Clicked on agent "QA-20260508-205631-m8o0" in the agents list — Agent page opened successfully
 
-[STEP] Verified agent status — Status displayed as "idle" in the header
+[STEP] Verified agent status is "running" or "idle" — Agent status showed "idle" in the status indicator
 
-[STEP] Typed and sent message "Use the GitHub tool to check who I am. Tell me my GitHub username." — Message was sent and agent began processing with status changing to "working"
+[STEP] Sent message "Use the GitHub tool to check who I am. Tell me my GitHub username." — Message was sent successfully and agent transitioned to "working" status
 
-[STEP] Granted GitHub account access when card appeared — Clicked "Allow Access (1)" to grant the GitHub account connection
+[STEP] GitHub account access request card appeared asking to grant access — Card displayed with GitHub account option selected
 
-[STEP] Approved GitHub API GET /user permission request (first attempt) — Clicked "Allow Once" to permit the API call
+[STEP] Clicked "Allow Access" button to grant GitHub account access — GitHub access was granted successfully
 
-[STEP] Approved GitHub API GET /user permission request (second attempt) — Clicked "Allow Once" again as another permission request appeared
+[STEP] Multiple GitHub API permission dialogs appeared (GET /user requests) — Selected "Allow Once" for each permission request to allow agent to make API calls
 
-[STEP] Approved GitHub API GET /user permission request with "Always allow read:user" — Selected "Always allow read:user" for permanent read access to GitHub user profile
+[STEP] Agent completed processing after 2 minutes 8 seconds — Agent returned an error response instead of GitHub username
 
-[STEP] Waited approximately 8 minutes 30 seconds for agent to complete — Agent finished with "Worked for 8m 30s" message
-
-[STEP] Verified final response — Response showed error: "The GitHub proxy is returning 'Bad credentials' — the OAuth token attached to the connected account isn't being accepted by GitHub. The connection appears to be broken." No GitHub username was provided.
+[STEP] Reviewed agent response — Response stated: "The GitHub connection returned 'Bad credentials' from GitHub itself — the proxy is forwarding correctly but the OAuth token attached to your connected GitHub account appears invalid or expired." The agent did not return a GitHub username as required by step 7.
