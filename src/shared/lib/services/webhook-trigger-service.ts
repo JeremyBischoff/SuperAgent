@@ -108,11 +108,16 @@ export async function createWebhookTrigger(params: CreateWebhookTriggerParams): 
     agentSlug: params.agentSlug,
   })
 
-  // Re-poll so a host that booted with 0 active triggers subscribes to
-  // Realtime now. Lazy import avoids circular dependency.
-  void import('@shared/lib/scheduler/trigger-manager').then(({ triggerManager }) =>
-    triggerManager.pollAndProcess(),
-  )
+  // If the host booted with 0 active triggers, TriggerManager early-returned
+  // without subscribing to Realtime. Kick it now so this trigger actually
+  // fires. Skip when Realtime is already active — events will be pushed in
+  // through the existing subscription, no need for an extra poll.
+  // Lazy import avoids the trigger-manager <-> webhook-trigger-service cycle.
+  void import('@shared/lib/scheduler/trigger-manager').then(({ triggerManager }) => {
+    if (!triggerManager.isRealtimeActive()) {
+      void triggerManager.pollAndProcess()
+    }
+  })
 
   return id
 }
