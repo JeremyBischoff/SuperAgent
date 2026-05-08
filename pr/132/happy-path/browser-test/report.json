@@ -1,0 +1,24 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Successfully verified browser use feature: agent can open a browser, navigate to a URL, retrieve the page title, and return the result in the chat.",
+  "steps": [
+    "Navigated to http://localhost:47891 - Page loaded successfully, showing SuperAgent home with \"Your Agents\" list containing multiple agents.",
+    "Found and clicked the \"QA-20260508-233518-y2g3\" agent in the sidebar - Agent page opened, showing chat interface with settings panels on the right side.",
+    "Sent message \"Open a browser and go to https://example.com. Tell me the page title.\" - Message was entered in the input field and sent successfully by clicking the send button.",
+    "Waited up to 3 minutes for a response - Agent processed the request and returned a response within 9 seconds, showing the \"Browser Page Title Check\" task completed successfully.",
+    "Verified the response mentions \"Example Domain\" - Response clearly shows \"The page title is Example Domain.\" confirming the agent successfully retrieved the page title from https://example.com.",
+    "Took a screenshot of the final response - Screenshot captured showing the complete interaction including all browser tool calls (Open Browser, Page Snapshot, Browser Command, Close Browser) with success indicators and the final response text containing \"Example Domain\"."
+  ],
+  "bugs": [],
+  "durationMs": 93474,
+  "sessionId": "04aa876b-98b3-40c2-9981-97b210ad1563",
+  "cost": {
+    "inputTokens": 309,
+    "outputTokens": 9293,
+    "cacheCreationTokens": 51414,
+    "cacheReadTokens": 1193249,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.230366
+  }
+}
