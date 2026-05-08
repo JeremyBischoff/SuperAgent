@@ -1,5 +1,5 @@
 
-import { Bell, ChevronDown, ChevronRight, Plus, Settings, AlertTriangle, LayoutGrid, Loader2, SquareMousePointer, WifiOff, LogOut, User, Users } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, Plus, Search, Settings, AlertTriangle, LayoutGrid, Loader2, SquareMousePointer, WifiOff, LogOut, User, Users } from 'lucide-react'
 import { cn } from '@shared/lib/utils/cn'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ErrorBoundary } from '@renderer/components/ui/error-boundary'
@@ -45,13 +45,13 @@ import { DashboardContextMenu } from '@renderer/components/dashboards/dashboard-
 import { useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@renderer/lib/api'
 import { useSelection } from '@renderer/context/selection-context'
-import { useWebhookTriggers } from '@renderer/hooks/use-webhook-triggers'
+import { useSearch } from '@renderer/context/search-context'
 import { useArtifacts, type ArtifactInfo } from '@renderer/hooks/use-artifacts'
 import { useChatIntegrations, useChatIntegrationSessions, type ChatIntegration } from '@renderer/hooks/use-chat-integrations'
 import { formatProviderName } from '@shared/lib/chat-integrations/utils'
-import { ServiceIcon } from '@renderer/components/ui/service-icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { useUser } from '@renderer/context/user-context'
+import { useUpdateStatus } from '@renderer/context/update-status-context'
 import { NotificationsPopoverContent } from '@renderer/components/notifications/notifications-popover'
 import { useUnreadNotificationCount } from '@renderer/hooks/use-notifications'
 import { useIsOnline } from '@renderer/context/connectivity-context'
@@ -131,111 +131,6 @@ function SessionSubItem({
           </button>
         </SidebarMenuSubButton>
       </SessionContextMenu>
-    </SidebarMenuSubItem>
-  )
-}
-
-// Webhook trigger sub-item
-function WebhookTriggerSubItem({
-  trigger,
-  agentSlug,
-}: {
-  trigger: { id: string; name: string | null; triggerType: string; status: string }
-  agentSlug: string
-}) {
-  const { view, setAgent } = useSelection()
-  const isSelected = view.kind === 'webhook' && view.id === trigger.id
-
-  const handleClick = () => {
-    setAgent(agentSlug, { kind: 'webhook', id: trigger.id })
-  }
-
-  const tooltip = trigger.status === 'cancelled'
-    ? `Cancelled trigger: ${trigger.triggerType}`
-    : trigger.status === 'paused'
-    ? `Paused trigger: ${trigger.triggerType}`
-    : `Trigger: ${trigger.triggerType}`
-
-  return (
-    <SidebarMenuSubItem>
-      <SidebarMenuSubButton
-        asChild
-        isActive={isSelected}
-        title={tooltip}
-      >
-        <button
-          onClick={handleClick}
-          className={`flex items-center gap-2 w-full text-muted-foreground ${trigger.status === 'cancelled' ? 'opacity-50' : 'opacity-70'}`}
-        >
-          <span className="truncate">{trigger.name || trigger.triggerType}</span>
-        </button>
-      </SidebarMenuSubButton>
-    </SidebarMenuSubItem>
-  )
-}
-
-// Collapsible group for multiple webhook triggers
-function WebhookTriggersGroup({
-  activeTriggers,
-  cancelledTriggers,
-  agentSlug,
-}: {
-  activeTriggers: Array<{ id: string; name: string | null; triggerType: string; status: string }>
-  cancelledTriggers: Array<{ id: string; name: string | null; triggerType: string; status: string }>
-  agentSlug: string
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [cancelledOpen, setCancelledOpen] = useState(false)
-  const totalCount = activeTriggers.length + cancelledTriggers.length
-
-  return (
-    <SidebarMenuSubItem>
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <SidebarMenuSubButton asChild>
-            <button className="flex items-center gap-2 w-full text-muted-foreground opacity-70">
-              <span className="truncate">Webhook Triggers ({totalCount})</span>
-              <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" data-state={isOpen ? 'open' : 'closed'} />
-            </button>
-          </SidebarMenuSubButton>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <SidebarMenuSub>
-            {activeTriggers.map((trigger) => (
-              <WebhookTriggerSubItem
-                key={trigger.id}
-                trigger={trigger}
-                agentSlug={agentSlug}
-              />
-            ))}
-            {cancelledTriggers.length > 0 && (
-              <SidebarMenuSubItem>
-                <Collapsible open={cancelledOpen} onOpenChange={setCancelledOpen}>
-                  <CollapsibleTrigger asChild>
-                    <SidebarMenuSubButton asChild>
-                      <button className="flex items-center gap-2 w-full text-muted-foreground opacity-50">
-                        <span className="truncate">Cancelled ({cancelledTriggers.length})</span>
-                        <ChevronRight className="ml-auto h-3 w-3 shrink-0 transition-transform duration-200 data-[state=open]:rotate-90" data-state={cancelledOpen ? 'open' : 'closed'} />
-                      </button>
-                    </SidebarMenuSubButton>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {cancelledTriggers.map((trigger) => (
-                        <WebhookTriggerSubItem
-                          key={trigger.id}
-                          trigger={trigger}
-                          agentSlug={agentSlug}
-                        />
-                      ))}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </Collapsible>
-              </SidebarMenuSubItem>
-            )}
-          </SidebarMenuSub>
-        </CollapsibleContent>
-      </Collapsible>
     </SidebarMenuSubItem>
   )
 }
@@ -598,16 +493,11 @@ export const AgentMenuItem = React.forwardRef<
 
   // Lazy-load detail data only when expanded
   const { data: sessions, isLoading: sessionsLoading } = useSessions(isOpen ? agent.slug : null)
-  const { data: webhookTriggersData } = useWebhookTriggers(isOpen ? agent.slug : null, 'active')
-  const { data: cancelledWebhookTriggersData } = useWebhookTriggers(isOpen ? agent.slug : null, 'cancelled')
   const { data: artifacts } = useArtifacts(isOpen ? agent.slug : null)
   const { data: chatIntegrationsData } = useChatIntegrations(isOpen ? agent.slug : null, 'active')
 
   const visibleSessions = showAll ? sessions : sessions?.slice(0, 5)
   const hasMore = (sessions?.length ?? 0) > 5
-  const activeWebhookTriggers = webhookTriggersData || []
-  const cancelledWebhookTriggers = cancelledWebhookTriggersData || []
-  const allWebhookTriggers = activeWebhookTriggers.length + cancelledWebhookTriggers.length
   const dashboards = Array.isArray(artifacts) ? artifacts : []
   const chatIntegrations = chatIntegrationsData || []
 
@@ -618,8 +508,7 @@ export const AgentMenuItem = React.forwardRef<
     isOpen ||
     (agent.sessionCount ?? 0) > 0 ||
     (agent.chatIntegrationCount ?? 0) > 0 ||
-    (agent.dashboardCount ?? 0) > 0 ||
-    activeWebhookTriggers.length > 0
+    (agent.dashboardCount ?? 0) > 0
 
   // Show skeleton after 100ms if sessions haven't loaded yet
   useEffect(() => {
@@ -713,19 +602,6 @@ export const AgentMenuItem = React.forwardRef<
                         agentSlug={agent.slug}
                       />
                     ))}
-                    {/* Webhook triggers */}
-                    {cancelledWebhookTriggers.length > 0 || allWebhookTriggers > 1 ? (
-                      <WebhookTriggersGroup
-                        activeTriggers={activeWebhookTriggers}
-                        cancelledTriggers={cancelledWebhookTriggers}
-                        agentSlug={agent.slug}
-                      />
-                    ) : activeWebhookTriggers.length === 1 ? (
-                      <WebhookTriggerSubItem
-                        trigger={activeWebhookTriggers[0]}
-                        agentSlug={agent.slug}
-                      />
-                    ) : null}
                     {/* Chat integrations */}
                     {chatIntegrations.length > 1 ? (
                       <ChatIntegrationsGroup
@@ -869,6 +745,8 @@ export function AppSidebar() {
   useRenderTracker('AppSidebar')
   const { setSettingsOpen, openSettings } = useDialogs()
   const { createUntitledAgent, isPending: isCreatingAgent } = useCreateUntitledAgent()
+  const updateStatus = useUpdateStatus()
+  const updateAvailable = updateStatus.state === 'available' || updateStatus.state === 'downloaded'
 
   // Electron menu → New Agent
   useEffect(() => {
@@ -879,6 +757,7 @@ export function AppSidebar() {
     }
   }, [createUntitledAgent])
   const { clearSelection, selectedAgentSlug } = useSelection()
+  const { openSearch } = useSearch()
   const { data: agents, isLoading, error } = useAgents()
   const { data: userSettings } = useUserSettings()
   const updateSettings = useUpdateUserSettings()
@@ -1071,6 +950,15 @@ export function AppSidebar() {
                     <span>New Agent</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={openSearch}
+                    data-testid="search-button"
+                  >
+                    <Search className="h-4 w-4" />
+                    <span>Search</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -1128,7 +1016,18 @@ export function AppSidebar() {
             <Settings className="h-4 w-4" />
             <span>Settings</span>
           </SidebarMenuButton>
-          <span className="px-2 text-xs text-muted-foreground shrink-0">v{__APP_VERSION__}</span>
+          <button
+            type="button"
+            onClick={() => openSettings('general')}
+            className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground shrink-0 hover:text-foreground"
+            title={updateAvailable ? `Update available: v${updateStatus.version}` : undefined}
+            data-testid="sidebar-version"
+          >
+            {updateAvailable && (
+              <span className="h-2 w-2 rounded-full bg-blue-500" aria-label="Update available" />
+            )}
+            <span>v{__APP_VERSION__}</span>
+          </button>
         </div>
       </SidebarFooter>
 

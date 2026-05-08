@@ -64,7 +64,10 @@ class NotificationManager {
   }
 
   /**
-   * Trigger a notification if conditions are met
+   * Trigger a notification if conditions are met.
+   * `actions` + `actionContext` are forwarded to the OS layer where supported
+   * (Electron Notification `actions` on macOS). Renderer dispatches the action
+   * back into the app using `actionContext`.
    */
   private async triggerNotification(params: {
     type: NotificationType
@@ -72,8 +75,10 @@ class NotificationManager {
     agentSlug: string
     title: string
     body: string
+    actions?: Array<{ text: string }>
+    actionContext?: Record<string, unknown>
   }): Promise<void> {
-    const { type, sessionId, agentSlug, title, body } = params
+    const { type, sessionId, agentSlug, title, body, actions, actionContext } = params
 
     // Skip if notification type is disabled in settings
     if (!this.isNotificationTypeEnabled(type)) {
@@ -89,6 +94,14 @@ class NotificationManager {
       body,
     })
 
+    // Stamp the actionContext with notificationId so the renderer dispatcher
+    // can mark the DB record as read when the user clicks the OS notification
+    // or one of its action buttons (otherwise the badge stays incremented
+    // even after the user has clearly seen and acted on the notification).
+    const stampedActionContext = actionContext
+      ? { ...actionContext, notificationId }
+      : undefined
+
     // Broadcast OS notification event to all connected clients
     // Frontend will decide whether to show based on tab visibility and selected session
     messagePersister.broadcastGlobal({
@@ -99,6 +112,8 @@ class NotificationManager {
       agentSlug,
       title,
       body,
+      ...(actions ? { actions } : {}),
+      ...(stampedActionContext ? { actionContext: stampedActionContext } : {}),
     })
   }
 
@@ -172,6 +187,47 @@ class NotificationManager {
       agentSlug,
       title: 'Action Required',
       body: `${displayName} ${waitingMessage}`,
+    })
+  }
+
+  /**
+   * Trigger notification for a pending proxy / API request review.
+   * Carries Approve/Deny action buttons (rendered by the OS on macOS via
+   * Electron's `actions` API; ignored on Windows/Linux which fall back to
+   * a click-to-focus notification).
+   *
+   * `kind` differentiates standard API reviews from x-agent (cross-agent)
+   * reviews so the title can be appropriate for each (S7).
+   */
+  async triggerSessionApiReviewWaiting(
+    sessionId: string,
+    agentSlug: string,
+    reviewId: string,
+    displayText: string,
+    agentName?: string,
+    kind: 'api_request' | 'agent_action' = 'api_request',
+  ): Promise<void> {
+    const displayName = agentName || await this.getAgentDisplayName(agentSlug)
+    const titleSuffix = kind === 'agent_action' ? 'Agent Action Review' : 'API Request Review'
+    // Decisions are index-aligned with `actions`. Carrying them in the
+    // context decouples the renderer's dispatch from button order — see
+    // notification-action-schema for the contract. (Review S6.)
+    const actions = [{ text: 'Approve' }, { text: 'Deny' }]
+    const decisions: Array<'allow' | 'deny'> = ['allow', 'deny']
+    await this.triggerNotification({
+      type: 'session_waiting',
+      sessionId,
+      agentSlug,
+      title: `${displayName} — ${titleSuffix}`,
+      body: displayText,
+      actions,
+      actionContext: {
+        kind: 'proxy_review',
+        reviewId,
+        agentSlug,
+        sessionId,
+        decisions,
+      },
     })
   }
 

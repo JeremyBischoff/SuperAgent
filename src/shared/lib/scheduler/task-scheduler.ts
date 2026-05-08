@@ -17,6 +17,7 @@ import {
   updateNextExecution,
 } from '@shared/lib/services/scheduled-task-service'
 import type { ScheduledTask } from '@shared/lib/services/scheduled-task-service'
+import type { EffortLevel } from '@shared/lib/container/types'
 import { getNextCronTime } from '@shared/lib/services/schedule-parser'
 import {
   registerSession,
@@ -164,12 +165,14 @@ class TaskScheduler {
     const availableEnvVars = await getSecretEnvVars(task.agentSlug)
 
     // Create a new session with the scheduled prompt
+    const models = getEffectiveModels()
     const containerSession = await client.createSession({
       availableEnvVars:
         availableEnvVars.length > 0 ? availableEnvVars : undefined,
       initialMessage: task.prompt,
-      model: getEffectiveModels().agentModel,
-      browserModel: getEffectiveModels().browserModel,
+      model: task.model || models.agentModel,
+      browserModel: models.browserModel,
+      ...(task.effort ? { effort: task.effort as EffortLevel } : {}),
     })
 
     const sessionId = containerSession.id

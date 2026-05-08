@@ -348,6 +348,20 @@ class MessagePersister {
     return false
   }
 
+  // Return the IDs of all active sessions for a given agent.
+  // Used to attribute agent-scoped events (e.g. proxy reviews) to the
+  // session(s) actually running — mirrors the sidebar heuristic in
+  // agents.ts that lights up `isActive && hasAgentLevelReviews`.
+  getActiveSessionIdsForAgent(agentSlug: string): string[] {
+    const ids: string[] = []
+    for (const [sessionId, state] of this.streamingStates) {
+      if (state.agentSlug === agentSlug && state.isActive) {
+        ids.push(sessionId)
+      }
+    }
+    return ids
+  }
+
   // Check if any session for a given agent is awaiting user input
   hasSessionsAwaitingInputForAgent(agentSlug: string): boolean {
     for (const [, state] of this.streamingStates) {
@@ -1498,6 +1512,8 @@ class MessagePersister {
           prompt: string
           name?: string
           timezone?: string
+          model?: string
+          effort?: string
         }
         try {
           input = JSON.parse(toolInput)
@@ -1530,6 +1546,8 @@ class MessagePersister {
           createdBySessionId: sessionId,
           createdByUserId: sessionOwnerId ?? undefined,
           timezone,
+          model: input.model,
+          effort: input.effort,
         })
 
         // Broadcast the scheduled task created event to session-specific SSE clients
@@ -1666,6 +1684,8 @@ class MessagePersister {
           prompt: string
           name?: string
           trigger_config?: Record<string, unknown>
+          model?: string
+          effort?: string
         }
         try {
           input = JSON.parse(toolInput)
@@ -1726,6 +1746,8 @@ class MessagePersister {
             name: input.name,
             createdBySessionId: sessionId,
             createdByUserId: triggerOwnerId ?? undefined,
+            model: input.model,
+            effort: input.effort,
           })
         } catch (dbError) {
           // Rollback Composio trigger

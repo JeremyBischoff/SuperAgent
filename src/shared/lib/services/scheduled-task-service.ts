@@ -27,6 +27,8 @@ export interface CreateScheduledTaskParams {
   createdBySessionId?: string
   createdByUserId?: string
   timezone?: string
+  model?: string
+  effort?: string
 }
 
 export interface UpdateNextExecutionParams {
@@ -71,6 +73,8 @@ export async function createScheduledTask(
     createdBySessionId: params.createdBySessionId,
     createdByUserId: params.createdByUserId,
     timezone: params.timezone || null,
+    model: params.model || null,
+    effort: params.effort || null,
   }
 
   await db.insert(scheduledTasks).values(newTask)
@@ -360,6 +364,25 @@ export async function updateTaskTimezone(taskId: string, timezone: string): Prom
 // ============================================================================
 
 /**
+ * Update a scheduled task's prompt (the instructions executed when the task runs).
+ * Allowed for pending or paused tasks.
+ */
+export async function updateTaskPrompt(
+  taskId: string,
+  prompt: string,
+): Promise<boolean> {
+  const task = await getScheduledTask(taskId)
+  if (!task || (task.status !== 'pending' && task.status !== 'paused')) return false
+
+  const result = await db
+    .update(scheduledTasks)
+    .set({ prompt })
+    .where(eq(scheduledTasks.id, taskId))
+
+  return (result.changes ?? 0) > 0
+}
+
+/**
  * Update a recurring task's schedule expression and recalculate next execution time.
  */
 export async function updateScheduleExpression(
@@ -398,6 +421,29 @@ export async function recordManualExecution(
       executionCount: task.executionCount + 1,
     })
     .where(eq(scheduledTasks.id, taskId))
+}
+
+/**
+ * Update a task's runtime options (model and/or effort).
+ * Pass null to clear a field back to the global default.
+ */
+export async function updateTaskRuntimeOptions(
+  taskId: string,
+  options: { model?: string | null; effort?: string | null },
+): Promise<boolean> {
+  const task = await getScheduledTask(taskId)
+  if (!task || (task.status !== 'pending' && task.status !== 'paused')) return false
+
+  const updates: Record<string, string | null> = {}
+  if ('model' in options) updates.model = options.model ?? null
+  if ('effort' in options) updates.effort = options.effort ?? null
+
+  const result = await db
+    .update(scheduledTasks)
+    .set(updates)
+    .where(eq(scheduledTasks.id, taskId))
+
+  return (result.changes ?? 0) > 0
 }
 
 /**

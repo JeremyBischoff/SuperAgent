@@ -1,7 +1,5 @@
 
-import { MessageList } from '@renderer/components/messages/message-list'
-import { MessageInput } from '@renderer/components/messages/message-input'
-import { AgentActivityIndicator } from '@renderer/components/messages/agent-activity-indicator'
+import { SessionChatColumn } from './session-chat-column'
 import { AgentSettingsDialog } from '@renderer/components/agents/agent-settings-dialog'
 import { SystemPromptDialog } from '@renderer/components/agents/system-prompt-dialog'
 import { SessionContextMenu } from '@renderer/components/sessions/session-context-menu'
@@ -17,14 +15,14 @@ import { DashboardView } from '@renderer/components/dashboards/dashboard-view'
 import { SidebarTrigger } from '@renderer/components/ui/sidebar'
 import { Separator } from '@renderer/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { DonutChart } from '@renderer/components/ui/donut-chart'
 import { ErrorBoundary } from '@renderer/components/ui/error-boundary'
-import { Power, Square, ChevronLeft, Clock, Loader2, AlertCircle, AlertTriangle, X, CalendarClock, Webhook } from 'lucide-react'
+import { Power, Square, ChevronLeft, Clock, Loader2, AlertCircle, AlertTriangle, X, CalendarClock, Zap } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useAgent, useStartAgent, useStopAgent } from '@renderer/hooks/use-agents'
 import { useSessions, useSession } from '@renderer/hooks/use-sessions'
 import { useScheduledTask } from '@renderer/hooks/use-scheduled-tasks'
+import { useWebhookTrigger } from '@renderer/hooks/use-webhook-triggers'
 import { AgentStatus } from '@renderer/components/agents/agent-status'
 import { useSelection } from '@renderer/context/selection-context'
 import { useRuntimeStatus } from '@renderer/hooks/use-runtime-status'
@@ -60,6 +58,7 @@ export function MainContent() {
   const { data: sessions } = useSessions(agentSlug)
   const { data: session } = useSession(sessionId, agentSlug)
   const { data: scheduledTask } = useScheduledTask(scheduledTaskId)
+  const { data: webhookTrigger } = useWebhookTrigger(webhookTriggerId)
   const startAgent = useStartAgent()
   const stopAgent = useStopAgent()
   const hasActiveSessions = sessions?.some((s) => s.isActive) || (agent?.hasActiveSessions ?? false)
@@ -159,9 +158,10 @@ export function MainContent() {
 
   const showSessionCrumb = !!(sessionId && session?.agentSlug === agentSlug)
   const showTaskCrumb = !!(scheduledTaskId && scheduledTask)
+  const showWebhookCrumb = !!(webhookTriggerId && webhookTrigger)
   const showApiLogsCrumb = !!apiLogsOpen
   const showConnectionsCrumb = !!connectionsOpen
-  const isAgentLeaf = !showSessionCrumb && !showTaskCrumb && !showApiLogsCrumb && !showConnectionsCrumb
+  const isAgentLeaf = !showSessionCrumb && !showTaskCrumb && !showWebhookCrumb && !showApiLogsCrumb && !showConnectionsCrumb
 
   return (
     <div className="h-full flex flex-col" data-testid="main-content">
@@ -184,6 +184,50 @@ export function MainContent() {
               {agent?.name || 'Loading...'}
             </button>
           </div>
+          {(() => {
+            const taskCrumbId = scheduledTaskId ?? (sessionId ? session?.scheduledTaskId ?? null : null)
+            const taskCrumbName = scheduledTask?.name ?? (sessionId ? session?.scheduledTaskName : null)
+            if (!taskCrumbId) return null
+            const isLeaf = !!scheduledTaskId
+            return (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
+                <button
+                  type="button"
+                  className={`flex items-center gap-1 transition-colors app-no-drag ${isLeaf ? 'text-muted-foreground cursor-default' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setView({ kind: 'task', id: taskCrumbId })}
+                  disabled={isLeaf}
+                >
+                  <Clock className="h-4 w-4" />
+                  <span className={`truncate text-sm font-light ${isLeaf ? 'text-foreground' : ''}`}>
+                    {taskCrumbName || 'Scheduled Task'}
+                  </span>
+                </button>
+              </div>
+            )
+          })()}
+          {(() => {
+            const webhookCrumbId = webhookTriggerId ?? (sessionId ? session?.webhookTriggerId ?? null : null)
+            const webhookCrumbName = webhookTrigger?.name ?? webhookTrigger?.triggerType ?? (sessionId ? session?.webhookTriggerName : null)
+            if (!webhookCrumbId) return null
+            const isLeaf = !!webhookTriggerId
+            return (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
+                <button
+                  type="button"
+                  className={`flex items-center gap-1 transition-colors app-no-drag ${isLeaf ? 'text-muted-foreground cursor-default' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setView({ kind: 'webhook', id: webhookCrumbId })}
+                  disabled={isLeaf}
+                >
+                  <Zap className="h-4 w-4" />
+                  <span className={`truncate text-sm font-light ${isLeaf ? 'text-foreground' : ''}`}>
+                    {webhookCrumbName || 'Webhook Trigger'}
+                  </span>
+                </button>
+              </div>
+            )
+          })()}
           {sessionId && session?.agentSlug === agentSlug && (
             <div className="flex items-center gap-1.5 min-w-0">
               <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
@@ -196,17 +240,6 @@ export function MainContent() {
                   {session?.name || 'Loading...'}
                 </span>
               </SessionContextMenu>
-            </div>
-          )}
-          {scheduledTaskId && scheduledTask && (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span aria-hidden="true" className="text-sm font-light text-muted-foreground shrink-0 hidden md:block">/</span>
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                <span className="truncate text-sm font-light text-foreground">
-                  {scheduledTask.name || 'Scheduled Task'}
-                </span>
-              </div>
             </div>
           )}
           {showApiLogsCrumb && (
@@ -392,7 +425,7 @@ export function MainContent() {
               View trigger
             </button>
             <span className="mx-1 text-border">|</span>
-            <Webhook className="h-3 w-3 shrink-0" />
+            <Zap className="h-3 w-3 shrink-0" />
             <span>
               Session created by webhook trigger{session.webhookTriggerName ? ` "${session.webhookTriggerName}"` : ''}
             </span>
@@ -418,56 +451,17 @@ export function MainContent() {
             <SessionSearchBar search={search} />
             <div className="relative flex-1 flex min-h-0">
             {/* Chat column */}
-            <div className="flex-1 min-w-0 grid grid-rows-[1fr_auto] min-h-0">
-              <MessageList
-                sessionId={view.id}
-                agentSlug={agentSlug}
-                pendingUserMessage={pendingUserMessage}
-                onPendingMessageAppeared={handlePendingMessageAppeared}
-              />
-              <div className="bg-background max-w-[740px] mx-auto w-full">
-                <AgentActivityIndicator sessionId={view.id} agentSlug={agentSlug} />
-                <MessageInput
-                  key={view.id}
-                  sessionId={view.id}
-                  agentSlug={agentSlug}
-                  onMessageSent={handleMessageSent}
-                  initialEffort={session?.effort}
-                  initialModel={session?.model}
-                />
-                <div className="flex justify-between items-center gap-1.5 px-6 py-3">
-                  {contextPercent != null ? (
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex items-center gap-1.5 cursor-default">
-                            <span className="text-xs text-muted-foreground">Context Usage</span>
-                            <DonutChart
-                              percent={contextPercent}
-                              animated={isActive}
-                              size="sm"
-                              showLabel={false}
-                            />
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{contextPercent}%</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
-                    <span />
-                  )}
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <kbd className="inline-flex items-center justify-center rounded-sm bg-muted border border-border/50 px-1 h-4 text-xs font-sans leading-none">↵</kbd>
-                    <span>Send</span>
-                    <span className="mx-1">·</span>
-                    <kbd className="inline-flex items-center justify-center rounded-sm bg-muted border border-border/50 px-1 h-4 text-xs font-sans leading-none">⇧↵</kbd>
-                    <span>New line</span>
-                  </span>
-                </div>
-              </div>
-            </div>
+            <SessionChatColumn
+              sessionId={view.id}
+              agentSlug={agentSlug}
+              pendingUserMessage={pendingUserMessage}
+              isViewOnly={isViewOnly}
+              contextPercent={contextPercent}
+              effort={session?.effort}
+              model={session?.model}
+              onPendingMessageAppeared={handlePendingMessageAppeared}
+              onMessageSent={handleMessageSent}
+            />
             {/* Browser drawer panel */}
             <BrowserDrawerPanel agentSlug={agentSlug} sessionId={view.id} browserActive={browserActive} isActive={isActive} />
           </div>
