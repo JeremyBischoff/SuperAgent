@@ -48,6 +48,7 @@ describe('skillsets routes', () => {
     vi.clearAllMocks()
     mockGetPlatformAuthStatus.mockReturnValue({
       connected: true,
+      source: 'settings',
       tokenPreview: 'plat_s...1234',
       email: 'user@example.com',
       label: 'SuperAgent',
