@@ -1169,6 +1169,7 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
     const initialMetadata: Parameters<typeof updateSessionMetadata>[2] = {}
     if (runtimeOptions.effort) initialMetadata.effort = runtimeOptions.effort
     if (runtimeOptions.model) initialMetadata.model = runtimeOptions.model
+    if (isAuthMode()) initialMetadata.createdByUserId = getCurrentUserId(c)
     if (Object.keys(initialMetadata).length > 0) {
       updateSessionMetadata(slug, sessionId, initialMetadata).catch(console.error)
     }
