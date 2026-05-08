@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { randomUUID } from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import type {
@@ -650,6 +651,85 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
         },
       },
     ])],
+    // Note: scenarios are matched by substring in insertion order, so
+    // longer/more-specific triggers must come first to avoid being shadowed
+    // by shorter prefixes.
+    ['ask multi parallel', new UserInputRequestScenario([
+      {
+        name: 'mcp__user-input__request_secret',
+        input: { secretName: 'DATABASE_URL', reason: 'Connection string for the database' },
+      },
+      {
+        name: 'AskUserQuestion',
+        input: {
+          questions: [
+            {
+              question: 'Which database should we use?',
+              header: 'Database',
+              options: [
+                { label: 'PostgreSQL', description: 'Reliable relational database' },
+                { label: 'MongoDB', description: 'Flexible document store' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Which cloud provider do you prefer?',
+              header: 'Cloud',
+              options: [
+                { label: 'AWS', description: 'Amazon Web Services' },
+                { label: 'GCP', description: 'Google Cloud Platform' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Preferred language?',
+              header: 'Language',
+              options: [
+                { label: 'TypeScript', description: 'Typed JavaScript' },
+                { label: 'Go', description: 'Compiled' },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      },
+    ])],
+    ['ask multi', new UserInputRequestScenario([
+      {
+        name: 'AskUserQuestion',
+        input: {
+          questions: [
+            {
+              question: 'Which database should we use?',
+              header: 'Database',
+              options: [
+                { label: 'PostgreSQL', description: 'Reliable relational database' },
+                { label: 'MongoDB', description: 'Flexible document store' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Which cloud provider do you prefer?',
+              header: 'Cloud',
+              options: [
+                { label: 'AWS', description: 'Amazon Web Services' },
+                { label: 'GCP', description: 'Google Cloud Platform' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Preferred language?',
+              header: 'Language',
+              options: [
+                { label: 'TypeScript', description: 'Typed JavaScript' },
+                { label: 'Go', description: 'Compiled' },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      },
+    ])],
     ['ask script', new UserInputRequestScenario([
       {
         name: 'mcp__user-input__request_script_run',
@@ -846,6 +926,11 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
       }
+
+      // Ensure uuid/parentUuid/sessionId so entries conform to JsonlMessageEntry
+      if (!entry.uuid) entry.uuid = randomUUID()
+      if (!('parentUuid' in entry)) entry.parentUuid = null
+      if (!entry.sessionId) entry.sessionId = apiSessionId
 
       // Append the entry as a JSON line
       fs.appendFileSync(jsonlPath, JSON.stringify(entry) + '\n')
@@ -1053,6 +1138,12 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       initialMessage: options.initialMessage,
       timestamp: new Date().toISOString(),
     })
+
+    // Simulate container startup latency for onboarding sessions so the
+    // "Setting up your agent…" modal is visible long enough for E2E assertions.
+    if (options.initialMessage?.includes('agent-onboarding')) {
+      await new Promise((r) => setTimeout(r, 2000))
+    }
 
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
     const now = new Date().toISOString()

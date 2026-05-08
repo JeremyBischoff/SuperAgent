@@ -1,5 +1,5 @@
 
-import { Bell, ChevronDown, ChevronRight, Plus, Settings, AlertTriangle, LayoutGrid, Loader2, SquareMousePointer, WifiOff, LogOut, User, Users } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, Plus, Search, Settings, AlertTriangle, LayoutGrid, Loader2, SquareMousePointer, WifiOff, LogOut, User, Users } from 'lucide-react'
 import { cn } from '@shared/lib/utils/cn'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ErrorBoundary } from '@renderer/components/ui/error-boundary'
@@ -45,11 +45,13 @@ import { DashboardContextMenu } from '@renderer/components/dashboards/dashboard-
 import { useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '@renderer/lib/api'
 import { useSelection } from '@renderer/context/selection-context'
+import { useSearch } from '@renderer/context/search-context'
 import { useArtifacts, type ArtifactInfo } from '@renderer/hooks/use-artifacts'
 import { useChatIntegrations, useChatIntegrationSessions, type ChatIntegration } from '@renderer/hooks/use-chat-integrations'
 import { formatProviderName } from '@shared/lib/chat-integrations/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { useUser } from '@renderer/context/user-context'
+import { useUpdateStatus } from '@renderer/context/update-status-context'
 import { NotificationsPopoverContent } from '@renderer/components/notifications/notifications-popover'
 import { useUnreadNotificationCount } from '@renderer/hooks/use-notifications'
 import { useIsOnline } from '@renderer/context/connectivity-context'
@@ -743,6 +745,8 @@ export function AppSidebar() {
   useRenderTracker('AppSidebar')
   const { setSettingsOpen, openSettings } = useDialogs()
   const { createUntitledAgent, isPending: isCreatingAgent } = useCreateUntitledAgent()
+  const updateStatus = useUpdateStatus()
+  const updateAvailable = updateStatus.state === 'available' || updateStatus.state === 'downloaded'
 
   // Electron menu → New Agent
   useEffect(() => {
@@ -753,6 +757,7 @@ export function AppSidebar() {
     }
   }, [createUntitledAgent])
   const { clearSelection, selectedAgentSlug } = useSelection()
+  const { openSearch } = useSearch()
   const { data: agents, isLoading, error } = useAgents()
   const { data: userSettings } = useUserSettings()
   const updateSettings = useUpdateUserSettings()
@@ -945,6 +950,15 @@ export function AppSidebar() {
                     <span>New Agent</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={openSearch}
+                    data-testid="search-button"
+                  >
+                    <Search className="h-4 w-4" />
+                    <span>Search</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -1002,7 +1016,18 @@ export function AppSidebar() {
             <Settings className="h-4 w-4" />
             <span>Settings</span>
           </SidebarMenuButton>
-          <span className="px-2 text-xs text-muted-foreground shrink-0">v{__APP_VERSION__}</span>
+          <button
+            type="button"
+            onClick={() => openSettings('general')}
+            className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground shrink-0 hover:text-foreground"
+            title={updateAvailable ? `Update available: v${updateStatus.version}` : undefined}
+            data-testid="sidebar-version"
+          >
+            {updateAvailable && (
+              <span className="h-2 w-2 rounded-full bg-blue-500" aria-label="Update available" />
+            )}
+            <span>v{__APP_VERSION__}</span>
+          </button>
         </div>
       </SidebarFooter>
 

@@ -12,6 +12,7 @@ import {
 } from '@shared/lib/composio/client'
 import { getAppBaseUrlFromRequest, getCurrentUserId } from '@shared/lib/auth/config'
 import { isAuthMode } from '@shared/lib/auth/mode'
+import { getComposioUserId } from '@shared/lib/config/settings'
 import { Authenticated, OwnsAccount, IsAdmin, Or } from '../middleware/auth'
 import { trackServerEvent } from '@shared/lib/analytics/server-analytics'
 import { countActiveTriggersPerAccount } from '@shared/lib/services/webhook-trigger-service'
@@ -129,7 +130,12 @@ connectedAccountsRouter.post('/initiate', async (c) => {
       callbackUrl = `${origin}/api/connected-accounts/callback?toolkit=${encodeURIComponent(providerSlug)}`
     }
 
-    const composioUserId = isAuthMode() ? getCurrentUserId(c) : undefined
+    // Platform proxy injects user_id server-side, so it's only required
+    // for local API key users and auth-mode users.
+    const composioUserId = isAuthMode()
+      ? getCurrentUserId(c)
+      : getComposioUserId()
+
     const { connectionId, redirectUrl } = await initiateConnection(
       authConfig.id,
       callbackUrl,
@@ -236,7 +242,9 @@ connectedAccountsRouter.post('/complete', async (c) => {
 // GET /api/connected-accounts/callback - OAuth callback handler (for web)
 connectedAccountsRouter.get('/callback', async (c) => {
   try {
-    const connectionId = c.req.query('connectedAccountId')
+    // Composio's /link flow may use either casing — accept both.
+    const connectionId =
+      c.req.query('connectedAccountId') || c.req.query('connected_account_id')
     const status = c.req.query('status')
     const toolkit = c.req.query('toolkit')
 

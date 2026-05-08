@@ -301,6 +301,8 @@ export interface ApiScheduledTask {
   lastSessionId: string | null
   createdBySessionId: string | null
   timezone: string | null
+  model: string | null
+  effort: string | null
   createdAt: Date
   cancelledAt: Date | null
   pausedAt: Date | null

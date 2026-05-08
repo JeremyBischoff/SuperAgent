@@ -143,9 +143,12 @@ function TriggerRow({
 
   return (
     <>
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onSelect}
-        className="group relative w-full py-3 px-4 text-left hover:bg-muted/50 transition-colors"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() } }}
+        className="group relative w-full py-3 px-4 text-left hover:bg-muted/50 transition-colors cursor-pointer"
       >
         <div className="flex items-center gap-1.5">
           <div className="text-xs font-medium truncate">{name}</div>
@@ -240,7 +243,7 @@ function TriggerRow({
             </PopoverContent>
           </Popover>
         </div>
-      </button>
+      </div>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
@@ -289,7 +292,10 @@ function CronRow({
       subtitleLeft={<span>cron · {humanizedCron ?? 'One-time'}</span>}
       subtitleRight={
         task.nextExecutionAt && !isPaused ? (
-          <span className="shrink-0">{formatRelativeTime(task.nextExecutionAt)}</span>
+          <span className="shrink-0">
+            <span className="text-muted-foreground">next run </span>
+            {formatRelativeTime(task.nextExecutionAt)}
+          </span>
         ) : null
       }
       isPaused={isPaused}
@@ -333,7 +339,14 @@ function WebhookRow({
       subtitleLeft={<span className="truncate lowercase">webhook · {trigger.triggerType}</span>}
       subtitleRight={
         <span className="shrink-0">
-          {formatRelativeTime(trigger.lastFiredAt) ?? 'Never fired'}
+          {formatRelativeTime(trigger.lastFiredAt) ? (
+            <>
+              <span className="text-muted-foreground">last run </span>
+              {formatRelativeTime(trigger.lastFiredAt)}
+            </>
+          ) : (
+            'No runs yet'
+          )}
         </span>
       }
       isPaused={isPaused}

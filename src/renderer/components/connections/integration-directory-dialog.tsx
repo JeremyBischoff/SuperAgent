@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@renderer/components/ui/dialog'
@@ -77,6 +78,7 @@ export function IntegrationDirectoryDialog({ open, onOpenChange, initialTab = 'a
       >
         <DialogHeader>
           <DialogTitle className="font-medium">Add New Connection</DialogTitle>
+          <DialogDescription className="sr-only">Connect APIs or MCP servers to your agents</DialogDescription>
         </DialogHeader>
         <Tabs value={tab} onValueChange={handleTabChange} className="flex flex-col gap-4 mt-4 min-h-[50vh]">
           <div className="flex items-center gap-2">

@@ -6,7 +6,10 @@ import { AuthGate } from './components/auth/auth-gate'
 import { SelectionProvider } from './context/selection-context'
 import { ConnectivityProvider } from './context/connectivity-context'
 import { DialogProvider, useDialogs } from './context/dialog-context'
+import { UpdateStatusProvider } from './context/update-status-context'
+import { UpdateToastNotifier } from './components/update-toast-notifier'
 import { DraftsProvider } from './context/drafts-context'
+import { SearchProvider } from './context/search-context'
 import { AppSidebar } from './components/layout/app-sidebar'
 import { MainContent } from './components/layout/main-content'
 import { WindowControls } from './components/layout/window-controls'
@@ -16,6 +19,7 @@ import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
 import { TrayNavigationHandler } from './components/tray-navigation-handler'
 import { GlobalNotificationHandler } from './components/notifications/global-notification-handler'
+import { OnboardingProvider } from './context/onboarding-context'
 import { GettingStartedWizard } from './components/wizard/getting-started-wizard'
 import { ErrorBoundary } from './components/ui/error-boundary'
 import { useUserSettings } from './hooks/use-user-settings'
@@ -69,12 +73,17 @@ function AppContent() {
 
   return (
     <DialogProvider onOpenWizard={() => setWizardOpen(true)}>
-      <WindowControls />
-      {wizardOpen ? (
-        <GettingStartedWizard onClose={() => setWizardOpen(false)} />
-      ) : (
-        <AppShell />
-      )}
+      <UpdateStatusProvider>
+        <OnboardingProvider>
+          <WindowControls />
+          <UpdateToastNotifier />
+          {wizardOpen ? (
+            <GettingStartedWizard onClose={() => setWizardOpen(false)} />
+          ) : (
+            <AppShell />
+          )}
+        </OnboardingProvider>
+      </UpdateStatusProvider>
     </DialogProvider>
   )
 }
@@ -113,10 +122,12 @@ export default function App() {
             <SelectionProvider>
               <ConnectivityProvider>
                 <DraftsProvider>
-                  <ErrorBoundary>
-                    <AppContent />
-                    <Toaster />
-                  </ErrorBoundary>
+                  <SearchProvider>
+                    <ErrorBoundary>
+                      <AppContent />
+                      <Toaster />
+                    </ErrorBoundary>
+                  </SearchProvider>
                 </DraftsProvider>
               </ConnectivityProvider>
             </SelectionProvider>
