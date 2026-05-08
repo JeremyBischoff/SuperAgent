@@ -601,7 +601,7 @@ Instructions here`
     })
 
     it('platform: merged queue item clears pendingQueueItemId and adopts remote content', async () => {
-      mockGetPlatformAuthStatus.mockReturnValue({ orgId: 'org_A' })
+      mockGetPlatformAuthStatus.mockReturnValue({ connected: true, source: 'settings', orgId: 'org_A' })
       const proxyBase = 'https://platform.example'
       const queueId = 'q-1'
       const modifiedContent = '# Test Skill\nModified locally'
@@ -658,7 +658,7 @@ Instructions here`
     })
 
     it('platform: rejected queue item clears pendingQueueItemId without touching files', async () => {
-      mockGetPlatformAuthStatus.mockReturnValue({ orgId: 'org_A' })
+      mockGetPlatformAuthStatus.mockReturnValue({ connected: true, source: 'settings', orgId: 'org_A' })
       const proxyBase = 'https://platform.example'
       const queueId = 'q-2'
       const localContent = '# Test Skill\nLocal modifications'
