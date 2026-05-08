@@ -1,25 +1,42 @@
-Perfect! I have successfully completed the test. The screenshot confirms the GitHub username response. Let me now write the final test report.
+Now I have the complete picture of what happened. Let me compile the test report:
+
+## Test Execution Summary
+
+I successfully executed all the QA test steps. Here's what occurred:
+
+**Steps Executed:**
+1. ✅ Navigated to http://localhost:47891
+2. ✅ Found and clicked agent "QA-20260508-001429-3yp2" in the sidebar
+3. ✅ Verified agent status is "idle" initially
+4. ✅ Sent message: "Use the GitHub tool to check who I am. Tell me my GitHub username."
+5. ✅ Granted GitHub account access when requested (multiple times)
+6. ✅ Waited up to 4 minutes for response (agent worked for 2m 13s)
+7. ❌ Response does NOT include a GitHub username
+
+**Result:** The agent attempted to use the GitHub tool and made multiple attempts to retrieve the GitHub username, but ultimately failed with a `401 Bad credentials` error from the stored OAuth token.
 
 ---
 
-[TEST_PASS]
+[TEST_FAIL]
 
-[REASON] Successfully verified that the agent can use the GitHub tool to retrieve the authenticated user's GitHub username with proper account access flow and API permissions.
+[REASON] Agent was unable to retrieve GitHub username due to invalid/expired OAuth token
 
-[STEP] Navigated to http://localhost:47891 - Page loaded successfully showing Super Agent application with sidebar containing three agents.
+[BUG_FOUND] Connected GitHub account has invalid or expired OAuth token - the proxy returns "401 Bad credentials" when the agent attempts to call the GitHub API to fetch the authenticated user. The response states: "I can't determine your GitHub username — the connected GitHub account is returning `401 Bad credentials` from the proxy, which means the stored OAuth token is invalid or expired."
 
-[STEP] Located and clicked on "QA-20260423-173534-r7m5" agent in the sidebar - Agent page opened successfully with chat interface.
+[STEP] Step 1: Navigated to http://localhost:47891 - SUCCESS - page loaded showing the SuperAgent home with sidebar containing three agents
 
-[STEP] Verified agent status is "running" or "idle" - Agent status was "idle", which is an acceptable status for the test.
+[STEP] Step 2: Found and clicked agent "QA-20260508-001429-3yp2" in sidebar - SUCCESS - agent selected and its interface displayed
 
-[STEP] Sent message "Use the GitHub tool to check who I am. Tell me my GitHub username." - Message was successfully sent to the agent and appeared in the chat.
+[STEP] Step 3: Verified agent status is "idle" - SUCCESS - agent status displayed as "idle" at the top right
 
-[STEP] GitHub account access card appeared asking to grant GitHub account access - The agent requested connected account access with GitHub already linked and checked. Clicked "Allow Access (1)" button to grant permission.
+[STEP] Step 4: Sent message "Use the GitHub tool to check who I am. Tell me my GitHub username." - SUCCESS - message sent and agent started processing
 
-[STEP] API Request Review card appeared asking to allow "Get the authenticated user" - Selected "Allow Once" from the permission dialog to allow the GitHub API call.
+[STEP] Step 5a: GitHub account access card appeared and I clicked "Allow Access (1)" - SUCCESS - card appeared asking to grant GitHub access with account already connected
 
-[STEP] Agent completed processing and returned response - After ~36 seconds of processing, the agent successfully executed three tools: "Check connected accounts" (Bash), "Request Connected Account" (GitHub), and "Fetch GitHub authenticated user" (Bash).
+[STEP] Step 5b: GitHub API permission dialog appeared and I selected "Always allow read:user" - SUCCESS - permission selected for read:user scope
 
-[STEP] Verified response includes a GitHub username - Response clearly displays "Your GitHub username is yiw190." confirming successful retrieval of the authenticated GitHub user's username.
+[STEP] Step 5c: Second GitHub reconnection card appeared and I clicked "Allow Access (1)" again - SUCCESS - agent attempted to reconnect after encountering 401 error
 
-[STEP] Took final screenshot showing the complete interaction - Screenshot (final-response-with-github-username.png) displays the full chat history with the agent's response including the GitHub username "yiw190".
+[STEP] Step 6: Waited up to 4 minutes for response - SUCCESS - agent worked for 2m 13s and completed
+
+[STEP] Step 7: Verified response includes GitHub username - FAILED - Response does not include a GitHub username. Instead it shows: "I can't determine your GitHub username — the connected GitHub account is returning `401 Bad credentials` from the proxy, which means the stored OAuth token is invalid or expired. You'll likely need to disconnect and reconnect the GitHub account in your settings, then I can try again."
