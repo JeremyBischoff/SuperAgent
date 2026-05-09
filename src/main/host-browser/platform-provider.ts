@@ -35,6 +35,14 @@ export class PlatformBrowserProvider implements HostBrowserProvider {
   onExternalClose: ((instanceId: string) => void) | null = null
 
   detect(): HostBrowserProviderStatus {
+    if (!getPlatformProxyBaseUrl()) {
+      return {
+        id: this.id,
+        name: this.name,
+        available: false,
+        reason: 'Platform proxy URL is not configured',
+      }
+    }
     if (!getPlatformAccessToken()) {
       return {
         id: this.id,
