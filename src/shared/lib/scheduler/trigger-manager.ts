@@ -111,7 +111,11 @@ class TriggerManager {
     return this.isRunning
   }
 
-  private async pollAndProcess(): Promise<void> {
+  isRealtimeActive(): boolean {
+    return this.realtimeClient?.isActive() ?? false
+  }
+
+  async pollAndProcess(): Promise<void> {
     if (this.isProcessing) return
     this.isProcessing = true
 
