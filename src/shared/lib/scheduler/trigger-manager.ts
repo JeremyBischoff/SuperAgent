@@ -288,6 +288,7 @@ class TriggerManager {
       initialMessage: prompt,
       model: trigger.model || models.agentModel,
       browserModel: models.browserModel,
+      metadata: { isAutomated: true },
       ...(trigger.effort ? { effort: trigger.effort as EffortLevel } : {}),
     })
 
