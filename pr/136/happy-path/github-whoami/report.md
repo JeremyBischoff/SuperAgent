@@ -1,0 +1,29 @@
+## Test Report
+
+[TEST_FAIL]
+
+[REASON] Attempted to verify GitHub tool usage to retrieve GitHub username. Agent responded with an error indicating expired OAuth token instead of providing the username.
+
+[BUG_FOUND] The GitHub OAuth token for the connected account was expired/revoked (returning "401 Bad credentials"). The agent was unable to retrieve the user's GitHub username as requested. The agent provided an error message asking to reconnect the GitHub account instead of providing the username. Test requirement was: "Verify the response includes a GitHub username."
+
+[STEP] Step 1: Navigate to http://localhost:47891 — SUCCESS. Page loaded with SuperAgent interface showing sidebar with multiple agents.
+
+[STEP] Step 2: Find and click "QA-20260512-002640-bf22" agent in sidebar — SUCCESS. Agent opened and displayed agent details page.
+
+[STEP] Step 3: Verify agent status is "running" or "idle" — SUCCESS. Agent status showed "idle" which meets the requirement.
+
+[STEP] Step 4: Send message "Use the GitHub tool to check who I am. Tell me my GitHub username." — SUCCESS. Message was sent and new session "GitHub Username Verification Check" was created.
+
+[STEP] Step 5a: Handle GitHub account access request card — SUCCESS. Card appeared asking to grant GitHub account access. GitHub account was already selected and "Allow Access" button was clicked.
+
+[STEP] Step 5b: Handle first API permission request (GET /user) — SUCCESS. Permission dialog appeared, "Allow Once" was clicked to allow the request.
+
+[STEP] Step 5c: Handle second API permission request (GET /user) — SUCCESS. Another permission request appeared, "Allow Once" was clicked.
+
+[STEP] Step 5d: Handle third API permission request (GET /) — SUCCESS. Permission request for "GET /" appeared, "Allow Once" was clicked.
+
+[STEP] Step 5e: Handle fourth API permission request (GET /user) — SUCCESS. Final permission request appeared, "Allow Once" was clicked.
+
+[STEP] Step 6: Wait up to 4 minutes for response — COMPLETED. Agent worked for 4 minutes 16 seconds total before responding. Multiple bash tool calls were executed attempting different approaches to retrieve the username.
+
+[STEP] Step 7: Verify response includes GitHub username and take screenshot — FAILED. Agent returned error message: "The GitHub account is registered (ID `135f3d77-d4d0-41f2-b34b-321d9ff59e8e`), but the OAuth token is returning `401 Bad credentials` through the proxy — it looks expired or revoked. I can't read your username until that's refreshed." No GitHub username was provided in the response. Screenshot taken showing the error response.
