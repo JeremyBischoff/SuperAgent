@@ -15,15 +15,6 @@ export default async function ensureOAuth(ctx: SetupContext): Promise<void> {
     throw new Error('ensureOAuth requires COMPOSIO_API_KEY and COMPOSIO_USER_ID in env')
   }
 
-  // Composio's GET /connected_accounts only honors the *plural* filter names
-  // (`user_ids`, `toolkit_slugs`, `statuses`) per the v3 OpenAPI spec. Older
-  // singular forms (`entityId`, `toolkit`, `status`) are silently ignored and
-  // return every connection in the org across all users — which makes the
-  // subsequent `.find()` pick whichever GitHub connection happens to be first
-  // in the array, regardless of who owns it. That bites CI: a stranger's
-  // GitHub connection whose OAuth token Composio has stopped being able to
-  // refresh comes back ACTIVE-but-broken, and the test fails with a 401
-  // "Bad credentials" from GitHub.
   const params = new URLSearchParams({
     user_ids: composioUserId,
     toolkit_slugs: 'github',
@@ -47,10 +38,6 @@ export default async function ensureOAuth(ctx: SetupContext): Promise<void> {
   }
 
   const connections = composioData.items ?? []
-  // Defense in depth: even though the server filter is authoritative, verify
-  // the returned connection actually belongs to our user. If Composio ever
-  // regresses the filter again we want to fail loudly here rather than
-  // silently registering somebody else's GitHub.
   const githubConn = connections.find(
     (c) => c.toolkit?.slug === 'github' && c.user_id === composioUserId,
   )
