@@ -15,6 +15,10 @@ import { dashboardManager } from './dashboard-manager';
 import { tabManager } from './tab-manager';
 
 import { getEditingCommands } from './cdp-editing-commands';
+import {
+  annotateSnapshot,
+  clearSession as clearStableRefSession,
+} from './snapshot-stable-refs';
 
 // Global error handlers to prevent crashes from AbortError during interrupts
 // The SDK throws AbortError when queries are aborted, which can propagate uncaught
@@ -874,6 +878,10 @@ app.post('/browser/open', async (c) => {
     browserState = { active: true, sessionId: body.sessionId, cdpUrl: cdpUrl || null };
     tabManager.resetTabCount();
     broadcastBrowserEvent(true);
+    // Fresh navigation = fresh sref namespace. Without this, `nextSrefId`
+    // keeps climbing across sites and stale (parentPath, role, name) keys
+    // from the previous page can collide with new elements.
+    clearStableRefSession(body.sessionId);
 
     return c.json({ success: true });
   } catch (error: any) {
@@ -904,6 +912,7 @@ app.post('/browser/close', async (c) => {
 
     cleanupCdpScreencast();
     broadcastBrowserEvent(false);
+    clearStableRefSession(body.sessionId);
     browserState = { active: false, sessionId: null, cdpUrl: null };
     tabManager.resetTabCount();
 
@@ -917,11 +926,13 @@ app.post('/browser/close', async (c) => {
 // POST /browser/notify-closed - Host browser was closed externally, clean up state
 app.post('/browser/notify-closed', (c) => {
   if (browserState.active) {
+    const prevSessionId = browserState.sessionId;
     cleanupAgentBrowserDaemon();
     cleanupCdpScreencast();
     broadcastBrowserEvent(false);
     browserState = { active: false, sessionId: null, cdpUrl: null };
     tabManager.resetTabCount();
+    if (prevSessionId) clearStableRefSession(prevSessionId);
     console.log('[Browser] Browser closed externally, state cleaned up');
   }
   return c.json({ success: true });
@@ -966,7 +977,11 @@ app.post('/browser/snapshot', async (c) => {
       }
     }
 
-    return c.json({ snapshot: result.stdout, tabCount: tabManager.getTabCount() });
+    // Rewrite [ref=eN] → [ref=sN] so the model only ever sees stable refs
+    // that survive page changes between snapshots. The tool layer is
+    // responsible for diffing / promoting baselines — see browserSnapshotTool.
+    const annotated = annotateSnapshot(body.sessionId, result.stdout);
+    return c.json({ snapshot: annotated, tabCount: tabManager.getTabCount() });
   } catch (error: any) {
     console.error('[Browser] Error taking snapshot:', error);
     return c.json({ error: error.message || 'Failed to take snapshot' }, 500);

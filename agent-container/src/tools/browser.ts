@@ -1,4 +1,4 @@
-/**
+ /**
  * Browser Automation Tools
  *
  * These tools allow agents to control a headless browser via agent-browser.
@@ -11,6 +11,34 @@ import { readFile } from 'fs/promises'
 import { z } from 'zod'
 import { resizeScreenshot } from '../image-utils'
 import { tabManager } from '../tab-manager'
+import {
+  commitBaseline,
+  diffAgainstBaseline,
+  diffIsLargerThanFull,
+  formatDiff,
+  resetDuplicateOccurrences,
+  resolveRef,
+  resolveRefsInCommand,
+  rewriteAnnotateLegend,
+  StableRefNotFoundError,
+} from '../snapshot-stable-refs'
+
+/** Translate a model-facing `@sN` ref to the current `@eN` understood by
+ *  agent-browser. Returns a typed error result on miss so callers can short-
+ *  circuit cleanly. */
+function resolveRefOrError(ref: string):
+  | { ok: true; ref: string }
+  | { ok: false; error: ReturnType<typeof errorResult> } {
+  if (!currentSessionId) return { ok: true, ref }
+  try {
+    return { ok: true, ref: resolveRef(currentSessionId, ref) }
+  } catch (err) {
+    if (err instanceof StableRefNotFoundError) {
+      return { ok: false, error: errorResult(err.message) }
+    }
+    throw err
+  }
+}
 
 const CONTAINER_URL = `http://localhost:${process.env.PORT || '3000'}`
 
@@ -143,58 +171,124 @@ export const browserCloseTool = tool(
 
 export const browserSnapshotTool = tool(
   'browser_snapshot',
-  `Get an accessibility tree snapshot of the current page. Returns interactive elements with refs (like @e1, @e2) that you can use with browser_click and browser_fill.
+  `Get the current state of the page as an accessibility tree with stable refs (@s1, @s2, ...).
 
-Use interactive=true (default) to get clickable/fillable elements with refs.
-Use compact=true (default) to reduce output size.
-Use json=true to get structured JSON output with a refs dictionary.`,
+The first call (or one after a navigation / full-page replacement) returns the full tree. Subsequent calls return only what changed since the last call — added / removed / changed elements, plus a count of unchanged ones. You always know which one you got from the response header.
+
+Refs persist across calls: a ref you saw earlier still points to the same element as long as that element is still on the page. Reuse refs you already have. Refs are tool-layer identifiers — pass them only to browser_click / browser_fill / browser_hover / browser_select / browser_run's ref argument. They are NOT DOM attributes; do not put @sN inside a CSS selector or eval.
+
+Call this once per new page, and again after any action (click / fill / scroll / hover / press / select / open).
+
+Parameters:
+- fresh=true forces a full tree instead of a diff. Useful when a diff looked wrong or you have lost track of state.
+- include_text=true includes non-interactive text content (addresses, prices, paragraphs, list-item text, descriptions). Default false keeps the tree compact by listing only interactive elements + headings + landmarks. Turn this on when the task requires reading content that the default tree is missing. Returns a full tree (no diff) and is ~3-10× larger, so do not leave it on for routine observations.`,
   {
-    interactive: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe('Include interactive elements with refs (default: true)'),
-    compact: z
-      .boolean()
-      .optional()
-      .default(true)
-      .describe('Compact output to reduce size (default: true)'),
-    json: z
+    fresh: z
       .boolean()
       .optional()
       .default(false)
-      .describe('Return structured JSON with refs dictionary (default: false)'),
+      .describe('Force a full snapshot instead of a diff (default: false).'),
+    include_text: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'Include non-interactive text nodes (addresses, prices, paragraphs, etc.). Default false. Forces a full snapshot. Use when the default interactive-only tree is missing the content you need to read.'
+      ),
   },
   async (args) => {
-    const result = await browserFetch('snapshot', {
-      interactive: args.interactive,
-      compact: args.compact,
-      json: args.json,
-    })
+    // Always pull a fresh snapshot — server-side annotates with stable refs.
+    // Default: diff against the committed baseline; fall back to full when the
+    // baseline is missing or the formatted diff would be at least as long as
+    // the full snapshot.
+    // fresh=true or include_text=true: skip the diff entirely and return the
+    // full tree (include_text would otherwise produce a diff that's missing
+    // the text nodes the caller asked for).
+    const fetchSnapshot = () =>
+      browserFetch('snapshot', {
+        interactive: !args.include_text,
+        compact: true,
+      })
+
+    const result = await fetchSnapshot()
     if (!result.success) return errorResult(result.error!)
 
-    const data = result.data as Record<string, unknown>
+    let data = result.data as Record<string, unknown>
     const tabCount = typeof data.tabCount === 'number' ? data.tabCount : 0
-    let text = data.snapshot
-      ? String(data.snapshot)
-      : JSON.stringify(data, null, 2)
+    let fullSnapshot = data.snapshot ? String(data.snapshot) : ''
 
-    text += tabManager.formatTabStatus(tabCount)
+    if (!currentSessionId) {
+      return {
+        content: [{ type: 'text' as const, text: fullSnapshot + tabManager.formatTabStatus(tabCount) }],
+      }
+    }
+
+    let diff = diffAgainstBaseline(currentSessionId)
+
+    // Mutation-driven baseline refresh.
+    // When elements were removed since the last baseline, identical sibling
+    // elements may have shifted occurrence indexes — leaving srefs pointing at
+    // the wrong physical element (Mode D: silent drift). Drop all duplicate-
+    // occurrence keys, re-fetch a clean snapshot, and serve that as a full
+    // tree so the model picks up the refreshed refs. Skipped when the caller
+    // already asked for a full tree or no duplicates exist.
+    let mutationReset = false
+    if (
+      !args.fresh &&
+      !args.include_text &&
+      !diff.noBaseline &&
+      diff.removed.length > 0
+    ) {
+      const dropped = resetDuplicateOccurrences(currentSessionId)
+      if (dropped > 0) {
+        const r2 = await fetchSnapshot()
+        if (r2.success) {
+          mutationReset = true
+          data = r2.data as Record<string, unknown>
+          fullSnapshot = data.snapshot ? String(data.snapshot) : ''
+          // Recompute the diff so srefToCurrentLine reflects the re-annotation.
+          diff = diffAgainstBaseline(currentSessionId)
+        }
+      }
+    }
+
+    commitBaseline(currentSessionId)
+
+    const useFull =
+      args.fresh ||
+      args.include_text ||
+      mutationReset ||
+      diff.noBaseline ||
+      diffIsLargerThanFull(diff)
+    const body = useFull ? fullSnapshot : formatDiff(diff)
+    const header = useFull
+      ? mutationReset
+        ? '(Full snapshot — list elements were removed; sibling refs refreshed to prevent occurrence drift.)\n\n'
+        : args.include_text
+          ? '(Full snapshot — include_text=true; text content included.)\n\n'
+          : args.fresh
+            ? '(Full snapshot — caller requested fresh=true.)\n\n'
+            : diff.noBaseline
+              ? '(Full snapshot — first observation in this session.)\n\n'
+              : '(Full snapshot — page churned enough that a full tree is shorter than the diff.)\n\n'
+      : ''
 
     return {
-      content: [{ type: 'text' as const, text }],
+      content: [{ type: 'text' as const, text: header + body + tabManager.formatTabStatus(tabCount) }],
     }
   }
 )
 
 export const browserClickTool = tool(
   'browser_click',
-  `Click an element on the page by its ref (e.g., @e1). Get refs from browser_snapshot.`,
+  `Click an element on the page by its ref (e.g., @s1). Get refs from browser_snapshot. Refs persist across snapshots — if you remember a ref from an earlier snapshot, it still works as long as the element is still on the page.`,
   {
-    ref: z.string().describe('Element ref from snapshot (e.g., "@e1")'),
+    ref: z.string().describe('Element ref from snapshot (e.g., "@s1")'),
   },
   async (args) => {
-    const result = await browserFetch('click', { ref: args.ref })
+    const resolved = resolveRefOrError(args.ref)
+    if (!resolved.ok) return resolved.error
+    const result = await browserFetch('click', { ref: resolved.ref })
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown> | undefined
     const tabInfo = data?.tabInfo as { activeIndex: number; activeUrl: string; tabCount: number } | undefined
@@ -214,14 +308,16 @@ export const browserClickTool = tool(
 
 export const browserFillTool = tool(
   'browser_fill',
-  `Fill an input field by its ref (e.g., @e2) with a value. Get refs from browser_snapshot.`,
+  `Fill an input field by its ref (e.g., @s2) with a value. Get refs from browser_snapshot.`,
   {
-    ref: z.string().describe('Input element ref from snapshot (e.g., "@e2")'),
+    ref: z.string().describe('Input element ref from snapshot (e.g., "@s2")'),
     value: z.string().describe('The text to fill into the input'),
   },
   async (args) => {
+    const resolved = resolveRefOrError(args.ref)
+    if (!resolved.ok) return resolved.error
     const result = await browserFetch('fill', {
-      ref: args.ref,
+      ref: resolved.ref,
       value: args.value,
     })
     if (!result.success) return errorResult(result.error!)
@@ -317,7 +413,7 @@ export const browserPressTool = tool(
 
 export const browserScreenshotTool = tool(
   'browser_screenshot',
-  `Take a screenshot of the current page. Returns the screenshot image and the file path where it was saved. Use full=true to capture the entire scrollable page. Use annotate=true to overlay numbered labels on interactive elements — each label [N] corresponds to ref @eN, so you can click elements by their visual label.`,
+  `Take a screenshot for visual verification. Use annotate=true to overlay numbered labels — each label [N] is paired with a stable ref @sN you can pass to browser_click / browser_fill, same as refs from browser_snapshot.`,
   {
     full: z
       .boolean()
@@ -328,7 +424,9 @@ export const browserScreenshotTool = tool(
       .boolean()
       .optional()
       .default(false)
-      .describe('Overlay numbered labels on interactive elements matching snapshot refs (default: false)'),
+      .describe(
+        'Overlay numbered labels [N] @sN on interactive elements (default: false). Useful when you want to pick a target visually.'
+      ),
   },
   async (args) => {
     const result = await browserFetch('screenshot', { full: args.full, annotate: args.annotate })
@@ -344,12 +442,22 @@ export const browserScreenshotTool = tool(
       if (image) {
         content.push({ type: 'image' as const, data: image.data, mimeType: image.mimeType })
       }
-      // For annotated screenshots, include the ref legend after the file path
-      const cleanOutput = stripAnsi(rawOutput).trim()
-      const legendStart = cleanOutput.indexOf('\n')
-      const legend = legendStart > 0 ? cleanOutput.slice(legendStart).trim() : ''
       const textParts = [`Screenshot saved to: ${filePath}`]
-      if (legend) textParts.push(legend)
+      if (args.annotate) {
+        // agent-browser's annotate legend pairs each [N] with its raw @eN ref.
+        // Rewrite those to stable @sN refs by matching (role, name) against
+        // the most recent snapshot — keeps the screenshot path consistent with
+        // browser_click / browser_fill, which only understand @sN.
+        const cleanOutput = stripAnsi(rawOutput).trim()
+        const legendStart = cleanOutput.indexOf('\n')
+        const rawLegend = legendStart > 0 ? cleanOutput.slice(legendStart).trim() : ''
+        if (rawLegend) {
+          const legend = currentSessionId
+            ? rewriteAnnotateLegend(currentSessionId, rawLegend)
+            : rawLegend
+          textParts.push(legend)
+        }
+      }
       content.push({ type: 'text' as const, text: textParts.join('\n') })
     } else {
       content.push({ type: 'text' as const, text: 'Screenshot taken.' })
@@ -363,11 +471,13 @@ export const browserSelectTool = tool(
   'browser_select',
   `Select an option from a <select> dropdown element by its ref. Get refs from browser_snapshot.`,
   {
-    ref: z.string().describe('Select element ref from snapshot (e.g., "@e3")'),
+    ref: z.string().describe('Select element ref from snapshot (e.g., "@s3")'),
     value: z.string().describe('The option value to select'),
   },
   async (args) => {
-    const result = await browserFetch('select', { ref: args.ref, value: args.value })
+    const resolved = resolveRefOrError(args.ref)
+    if (!resolved.ok) return resolved.error
+    const result = await browserFetch('select', { ref: resolved.ref, value: args.value })
     if (!result.success) return errorResult(result.error!)
     return {
       content: [
@@ -381,10 +491,12 @@ export const browserHoverTool = tool(
   'browser_hover',
   `Hover over an element by its ref. Useful for triggering dropdown menus, tooltips, or hover states. Get refs from browser_snapshot.`,
   {
-    ref: z.string().describe('Element ref from snapshot (e.g., "@e1")'),
+    ref: z.string().describe('Element ref from snapshot (e.g., "@s1")'),
   },
   async (args) => {
-    const result = await browserFetch('hover', { ref: args.ref })
+    const resolved = resolveRefOrError(args.ref)
+    if (!resolved.ok) return resolved.error
+    const result = await browserFetch('hover', { ref: resolved.ref })
     if (!result.success) return errorResult(result.error!)
     return {
       content: [
@@ -428,7 +540,12 @@ Available commands:
     command: z.string().describe('The agent-browser command to run (without "agent-browser" prefix)'),
   },
   async (args) => {
-    const result = await browserFetch('run', { command: args.command })
+    // Translate any @sN tokens in the raw command to current @eN refs so
+    // commands like `get text @s5` reach agent-browser with refs it knows.
+    const command = currentSessionId
+      ? resolveRefsInCommand(currentSessionId, args.command)
+      : args.command
+    const result = await browserFetch('run', { command })
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown>
     let text = data.output ? String(data.output) : 'Command executed.'
@@ -493,6 +610,10 @@ export const browserGetStateTool = tool(
       parts.push(`**Accessibility Snapshot:**\n${snapshot}`)
       const tabStatus = tabManager.formatTabStatus(tabCount)
       if (tabStatus) parts.push(tabStatus.trim())
+      // The model just saw a full annotated snapshot — promote it to the
+      // diff baseline so the next browser_snapshot doesn't re-report changes
+      // already covered here.
+      if (currentSessionId) commitBaseline(currentSessionId)
     } else {
       parts.push(`**Accessibility Snapshot:** Error - ${snapshotResult.error}`)
     }
