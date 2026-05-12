@@ -69,25 +69,6 @@ export interface AppPreferences {
   showMenuBarIcon?: boolean
   notifications?: NotificationSettings
   autoSleepTimeoutMinutes?: number
-  /**
-   * Auto-compact idle threshold. After a session has been idle this many
-   * minutes, a compact_boundary + cumulative text-only summary is appended
-   * to its JSONL tail. The SDK's next resume then sees the boundary,
-   * truncates everything before it, and replays only the summary as
-   * context. Set to 0 to disable. Only sessions used in this app run are
-   * affected; older sessions are left untouched.
-   */
-  autoCompactIdleMinutes?: number
-  /**
-   * How many of the most recent user turns to keep verbatim in the
-   * summary (with full assistant text + tool_use + tool_result detail).
-   * Older turns are kept as user/assistant text only; their tool I/O
-   * collapses to a single `[...]` placeholder per contiguous run.
-   *
-   * Trigger gates (≥1 new human input AND >10 new tool_use calls since
-   * the previous boundary) are hardcoded for V0 and not exposed here.
-   */
-  autoCompactKeepTurns?: number
   setupCompleted?: boolean
   /** @deprecated Use hostBrowserProvider instead */
   useHostBrowser?: boolean
@@ -296,8 +277,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   app: {
     showMenuBarIcon: true,
     autoSleepTimeoutMinutes: 30,
-    autoCompactIdleMinutes: 0,
-    autoCompactKeepTurns: 10,
     notifications: {
       enabled: true,
       sessionComplete: true,

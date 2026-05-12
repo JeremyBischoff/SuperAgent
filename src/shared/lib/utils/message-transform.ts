@@ -170,6 +170,15 @@ export function transformMessages(entries: (JsonlMessageEntry | JsonlSystemEntry
     if (entry.type === 'user' && (entry as JsonlMessageEntry).isCompactSummary) {
       skipIndices.add(i)
     }
+    // Hide SDK-synthetic assistant fillers (e.g. "No response requested.")
+    // emitted automatically when a user message has no paired response —
+    // they're balancing tokens for the SDK, not real conversation content.
+    if (entry.type === 'assistant') {
+      const msg = (entry as JsonlMessageEntry).message
+      if (msg && (msg as { model?: string }).model === '<synthetic>') {
+        skipIndices.add(i)
+      }
+    }
   }
 
   // Filter to only message entries for the main transform pipeline
