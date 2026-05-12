@@ -111,7 +111,7 @@ function isSyntheticAssistant(m: JsonlMessageEntry): boolean {
  * front which tool_use IDs are "recent" so we can route their result
  * counterparts the same way.
  */
-function formatSummary(entries: JsonlEntry[], keepLastTools: number): string {
+export function formatSummary(entries: JsonlEntry[], keepLastTools: number): string {
   const allToolUseIds: string[] = []
   for (const e of entries) {
     if (e.type !== 'assistant') continue
