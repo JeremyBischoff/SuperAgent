@@ -1,0 +1,23 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Browser-use feature successfully opened a browser, navigated to example.com, retrieved the page title, and returned the response mentioning \"Example Domain\"",
+  "steps": [
+    "Step 1: Navigated to http://localhost:47891 - Application loaded successfully, showing the home page with agent list in the sidebar",
+    "Step 2: Clicked on \"QA-20260512-221602-mlkc\" agent in the sidebar - Agent opened, displaying the chat interface with message input field and agent configuration panels",
+    "Step 3: Sent message \"Open a browser and go to https://example.com. Tell me the page title.\" - Message appeared in the chat, agent status changed to \"working\", browser preview panel became visible",
+    "Step 4: Waited up to 3 minutes for response - Agent completed the task in 7 seconds. Two successful tool calls executed: \"Open Browser https://example.com\" and \"Browser Command $ get title\" (both with green checkmarks)",
+    "Step 5: Verified response mentions \"Example Domain\" - Response text displays: \"The page title is Example Domain.\" Browser preview panel shows the actual Example Domain page with content visible. Agent status returned to \"idle\" after completion."
+  ],
+  "bugs": [],
+  "durationMs": 84876,
+  "sessionId": "968db7d9-529e-415b-8c8d-45c5f71eee89",
+  "cost": {
+    "inputTokens": 315,
+    "outputTokens": 9012,
+    "cacheCreationTokens": 129279,
+    "cacheReadTokens": 1117103,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.318684
+  }
+}
