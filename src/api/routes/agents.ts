@@ -96,6 +96,7 @@ import {
   collectAgentRequiredEnvVars,
 } from '@shared/lib/services/agent-template-service'
 import { getSkillsetProvider } from '@shared/lib/skillset-provider'
+import type { SkillsetConfig } from '@shared/lib/types/skillset'
 import { withRetry } from '@shared/lib/utils/retry'
 import { transformMessages, type TransformedMessage, type TransformedItem } from '@shared/lib/utils/message-transform'
 import { getEffectiveModels, getEffectiveAgentLimits, getCustomEnvVars, getSettings, VALID_SCRIPT_TYPES } from '@shared/lib/config/settings'
@@ -115,7 +116,7 @@ function getConfiguredSkillsets() {
   return getSettings().skillsets || []
 }
 
-function toSkillsetRef(config: { id: string; url: string; name: string; provider?: 'github' | 'platform'; providerData?: Record<string, unknown> }) {
+function toSkillsetRef(config: Pick<SkillsetConfig, 'id' | 'url' | 'name' | 'provider' | 'providerData'>) {
   const provider = getSkillsetProvider(config.provider)
   return {
     skillsetId: config.id,

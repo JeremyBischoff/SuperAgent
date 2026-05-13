@@ -101,6 +101,8 @@ import {
   getSkillPRInfo,
   getInstalledSkillMetadata,
   getSkillsetRepoDir,
+  isCacheReady,
+  isGitAvailable,
 } from './skillset-service'
 
 // ============================================================================
@@ -2184,6 +2186,60 @@ metadata:
         'utf-8',
       )
       expect(writtenAuxFile).toBe('print("helper")\n')
+    })
+  })
+
+  // ==========================================================================
+  // isCacheReady / isGitAvailable
+  // ==========================================================================
+
+  describe('isCacheReady', () => {
+    it('returns true for git-based provider when .git exists', async () => {
+      const repoDir = path.join(testDir, 'skillset-cache', 'git-test')
+      await fs.promises.mkdir(path.join(repoDir, '.git'), { recursive: true })
+      expect(await isCacheReady(repoDir, 'github')).toBe(true)
+    })
+
+    it('returns false for git-based provider when .git is missing', async () => {
+      const repoDir = path.join(testDir, 'skillset-cache', 'git-test-empty')
+      await fs.promises.mkdir(repoDir, { recursive: true })
+      expect(await isCacheReady(repoDir, 'github')).toBe(false)
+    })
+
+    it('delegates to provider.isCacheReady for non-git provider', async () => {
+      const repoDir = path.join(testDir, 'skillset-cache', 'public-test')
+      await fs.promises.mkdir(repoDir, { recursive: true })
+
+      // No .git, but has the public provider's cache marker
+      await fs.promises.writeFile(
+        path.join(repoDir, '.skillset-cache-meta.json'),
+        JSON.stringify({ provider: 'public', cachedAt: new Date().toISOString(), sourceUrl: 'test' }),
+      )
+      expect(await isCacheReady(repoDir, 'public')).toBe(true)
+    })
+
+    it('returns false for public provider when marker is missing', async () => {
+      const repoDir = path.join(testDir, 'skillset-cache', 'public-empty')
+      await fs.promises.mkdir(repoDir, { recursive: true })
+      expect(await isCacheReady(repoDir, 'public')).toBe(false)
+    })
+
+    it('defaults to github provider when provider is undefined', async () => {
+      const repoDir = path.join(testDir, 'skillset-cache', 'default-test')
+      await fs.promises.mkdir(path.join(repoDir, '.git'), { recursive: true })
+      expect(await isCacheReady(repoDir, undefined)).toBe(true)
+    })
+  })
+
+  describe('isGitAvailable', () => {
+    it('returns true when git --version succeeds', async () => {
+      mockExecFile.mockReturnValue({ stdout: 'git version 2.40.0', stderr: '' })
+      expect(await isGitAvailable()).toBe(true)
+    })
+
+    it('returns false when git --version fails', async () => {
+      mockExecFile.mockImplementation(() => { throw new Error('not found') })
+      expect(await isGitAvailable()).toBe(false)
     })
   })
 })
