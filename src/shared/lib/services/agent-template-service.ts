@@ -25,6 +25,7 @@ import { withRetry } from '@shared/lib/utils/retry'
 import {
   readIndexJson,
   ensureSkillsetCached,
+  isCacheReady,
   getSkillsetIndex,
   getSkillsetRepoDir,
   refreshSkillset,
@@ -543,7 +544,7 @@ export async function installAgentFromSkillset(
   agentVersion: string,
 ): Promise<ApiAgent> {
   const repoDir = getSkillsetRepoDirForRef(skillsetRef)
-  if (!(await directoryExists(path.join(repoDir, '.git')))) {
+  if (!(await isCacheReady(repoDir, skillsetRef.provider))) {
     await ensureSkillsetCached(skillsetRef)
   }
 
@@ -1380,7 +1381,7 @@ export async function publishAgentToSkillset(
 
   const skillsetRef = toSkillsetRefFromConfig(skillsetConfig)
   const repoDir = getSkillsetRepoDirForRef(skillsetRef)
-  if (!(await directoryExists(path.join(repoDir, '.git')))) {
+  if (!(await isCacheReady(repoDir, skillsetRef.provider))) {
     await ensureSkillsetCached(skillsetRef)
   }
 

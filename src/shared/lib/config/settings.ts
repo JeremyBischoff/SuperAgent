@@ -4,6 +4,7 @@ import os from 'os'
 import { getDataDir } from './data-dir'
 import { getDefaultAgentImage, AGENT_IMAGE_REGISTRY } from './version'
 import type { SkillsetConfig } from '@shared/lib/types/skillset'
+import { DEFAULT_PUBLIC_SKILLSET } from '@shared/lib/skillset-provider/default-public-skillset'
 import type { ComputerUseSettings } from '@shared/lib/computer-use/types'
 
 export interface ContainerSettings {
@@ -359,7 +360,9 @@ export function loadSettings(): AppSettings {
         },
         agentLimits: loaded.agentLimits,
         customEnvVars: loaded.customEnvVars,
-        skillsets: loaded.skillsets,
+        skillsets: loaded.skillsets !== undefined
+          ? loaded.skillsets
+          : [DEFAULT_PUBLIC_SKILLSET],
         auth: {
           ...DEFAULT_AUTH_SETTINGS,
           ...loaded.auth,
@@ -376,7 +379,7 @@ export function loadSettings(): AppSettings {
     console.error('Failed to load settings, using defaults:', error)
   }
 
-  return { ...DEFAULT_SETTINGS }
+  return { ...DEFAULT_SETTINGS, skillsets: [DEFAULT_PUBLIC_SKILLSET] }
 }
 
 /**
