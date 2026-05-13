@@ -1,23 +1,25 @@
 {
   "storyId": "browser-test",
   "passed": true,
-  "reason": "Successfully executed browser tool to navigate to example.com and retrieve page title",
+  "reason": "Browser use feature test: Agent successfully navigated to https://example.com via browser tool calls and reported the correct page title \"Example Domain\"",
   "steps": [
-    "Step 1 - Navigated to http://localhost:47891 - Page loaded successfully with SuperAgent interface displaying list of agents",
-    "Step 2 - Found and clicked \"QA-20260513-025517-u5jl\" agent in the sidebar - Agent page loaded with chat interface and configuration options",
-    "Step 3 - Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" into the input box - Message appeared in input field",
-    "Step 4 - Clicked Send message button - Agent started working and executed browser tools:",
-    "Step 5 - Waited for response and verified \"Example Domain\" mentioned - Response received within 12 seconds stating: **\"The page title is \"Example Domain\".\"** - Test completed successfully with screenshot captured"
+    "Navigated to http://localhost:47891 - Page loaded successfully showing SuperAgent home with three agents in sidebar",
+    "Clicked on agent \"QA-20260513-030815-ye7k\" in the sidebar - Agent details page opened with chat interface",
+    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" into input field - Message text appeared in input field",
+    "Clicked \"Send message\" button - Message was sent, agent status changed to \"working\", new session \"Browser Navigation Page Title Check\" appeared in sidebar",
+    "Waited 10 seconds - Agent executed browser tools: Open Browser and Browser Get State calls visible, browser preview showing \"Example Domain\"",
+    "Waited additional 10 seconds - Agent completed task with response: \"The page title (h1) is \\\"Example Domain\\\".\", status changed to \"idle\", timer showed 20s total",
+    "Took final screenshot - Screenshot captured showing complete exchange with agent's correct response about the page title"
   ],
   "bugs": [],
-  "durationMs": 99964,
-  "sessionId": "e55e7c8c-c168-450c-ad23-fe7ccf52a7c9",
+  "durationMs": 87901,
+  "sessionId": "646a9da3-d7f3-4a8e-a481-98e976572938",
   "cost": {
-    "inputTokens": 342,
-    "outputTokens": 10243,
-    "cacheCreationTokens": 134809,
-    "cacheReadTokens": 1249797,
+    "inputTokens": 315,
+    "outputTokens": 10683,
+    "cacheCreationTokens": 130545,
+    "cacheReadTokens": 1126437,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.345048
+    "totalCostUsd": 0.329555
   }
 }
