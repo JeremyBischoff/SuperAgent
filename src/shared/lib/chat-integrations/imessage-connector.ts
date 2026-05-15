@@ -498,10 +498,6 @@ export class IMessageConnector extends ChatClientConnector {
   private handleReactionAdded(data: any): void {
     if (!data) return
     const reactionType = data.reactionType as string
-    const from = data.from as string
-
-    // Only handle reactions from the external user (not our own)
-    if (from === this.config.phoneNumber) return
 
     // Check if this reaction is on a pending approval message
     for (const [key, approval] of this.pendingApprovals) {
