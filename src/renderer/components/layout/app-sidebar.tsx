@@ -882,10 +882,10 @@ export function AppSidebar() {
                       type="button"
                       onClick={openSearch}
                       aria-label="Search"
-                      className="app-no-drag ml-auto -mr-2 h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                      className="app-no-drag ml-auto -mr-2 h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/10 transition-colors"
                       data-testid="search-button"
                     >
-                      <Search className="h-4 w-4" />
+                      <Search className="h-4 w-4 -translate-y-[1px]" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="flex items-center gap-2">
