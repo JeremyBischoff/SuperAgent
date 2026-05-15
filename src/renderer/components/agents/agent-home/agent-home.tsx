@@ -53,6 +53,15 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
   // once so the stagger animation isn't cancelled when justCreatedSlug is
   // cleared mid-animation by the view-transition cleanup.
   const [introStagger] = useState(() => justCreatedSlug === agent.slug)
+  // Hold a subtle "Initializing" state for ~1s before the sections animate
+  // in, so a freshly created agent feels like it's spinning up rather than
+  // popping in instantly.
+  const [introPlaying, setIntroPlaying] = useState(!introStagger)
+  useEffect(() => {
+    if (!introStagger) return
+    const t = setTimeout(() => setIntroPlaying(true), 1000)
+    return () => clearTimeout(t)
+  }, [introStagger])
   const startOnboardingSession = useStartOnboardingSession()
   const { canUseAgent, canAdminAgent } = useUser()
   const isViewOnly = !canUseAgent(agent.slug)
@@ -255,10 +264,19 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
     <div
       className={cn(
         'flex-1 flex flex-col overflow-y-auto px-10 py-10 bg-background',
-        introStagger && 'agent-home-intro'
+        introStagger && 'agent-home-intro relative',
+        introPlaying && 'intro-play'
       )}
       style={style}
     >
+      {introStagger && !introPlaying && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Initializing
+          </div>
+        </div>
+      )}
       <div className={`grid gap-10 items-start ${showRightColumn ? 'grid-cols-1 xl:grid-cols-[1fr_minmax(320px,400px)] w-full max-w-6xl mx-auto' : 'max-w-2xl mx-auto'}`}>
         {/* Left Column — Chat composer + Sessions */}
         <div className="space-y-6 w-full min-w-0 xl:min-w-[480px] xl:max-w-[720px]">
@@ -496,17 +514,27 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
 
         {/* Right Column — Triggers + Connections + Skills + Volumes */}
         {showRightColumn && (
-          <div className="space-y-3" data-intro-step="4">
-            <HomeTriggers
-              agentSlug={agent.slug}
-              scheduledTasks={scheduledTasks}
-              onSelectTask={(taskId: string) => setView({ kind: 'task', id: taskId })}
-              onSelectWebhook={(webhookId: string) => setView({ kind: 'webhook', id: webhookId })}
-            />
-            <HomeConnections agentSlug={agent.slug} />
-            <HomeSkills agentSlug={agent.slug} />
-            <HomeVolumes agentSlug={agent.slug} />
-            <HomeExtras agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
+          <div className="space-y-3">
+            <div data-intro-step="4">
+              <HomeTriggers
+                agentSlug={agent.slug}
+                scheduledTasks={scheduledTasks}
+                onSelectTask={(taskId: string) => setView({ kind: 'task', id: taskId })}
+                onSelectWebhook={(webhookId: string) => setView({ kind: 'webhook', id: webhookId })}
+              />
+            </div>
+            <div data-intro-step="5">
+              <HomeConnections agentSlug={agent.slug} />
+            </div>
+            <div data-intro-step="6">
+              <HomeSkills agentSlug={agent.slug} />
+            </div>
+            <div data-intro-step="7">
+              <HomeVolumes agentSlug={agent.slug} />
+            </div>
+            <div data-intro-step="8">
+              <HomeExtras agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
+            </div>
           </div>
         )}
       </div>
