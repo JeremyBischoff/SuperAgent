@@ -261,9 +261,11 @@ describe('PlatformSkillsetProvider archive cache (no-git path)', () => {
     mockArchiveFetch(tarGz)
     const destDir = path.join(tmpDir, 'cache')
 
-    // tar throws when strict + a filter rejects an entry, so populate fails
-    // loudly — better than silently dropping. Test the outcome either way.
-    await provider.populateCache(destDir, makeRef()).catch(() => {})
+    // The tar.x filter drops `..` entries silently, so populateCache resolves
+    // successfully but the escape path must not have been written.
+    await expect(
+      provider.populateCache(destDir, makeRef()),
+    ).resolves.toBeUndefined()
     expect(fs.existsSync(path.resolve(destDir, '../escape/evil.txt'))).toBe(false)
   })
 
