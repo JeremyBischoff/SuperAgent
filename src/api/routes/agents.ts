@@ -4040,6 +4040,7 @@ agents.get('/:id/artifacts/:artifactSlug/view', AgentRead(), async (c) => {
         const iframe = document.createElement('iframe');
         iframe.src = dashboardUrl;
         iframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups';
+        iframe.allow = 'microphone; camera';
         document.body.appendChild(iframe);
       } catch (err) {
         statusEl.textContent = err.message;
