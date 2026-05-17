@@ -1,6 +1,6 @@
 
 import { cn } from '@shared/lib/utils/cn'
-import { Check, X, Ban, ChevronDown, ChevronRight, Loader2, Wrench } from 'lucide-react'
+import { Check, X, Ban, ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react'
 import { useState, useRef } from 'react'
 import { getToolRenderer } from './tool-renderers'
 import { parseToolResult } from '@renderer/lib/parse-tool-result'
@@ -15,7 +15,6 @@ interface ToolCallItemProps {
   messageCreatedAt?: Date | string
   agentSlug?: string
   isSessionActive?: boolean
-  defaultExpanded?: boolean
 }
 
 interface StreamingToolCallItemProps {
@@ -39,16 +38,19 @@ function isUserInputTool(name: string): boolean {
   return name === 'AskUserQuestion' || name.startsWith('mcp__user-input__')
 }
 
-function ToolNameWithSummary({ name, summary }: { name: string; summary?: string | null }) {
+function ToolNameWithSummary({ name, summary, active = false }: { name: string; summary?: string | null; active?: boolean }) {
   return (
     <>
-      <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">
+      <span className={cn(
+        'font-sans font-normal shrink-0 text-sm leading-none transition-colors',
+        active ? 'text-foreground' : 'text-foreground/65 group-hover:text-foreground'
+      )}>
         {name}
       </span>
       {summary && (
         <>
-          <span aria-hidden className="shrink-0 text-foreground/40 group-hover:text-muted-foreground text-sm transition-colors">→</span>
-          <span className="text-muted-foreground/70 group-hover:text-muted-foreground truncate text-sm transition-colors">
+          <span aria-hidden className="shrink-0 text-foreground/40 group-hover:text-muted-foreground text-sm leading-none transition-colors">→</span>
+          <span className="text-muted-foreground/70 group-hover:text-muted-foreground truncate text-xs leading-none transition-colors">
             {summary}
           </span>
         </>
@@ -86,13 +88,13 @@ export function StatusIndicator({ status }: { status: string }) {
   )
 }
 
-export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionActive, defaultExpanded = false }: ToolCallItemProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionActive }: ToolCallItemProps) {
+  const [expanded, setExpanded] = useState(false)
   const status = getStatus(toolCall, isSessionActive)
   const renderer = getToolRenderer(toolCall.name)
   const isPendingUserInput = status === 'running' && isUserInputTool(toolCall.name)
   const elapsed = useElapsedTimer(status === 'running' && !isPendingUserInput ? (messageCreatedAt ?? null) : null)
-  const ToolIcon = renderer?.icon || Wrench
+  const ToolIcon = renderer?.icon || Search
 
   // Get summary for collapsed view
   const summary = renderer?.getSummary?.(toolCall.input)
@@ -116,9 +118,9 @@ export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionA
         onClick={() => setExpanded(!expanded)}
         className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
-        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-foreground/80 group-hover:text-foreground transition-colors" />
+        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-foreground/45 group-hover:text-foreground transition-colors" />
         {isPendingUserInput && (
-          <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">
+          <span className="font-sans font-normal shrink-0 text-sm text-foreground/65 group-hover:text-foreground leading-none transition-colors">
             Waiting for input:
           </span>
         )}
@@ -128,7 +130,7 @@ export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionA
         />
         {renderer?.CollapsedContent && (
           <>
-            {!summary && <span aria-hidden className="shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground text-sm transition-colors">→</span>}
+            {!summary && <span aria-hidden className="shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground text-sm leading-none transition-colors">→</span>}
             <renderer.CollapsedContent
               input={toolCall.input}
               result={resultStr}
@@ -138,7 +140,7 @@ export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionA
           </>
         )}
         {elapsed && (
-          <span className="shrink-0 text-2xs text-muted-foreground tabular-nums ml-auto">
+          <span className="shrink-0 text-2xs text-muted-foreground/70 tabular-nums ml-auto">
             {elapsed}
           </span>
         )}
@@ -224,7 +226,7 @@ export function StreamingToolCallItem({ name, partialInput }: StreamingToolCallI
 
   // Get custom streaming view if available
   const CustomStreamingView = renderer?.StreamingView
-  const ToolIcon = renderer?.icon || Wrench
+  const ToolIcon = renderer?.icon || Search
 
   // Try to get summary from partial input
   let summary: string | null = null
@@ -252,12 +254,13 @@ export function StreamingToolCallItem({ name, partialInput }: StreamingToolCallI
   return (
     <div className="text-sm border border-border/70 rounded-md overflow-hidden">
       <div className="flex w-full items-center gap-2 pl-2 pr-2 py-1.5 bg-muted/50">
-        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-foreground/80" />
+        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-foreground" />
         <ToolNameWithSummary
           name={renderer?.displayName || formatToolName(name)}
           summary={summary}
+          active
         />
-        <span className="shrink-0 text-2xs text-muted-foreground tabular-nums ml-auto">
+        <span className="shrink-0 text-2xs text-muted-foreground/70 tabular-nums ml-auto">
           {elapsed}
         </span>
         <StatusIndicator status="running" />

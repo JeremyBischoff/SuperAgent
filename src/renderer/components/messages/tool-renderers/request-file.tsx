@@ -1,4 +1,4 @@
-import { Upload } from 'lucide-react'
+import { ArrowUpToLine } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps, StreamingToolRendererProps } from './types'
 import { requestFileDef, type RequestFileInput } from '@shared/lib/tool-definitions/request-file'
 
@@ -48,7 +48,7 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
 
 export const requestFileRenderer: ToolRenderer = {
   displayName: 'Request File',
-  icon: Upload,
+  icon: ArrowUpToLine,
   getSummary: (input: unknown) => requestFileDef.getSummary(input),
   ExpandedView,
   StreamingView,

@@ -1,7 +1,7 @@
 
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { cn } from '@shared/lib/utils/cn'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Workflow } from 'lucide-react'
 import { ToolCallItem, StreamingToolCallItem, StatusIndicator } from './tool-call-item'
 import { useSubagentMessages } from '@renderer/hooks/use-messages'
 import { parseToolResult } from '@renderer/lib/parse-tool-result'
@@ -180,14 +180,15 @@ export function SubAgentBlock({
         onClick={() => setExpanded(!expanded)}
         className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
-        <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">Sub-agent:</span>
-        <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">
+        <Workflow className="h-3.5 w-3.5 shrink-0 text-foreground/45 group-hover:text-foreground transition-colors" />
+        <span className="font-sans font-normal shrink-0 text-sm text-foreground/65 group-hover:text-foreground leading-none transition-colors">Sub-agent:</span>
+        <span className="font-sans font-normal shrink-0 text-sm text-foreground/65 group-hover:text-foreground leading-none transition-colors">
           {subagentType}
         </span>
         {description && (
           <>
-            <span aria-hidden className="shrink-0 text-foreground/40 group-hover:text-muted-foreground text-sm transition-colors">→</span>
-            <span className="text-muted-foreground/70 group-hover:text-muted-foreground truncate text-sm transition-colors">
+            <span aria-hidden className="shrink-0 text-foreground/40 group-hover:text-muted-foreground text-sm leading-none transition-colors">→</span>
+            <span className="text-muted-foreground/70 group-hover:text-muted-foreground truncate text-xs leading-none transition-colors">
               {description}
             </span>
           </>

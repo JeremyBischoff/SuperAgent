@@ -1,5 +1,5 @@
 
-import { Clock, Repeat, CalendarClock, Globe } from 'lucide-react'
+import { Calendar, Repeat, CalendarClock, Globe } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps, StreamingToolRendererProps } from './types'
 import { scheduleTaskDef, cronToHuman, type ScheduleTaskInput } from '@shared/lib/tool-definitions/schedule-task'
 
@@ -167,7 +167,7 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
 
 export const scheduleTaskRenderer: ToolRenderer = {
   displayName: 'Schedule Task',
-  icon: Clock,
+  icon: Calendar,
   getSummary: scheduleTaskDef.getSummary,
   ExpandedView,
   StreamingView,

@@ -1,5 +1,5 @@
 
-import { Plug } from 'lucide-react'
+import { Blocks } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps, StreamingToolRendererProps } from './types'
 import { requestRemoteMcpDef, type RequestRemoteMcpInput } from '@shared/lib/tool-definitions/request-remote-mcp'
 
@@ -134,7 +134,7 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
 
 export const requestRemoteMcpRenderer: ToolRenderer = {
   displayName: 'Request MCP Server',
-  icon: Plug,
+  icon: Blocks,
   getSummary,
   ExpandedView,
   StreamingView,

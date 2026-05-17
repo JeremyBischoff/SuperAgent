@@ -1,5 +1,5 @@
 
-import { Link2 } from 'lucide-react'
+import { Blocks } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps, StreamingToolRendererProps } from './types'
 import { requestConnectedAccountDef, type RequestConnectedAccountInput } from '@shared/lib/tool-definitions/request-connected-account'
 import { getProvider } from '@shared/lib/composio/providers'
@@ -118,7 +118,7 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
 
 export const requestConnectedAccountRenderer: ToolRenderer = {
   displayName: 'Request Connected Account',
-  icon: Link2,
+  icon: Blocks,
   getSummary: requestConnectedAccountDef.getSummary,
   ExpandedView,
   StreamingView,

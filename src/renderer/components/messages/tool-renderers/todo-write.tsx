@@ -1,5 +1,5 @@
 
-import { ListTodo } from 'lucide-react'
+import { SquareCheck } from 'lucide-react'
 import { cn } from '@shared/lib/utils/cn'
 import { todoWriteDef } from '@shared/lib/tool-definitions/todo-write'
 import type { ToolRenderer, ToolRendererProps } from './types'
@@ -36,7 +36,7 @@ function ExpandedView({ input }: ToolRendererProps) {
 
 export const todoWriteRenderer: ToolRenderer = {
   displayName: todoWriteDef.displayName,
-  icon: ListTodo,
+  icon: SquareCheck,
   getSummary: todoWriteDef.getSummary,
   ExpandedView,
 }

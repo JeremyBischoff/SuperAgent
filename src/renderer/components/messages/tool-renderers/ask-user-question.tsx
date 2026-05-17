@@ -1,5 +1,5 @@
 
-import { MessageCircleQuestion } from 'lucide-react'
+import { CircleHelp } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps } from './types'
 import { askUserQuestionDef, type AskUserQuestionInput } from '@shared/lib/tool-definitions/ask-user-question'
 
@@ -90,7 +90,7 @@ function ExpandedView({ input, result, isError }: ToolRendererProps) {
 
 export const askUserQuestionRenderer: ToolRenderer = {
   displayName: 'Question',
-  icon: MessageCircleQuestion,
+  icon: CircleHelp,
   getSummary,
   ExpandedView,
 }

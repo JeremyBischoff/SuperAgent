@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react'
+import { ArrowDownToLine, Download } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { FileTypeIcon } from '@renderer/components/ui/file-type-icon'
 import { FileDownloadPill } from '@renderer/components/ui/file-download-pill'
@@ -91,7 +91,7 @@ function CollapsedContent({ input, isError, agentSlug }: CollapsedContentProps) 
 
 export const deliverFileRenderer: ToolRenderer = {
   displayName: 'Deliver File',
-  icon: Download,
+  icon: ArrowDownToLine,
   getSummary: (input: unknown) => deliverFileDef.getSummary(input),
   ExpandedView,
   StreamingView,

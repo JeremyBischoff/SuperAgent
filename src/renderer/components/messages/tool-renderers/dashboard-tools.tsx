@@ -1,5 +1,5 @@
 
-import { SquareMousePointer, Play, List, ScrollText } from 'lucide-react'
+import { SquareMousePointer, SquareGanttChart, Code } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps } from './types'
 import {
   createDashboardDef, startDashboardDef, listDashboardsDef, getDashboardLogsDef,
@@ -49,7 +49,7 @@ function CreateDashboardExpandedView({ input, result, isError }: ToolRendererPro
 
 export const createDashboardRenderer: ToolRenderer = {
   displayName: createDashboardDef.displayName,
-  icon: SquareMousePointer,
+  icon: Code,
   getSummary: createDashboardDef.getSummary,
   ExpandedView: CreateDashboardExpandedView,
 }
@@ -58,7 +58,7 @@ export const createDashboardRenderer: ToolRenderer = {
 
 export const startDashboardRenderer: ToolRenderer = {
   displayName: startDashboardDef.displayName,
-  icon: Play,
+  icon: SquareMousePointer,
   getSummary: startDashboardDef.getSummary,
 }
 
@@ -66,7 +66,7 @@ export const startDashboardRenderer: ToolRenderer = {
 
 export const listDashboardsRenderer: ToolRenderer = {
   displayName: listDashboardsDef.displayName,
-  icon: List,
+  icon: SquareGanttChart,
 }
 
 // ── get_dashboard_logs ────────────────────────────────────────
@@ -105,7 +105,7 @@ function DashboardLogsExpandedView({ input, result, isError }: ToolRendererProps
 
 export const getDashboardLogsRenderer: ToolRenderer = {
   displayName: getDashboardLogsDef.displayName,
-  icon: ScrollText,
+  icon: Code,
   getSummary: getDashboardLogsDef.getSummary,
   ExpandedView: DashboardLogsExpandedView,
 }

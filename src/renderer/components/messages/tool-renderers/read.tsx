@@ -1,5 +1,5 @@
 
-import { FileText } from 'lucide-react'
+import { File } from 'lucide-react'
 import { readDef, type ReadInput } from '@shared/lib/tool-definitions/read'
 import type { ToolRenderer, ToolRendererProps, StreamingToolRendererProps } from './types'
 
@@ -67,7 +67,7 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
 
 export const readRenderer: ToolRenderer = {
   displayName: readDef.displayName,
-  icon: FileText,
+  icon: File,
   getSummary: readDef.getSummary,
   ExpandedView,
   StreamingView,

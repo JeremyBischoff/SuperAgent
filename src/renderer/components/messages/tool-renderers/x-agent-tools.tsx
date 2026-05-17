@@ -1,4 +1,4 @@
-import { Users, UserPlus, Send, List, ScrollText, ArrowUpRight } from 'lucide-react'
+import { SquareGanttChart, SquarePlus, SquareArrowRight, MessagesSquare, ArrowUpRight } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps } from './types'
 import { useSelection } from '@renderer/context/selection-context'
 import {
@@ -69,7 +69,7 @@ function ListAgentsExpandedView({ result, isError }: ToolRendererProps) {
 
 export const listAgentsRenderer: ToolRenderer = {
   displayName: listAgentsDef.displayName,
-  icon: Users,
+  icon: SquareGanttChart,
   getSummary: listAgentsDef.getSummary,
   ExpandedView: ListAgentsExpandedView,
 }
@@ -109,7 +109,7 @@ function CreateAgentExpandedView({ input, result, isError }: ToolRendererProps) 
 
 export const createAgentRenderer: ToolRenderer = {
   displayName: createAgentDef.displayName,
-  icon: UserPlus,
+  icon: SquarePlus,
   getSummary: createAgentDef.getSummary,
   ExpandedView: CreateAgentExpandedView,
 }
@@ -167,7 +167,7 @@ function InvokeAgentExpandedView({ input, result, isError }: ToolRendererProps) 
 
 export const invokeAgentRenderer: ToolRenderer = {
   displayName: invokeAgentDef.displayName,
-  icon: Send,
+  icon: SquareArrowRight,
   getSummary: invokeAgentDef.getSummary,
   ExpandedView: InvokeAgentExpandedView,
 }
@@ -188,7 +188,7 @@ function GetAgentSessionsExpandedView({ input, result, isError }: ToolRendererPr
 
 export const getAgentSessionsRenderer: ToolRenderer = {
   displayName: getAgentSessionsDef.displayName,
-  icon: List,
+  icon: SquareGanttChart,
   getSummary: getAgentSessionsDef.getSummary,
   ExpandedView: GetAgentSessionsExpandedView,
 }
@@ -221,7 +221,7 @@ function GetAgentSessionTranscriptExpandedView({ input, result, isError }: ToolR
 
 export const getAgentSessionTranscriptRenderer: ToolRenderer = {
   displayName: getAgentSessionTranscriptDef.displayName,
-  icon: ScrollText,
+  icon: MessagesSquare,
   getSummary: getAgentSessionTranscriptDef.getSummary,
   ExpandedView: GetAgentSessionTranscriptExpandedView,
 }
