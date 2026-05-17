@@ -1034,6 +1034,14 @@ export function AppSidebar() {
       </ErrorBoundary>
 
       <SidebarFooter className="border-t p-0 px-2 pt-1">
+        {/* TEMPORARY: dev-only tool-call gallery toggle. Remove before merging. */}
+        <SidebarMenuButton
+          onClick={() => window.dispatchEvent(new CustomEvent('toggle-gallery'))}
+          data-testid="gallery-button"
+        >
+          <LayoutGrid className="h-4 w-4" />
+          <span>Tool Call Gallery</span>
+        </SidebarMenuButton>
         <UserMenu />
         <div className="flex items-center justify-between gap-2">
           <SidebarMenuButton

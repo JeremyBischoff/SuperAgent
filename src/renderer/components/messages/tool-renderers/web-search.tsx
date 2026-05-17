@@ -1,5 +1,5 @@
 
-import { Globe } from 'lucide-react'
+import { Search } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { webSearchDef } from '@shared/lib/tool-definitions/web-search'
@@ -104,7 +104,7 @@ function ExpandedView({ input, result, isError }: ToolRendererProps) {
 
 export const webSearchRenderer: ToolRenderer = {
   displayName: webSearchDef.displayName,
-  icon: Globe,
+  icon: Search,
   getSummary: webSearchDef.getSummary,
   ExpandedView,
 }

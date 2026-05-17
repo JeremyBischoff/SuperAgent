@@ -1,5 +1,5 @@
 
-import { FolderSearch } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { globDef } from '@shared/lib/tool-definitions/glob'
 import type { ToolRenderer, ToolRendererProps } from './types'
 
@@ -47,7 +47,7 @@ function ExpandedView({ input, result, isError }: ToolRendererProps) {
 
 export const globRenderer: ToolRenderer = {
   displayName: globDef.displayName,
-  icon: FolderSearch,
+  icon: Search,
   getSummary: globDef.getSummary,
   ExpandedView,
 }

@@ -1,6 +1,6 @@
 
 import { cn } from '@shared/lib/utils/cn'
-import { Check, X, Ban, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { Check, X, Ban, ChevronDown, ChevronRight, Loader2, Wrench } from 'lucide-react'
 import { useState, useRef } from 'react'
 import { getToolRenderer } from './tool-renderers'
 import { parseToolResult } from '@renderer/lib/parse-tool-result'
@@ -15,6 +15,7 @@ interface ToolCallItemProps {
   messageCreatedAt?: Date | string
   agentSlug?: string
   isSessionActive?: boolean
+  defaultExpanded?: boolean
 }
 
 interface StreamingToolCallItemProps {
@@ -41,13 +42,13 @@ function isUserInputTool(name: string): boolean {
 function ToolNameWithSummary({ name, summary }: { name: string; summary?: string | null }) {
   return (
     <>
-      <span className="font-sans font-normal shrink-0 text-sm text-foreground/70 group-hover:text-foreground transition-colors">
+      <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">
         {name}
       </span>
       {summary && (
         <>
           <span aria-hidden className="shrink-0 text-foreground/40 group-hover:text-muted-foreground text-sm transition-colors">→</span>
-          <span className="text-foreground/70 group-hover:text-foreground truncate text-sm transition-colors">
+          <span className="text-muted-foreground/70 group-hover:text-muted-foreground truncate text-sm transition-colors">
             {summary}
           </span>
         </>
@@ -85,12 +86,13 @@ export function StatusIndicator({ status }: { status: string }) {
   )
 }
 
-export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionActive }: ToolCallItemProps) {
-  const [expanded, setExpanded] = useState(false)
+export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionActive, defaultExpanded = false }: ToolCallItemProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
   const status = getStatus(toolCall, isSessionActive)
   const renderer = getToolRenderer(toolCall.name)
   const isPendingUserInput = status === 'running' && isUserInputTool(toolCall.name)
   const elapsed = useElapsedTimer(status === 'running' && !isPendingUserInput ? (messageCreatedAt ?? null) : null)
+  const ToolIcon = renderer?.icon || Wrench
 
   // Get summary for collapsed view
   const summary = renderer?.getSummary?.(toolCall.input)
@@ -112,11 +114,11 @@ export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionA
     <div className="text-sm border border-border/70 rounded-md overflow-hidden" data-testid={`tool-call-${toolCall.name}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
+        className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
-        <StatusIndicator status={status} />
+        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-foreground/80 group-hover:text-foreground transition-colors" />
         {isPendingUserInput && (
-          <span className="font-sans font-normal shrink-0 text-sm text-foreground/70 group-hover:text-foreground transition-colors">
+          <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">
             Waiting for input:
           </span>
         )}
@@ -141,14 +143,19 @@ export function ToolCallItem({ toolCall, messageCreatedAt, agentSlug, isSessionA
           </span>
         )}
         <span className={cn(
-          'shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors',
-          !isPendingUserInput && !elapsed && 'ml-auto'
+          'relative shrink-0 flex h-4 w-4 items-center justify-center',
+          !elapsed && 'ml-auto'
         )}>
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
-          )}
+          <span className="transition-opacity group-hover:opacity-0">
+            <StatusIndicator status={status} />
+          </span>
+          <span className="absolute inset-0 flex items-center justify-center text-muted-foreground/60 opacity-0 transition-opacity group-hover:text-muted-foreground group-hover:opacity-100">
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </span>
         </span>
       </button>
 
@@ -217,6 +224,7 @@ export function StreamingToolCallItem({ name, partialInput }: StreamingToolCallI
 
   // Get custom streaming view if available
   const CustomStreamingView = renderer?.StreamingView
+  const ToolIcon = renderer?.icon || Wrench
 
   // Try to get summary from partial input
   let summary: string | null = null
@@ -243,15 +251,16 @@ export function StreamingToolCallItem({ name, partialInput }: StreamingToolCallI
 
   return (
     <div className="text-sm border border-border/70 rounded-md overflow-hidden">
-      <div className="flex w-full items-center gap-2 pl-2 pr-2 py-1 bg-muted/50">
-        <StatusIndicator status="running" />
+      <div className="flex w-full items-center gap-2 pl-2 pr-2 py-1.5 bg-muted/50">
+        <ToolIcon className="h-3.5 w-3.5 shrink-0 text-foreground/80" />
         <ToolNameWithSummary
           name={renderer?.displayName || formatToolName(name)}
           summary={summary}
         />
-        <span className="shrink-0 text-2xs text-muted-foreground tabular-nums">
+        <span className="shrink-0 text-2xs text-muted-foreground tabular-nums ml-auto">
           {elapsed}
         </span>
+        <StatusIndicator status="running" />
       </div>
 
       <div className="border-t border-border/70 bg-muted/50 rounded-b-md px-3 py-3">

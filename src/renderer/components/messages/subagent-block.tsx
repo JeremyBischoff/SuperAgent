@@ -178,27 +178,31 @@ export function SubAgentBlock({
       {/* Header — matches ToolCallItem collapsed row */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
+        className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
-        <StatusIndicator status={status} />
-        <span className="font-sans font-normal shrink-0 text-sm text-foreground/70 group-hover:text-foreground transition-colors">Sub-agent:</span>
-        <span className="font-sans font-normal shrink-0 text-sm text-foreground/70 group-hover:text-foreground transition-colors">
+        <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">Sub-agent:</span>
+        <span className="font-sans font-normal shrink-0 text-sm text-foreground group-hover:text-foreground transition-colors">
           {subagentType}
         </span>
         {description && (
           <>
             <span aria-hidden className="shrink-0 text-foreground/40 group-hover:text-muted-foreground text-sm transition-colors">→</span>
-            <span className="text-foreground/70 group-hover:text-foreground truncate text-sm transition-colors">
+            <span className="text-muted-foreground/70 group-hover:text-muted-foreground truncate text-sm transition-colors">
               {description}
             </span>
           </>
         )}
-        <span className="shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors ml-auto">
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
-          )}
+        <span className="relative ml-auto flex h-4 w-4 shrink-0 items-center justify-center">
+          <span className="transition-opacity group-hover:opacity-0">
+            <StatusIndicator status={status} />
+          </span>
+          <span className="absolute inset-0 flex items-center justify-center text-muted-foreground/60 opacity-0 transition-opacity group-hover:text-muted-foreground group-hover:opacity-100">
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </span>
         </span>
       </button>
 

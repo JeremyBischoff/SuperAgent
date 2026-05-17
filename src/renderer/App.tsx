@@ -29,6 +29,7 @@ import { useUser } from './context/user-context'
 import { useAnalyticsTracking } from './context/analytics-context'
 import { useSettings } from './hooks/use-settings'
 import { setRendererErrorReportingEnabled, setRendererErrorReportingUser } from './lib/error-reporting'
+import { ToolCallGallery } from './components/messages/__gallery__/tool-call-gallery'
 
 function AppContent() {
   useTheme()
@@ -113,9 +114,35 @@ function AppShell() {
   )
 }
 
+// TEMPORARY: dev-only tool-call gallery, toggled with Cmd/Ctrl+Shift+G.
+// Remove this block (and the import) before merging the styling work.
+function GalleryGate({ children }: { children: React.ReactNode }) {
+  const [showGallery, setShowGallery] = useState(false)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        setShowGallery((v) => !v)
+      }
+    }
+    function onToggle() {
+      setShowGallery((v) => !v)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('toggle-gallery', onToggle)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('toggle-gallery', onToggle)
+    }
+  }, [])
+  if (showGallery) return <ToolCallGallery />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <QueryProvider>
+      <GalleryGate>
       <UserProvider>
         <AuthGate>
           <AnalyticsProvider>
@@ -134,6 +161,7 @@ export default function App() {
           </AnalyticsProvider>
         </AuthGate>
       </UserProvider>
+      </GalleryGate>
     </QueryProvider>
   )
 }
