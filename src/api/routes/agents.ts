@@ -4,6 +4,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
+import { getPolyfillJs } from '../speech-recognition-polyfill'
 import { Authenticated, AgentRead, AgentUser, AgentAdmin } from '../middleware/auth'
 import {
   listAgentsWithStatus,
@@ -4160,6 +4161,22 @@ async function proxyArtifactRequest(c: any) {
   }
 
   const response = await client.fetch(containerPath, init)
+
+  const contentType = response.headers.get('content-type') || ''
+  if (contentType.includes('text/html')) {
+    let html = await response.text()
+    const tag = `<script>${getPolyfillJs()}</script>`
+    const headMatch = html.match(/<head(\s[^>]*)?>/i)
+    if (headMatch) {
+      const pos = headMatch.index! + headMatch[0].length
+      html = html.slice(0, pos) + tag + html.slice(pos)
+    } else {
+      html = tag + html
+    }
+    const headers = new Headers(response.headers)
+    headers.delete('content-length')
+    return new Response(html, { status: response.status, headers })
+  }
 
   return new Response(response.body, {
     status: response.status,

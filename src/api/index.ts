@@ -20,6 +20,7 @@ import userSettingsRouter from './routes/user-settings'
 import policies from './routes/policies'
 import runtimeStatusRouter from './routes/runtime-status'
 import sttRouter from './routes/stt'
+import { getPolyfillJs } from './speech-recognition-polyfill'
 import adminUsersRouter from './routes/admin-users'
 import debugRouter from './routes/debug'
 import platformAuth from './routes/platform-auth'
@@ -137,6 +138,14 @@ if (isAuthMode()) {
     })
   })
 }
+
+// Public static assets (no auth)
+app.get('/api/stt/speech-recognition-polyfill.js', (c) => {
+  return c.body(getPolyfillJs(), 200, {
+    'Content-Type': 'application/javascript; charset=utf-8',
+    'Cache-Control': 'public, max-age=3600',
+  })
+})
 
 // Mount route handlers
 app.route('/api/agents', agents)

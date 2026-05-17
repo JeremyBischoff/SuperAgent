@@ -185,6 +185,37 @@ When a dashboard crashes or shows unexpected behavior:
    - Module not found: Run `bun install` or `bun add <package>` in the dashboard directory
 4. **Clear logs**: Use `get_dashboard_logs(slug, clear: true)` to reset before a fresh test run
 
+## Built-in APIs
+
+Dashboards have access to the following APIs automatically (no setup or imports needed):
+
+### Speech Recognition (Web Speech API)
+
+The standard `SpeechRecognition` / `webkitSpeechRecognition` API is available in all dashboards. It uses the user's configured STT provider (Deepgram/OpenAI) under the hood.
+
+```javascript
+const recognition = new SpeechRecognition();
+recognition.continuous = true;
+recognition.interimResults = true;
+
+recognition.onresult = (event) => {
+  const result = event.results[event.resultIndex];
+  console.log(result[0].transcript, result.isFinal ? '(final)' : '(interim)');
+};
+
+recognition.onerror = (event) => {
+  console.error('Error:', event.error, event.message);
+};
+
+recognition.start();
+// Later: recognition.stop();
+```
+
+Key properties: `continuous` (keep listening after first result), `interimResults` (get partial transcripts).
+Key events: `onresult`, `onerror`, `onend`, `onstart`.
+
+This is a web standard — search "Web Speech API SpeechRecognition" for more examples and patterns. Full documentation is in `~/.claude/skills/dashboards/SPEECH_RECOGNITION.md`.
+
 ## Critical Rules
 
 - **NEVER use the browser tool** to view dashboards. The browser runs outside the container and cannot access localhost URLs. Use `start_dashboard` screenshots and `get_dashboard_logs` instead.
