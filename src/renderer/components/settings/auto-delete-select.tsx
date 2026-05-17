@@ -32,7 +32,7 @@ export function AutoDeleteSelect({ value, onChange, disabled }: AutoDeleteSelect
       onValueChange={(val) => onChange(parseInt(val, 10))}
       disabled={disabled}
     >
-      <SelectTrigger className="w-40">
+      <SelectTrigger className="w-40" aria-label="Session auto-delete">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -65,7 +65,7 @@ export function AgentAutoDeleteSelect({
         onChange(val === 'default' ? null : parseInt(val, 10))
       }}
     >
-      <SelectTrigger className="w-48">
+      <SelectTrigger className="w-48" aria-label="Session auto-delete">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
