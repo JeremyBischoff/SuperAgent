@@ -92,7 +92,7 @@ Bun.serve({
 **Client-side periodic refresh:**
 ```javascript
 async function refreshData() {
-  const res = await fetch('/api/data');
+  const res = await fetch('api/data');
   const data = await res.json();
   renderChart(data);
 }
@@ -216,6 +216,35 @@ Key events: `onresult`, `onerror`, `onend`, `onstart`.
 
 This is a web standard — search "Web Speech API SpeechRecognition" for more examples and patterns. Full documentation is in `~/.claude/skills/dashboards/SPEECH_RECOGNITION.md`.
 
+### LLM (Anthropic SDK)
+
+An Anthropic SDK-compatible `Anthropic` client is available in all dashboards for calling Claude. No API keys needed — routes through the user's configured LLM provider.
+
+```javascript
+const client = new Anthropic();
+
+// Non-streaming
+const message = await client.messages.create({
+  model: 'claude-sonnet-4-6',
+  max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Summarize this data.' }]
+});
+console.log(message.content[0].text);
+
+// Streaming
+const stream = client.messages.stream({
+  model: 'claude-sonnet-4-6',
+  max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Write a report.' }]
+});
+stream.on('text', (delta, fullText) => {
+  document.getElementById('output').textContent = fullText;
+});
+```
+
+Default model: `claude-sonnet-4-6`. Use `claude-haiku-4-5` for fast/cheap tasks, `claude-opus-4-7` for complex reasoning.
+Rate limited to 100 req/min. This is the full Anthropic JS SDK (lazy-loaded) — all features including tool use, vision, and extended thinking work. Search for examples online. Full documentation is in `~/.claude/skills/dashboards/LLM_API.md`.
+
 ## Critical Rules
 
 - **NEVER use the browser tool** to view dashboards. The browser runs outside the container and cannot access localhost URLs. Use `start_dashboard` screenshots and `get_dashboard_logs` instead.
@@ -223,6 +252,7 @@ This is a web standard — search "Web Speech API SpeechRecognition" for more ex
 - **Inspect the screenshot carefully.** It is your only visual feedback. Look for layout issues, missing content, broken styling.
 - **Install dependencies before starting.** If you add npm packages to `package.json`, run `bun install` in the dashboard directory, or just use `bun add <package>` which both installs and updates package.json.
 - **Use the DASHBOARD_PORT environment variable.** Never hardcode a port number.
+- **Always use relative URLs in client-side code.** Dashboards are served under a subpath (`/api/agents/:id/artifacts/:slug/`), so absolute paths like `fetch('/api/data')` bypass the proxy and 404. Use `fetch('api/data')` or `fetch('./api/data')` instead. This applies to all fetch calls, image sources, link hrefs, etc.
 
 ## Response Format
 

@@ -136,6 +136,7 @@ This applies to all fetches, image sources, link hrefs, etc.
 The following APIs are automatically available in all dashboards (injected by the platform):
 
 - **Speech Recognition** — The standard `SpeechRecognition` Web API for voice-to-text. See `~/.claude/skills/dashboards/SPEECH_RECOGNITION.md` for full documentation and examples.
+- **LLM (Anthropic SDK)** — An Anthropic SDK-compatible `Anthropic` client for calling Claude. No API keys needed. See `~/.claude/skills/dashboards/LLM_API.md` for full documentation and examples.
 
 ## Best Practices
 

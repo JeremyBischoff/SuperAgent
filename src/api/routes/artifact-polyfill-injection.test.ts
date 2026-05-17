@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { getPolyfillJs } from '../speech-recognition-polyfill'
+import { getLlmPolyfillJs } from '../llm-polyfill'
 
 /**
  * Tests for the polyfill injection logic used in proxyArtifactRequest.
  * This replicates the injection logic to verify it handles various HTML structures.
  */
 function injectPolyfill(html: string): string {
-  const tag = `<script>${getPolyfillJs()}</script>`
+  const tag = `<script>${getPolyfillJs()}${getLlmPolyfillJs()}</script>`
   const headMatch = html.match(/<head(\s[^>]*)?>/i)
   if (headMatch) {
     const pos = headMatch.index! + headMatch[0].length
@@ -42,11 +43,12 @@ describe('artifact polyfill injection', () => {
     expect(result).toContain('</script><html><body>')
   })
 
-  it('injects valid polyfill JS', () => {
+  it('injects valid polyfill JS (STT + LLM)', () => {
     const html = '<html><head></head><body></body></html>'
     const result = injectPolyfill(html)
     expect(result).toContain('SpeechRecognition')
     expect(result).toContain('SuperagentSpeechRecognition')
+    expect(result).toContain('window.Anthropic')
   })
 
   it('does not inject into non-HTML (simulating proxy content-type check)', () => {

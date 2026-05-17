@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { getPolyfillJs } from '../speech-recognition-polyfill'
+import { getLlmPolyfillJs } from '../llm-polyfill'
 import { Authenticated, AgentRead, AgentUser, AgentAdmin } from '../middleware/auth'
 import {
   listAgentsWithStatus,
@@ -4165,13 +4166,13 @@ async function proxyArtifactRequest(c: any) {
   const contentType = response.headers.get('content-type') || ''
   if (contentType.includes('text/html')) {
     let html = await response.text()
-    const tag = `<script>${getPolyfillJs()}</script>`
+    const tags = `<script>${getPolyfillJs()}${getLlmPolyfillJs()}</script>`
     const headMatch = html.match(/<head(\s[^>]*)?>/i)
     if (headMatch) {
       const pos = headMatch.index! + headMatch[0].length
-      html = html.slice(0, pos) + tag + html.slice(pos)
+      html = html.slice(0, pos) + tags + html.slice(pos)
     } else {
-      html = tag + html
+      html = tags + html
     }
     const headers = new Headers(response.headers)
     headers.delete('content-length')
