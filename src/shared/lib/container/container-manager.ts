@@ -1,4 +1,6 @@
 import path from 'path'
+import { statfs } from 'node:fs/promises'
+import os from 'os'
 import { createContainerClient, checkAllRunnersAvailability, checkImageExists, pullImage, canBuildImage, buildImage, startRunner, refreshRunnerAvailability, clearRunnerAvailabilityCache, reconcileRunnerState, getRunnerDisplayName, getContainerClientClass, getCliCommand, type ContainerRunner } from './client-factory'
 import { ensureLimaReady } from './lima-container-client'
 import type { ContainerClient, ContainerConfig, ContainerInfo, HealthCheckResult, ImagePullProgress, RuntimeReadiness, StopOptions } from './types'
@@ -14,7 +16,7 @@ import { copyChromeProfileData } from '@shared/lib/browser/chrome-profile'
 import { messagePersister } from './message-persister'
 import { ungrabAC } from '@shared/lib/computer-use/executor'
 import { computerUsePermissionManager } from '@shared/lib/computer-use/permission-manager'
-import { captureException, addErrorBreadcrumb } from '@shared/lib/error-reporting'
+import { captureException, captureMessage, addErrorBreadcrumb } from '@shared/lib/error-reporting'
 import { resolveTimezoneForAgent } from '@shared/lib/services/timezone-resolver'
 import { getMountsWithHealth } from '@shared/lib/services/mount-service'
 import { isPlatformComposioActive } from '@shared/lib/composio/client'
@@ -30,6 +32,14 @@ const HEALTH_CHECK_INTERVAL_MS = parseInt(
   process.env.CONTAINER_HEALTH_CHECK_INTERVAL_SECONDS || '30',
   10
 ) * 1000
+
+/** Minimum free disk space (in bytes) required before pulling an image: 5 GB */
+const MIN_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024
+
+async function getAvailableDiskSpace(): Promise<number> {
+  const stats = await statfs(os.homedir())
+  return stats.bavail * stats.bsize
+}
 
 /** Cached container status */
 interface CachedContainerStatus {
@@ -848,7 +858,29 @@ class ContainerManager {
       return
     }
 
-    // Step 3: Build or pull the image
+    // Step 3: Pre-flight disk space check
+    try {
+      const availableBytes = await getAvailableDiskSpace()
+      if (availableBytes < MIN_DISK_SPACE_BYTES) {
+        const availableGB = (availableBytes / (1024 * 1024 * 1024)).toFixed(1)
+        const requiredGB = (MIN_DISK_SPACE_BYTES / (1024 * 1024 * 1024)).toFixed(0)
+        captureMessage('Insufficient disk space for image pull', {
+          level: 'info',
+          tags: { component: 'runtime', operation: 'disk-space-check' },
+          extra: { availableGB: parseFloat(availableGB), requiredGB: parseInt(requiredGB), runner: effectiveRunner },
+        })
+        this.setReadiness({
+          status: 'ERROR',
+          message: `Insufficient disk space: ${availableGB} GB available, at least ${requiredGB} GB required to download the agent image. Free up disk space and try again.`,
+          pullProgress: null,
+        })
+        return
+      }
+    } catch (err) {
+      console.warn('[ContainerManager] Disk space check failed, proceeding anyway:', err)
+    }
+
+    // Step 4: Build or pull the image
     // In dev mode (agent-container directory exists), build locally.
     // In production (no build context), pull from registry.
     const shouldBuild = canBuildImage()
