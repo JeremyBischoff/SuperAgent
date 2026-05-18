@@ -17,6 +17,7 @@ vi.mock('@shared/lib/services/skillset-service', async (importOriginal) => {
     getSkillsetRepoDir: vi.fn((id: string) => {
       return `/tmp/mock-skillset-cache/${id}`
     }),
+    isCacheReady: vi.fn(() => Promise.resolve(true)),
     getSkillsetIndex: vi.fn(),
     readIndexJson: vi.fn(),
     refreshSkillset: vi.fn(),
@@ -56,6 +57,7 @@ import {
   exportAgentTemplate,
   exportAgentFull,
   importAgentFromTemplate,
+  installAgentFromSkillset,
   computeAgentTemplateHash,
   getAgentTemplateStatus,
   collectAgentRequiredEnvVars,
@@ -2306,5 +2308,68 @@ metadata:
 
     const envPath = path.join(workspaceDir, '.env')
     expect(fs.existsSync(envPath)).toBe(false)
+  })
+})
+
+describe('installAgentFromSkillset', () => {
+  let testDir: string
+  let originalEnv: string | undefined
+  const mockCreateAgent = vi.mocked(createAgentFromExistingWorkspace)
+  const mockGetAgentWithStatus = vi.mocked(getAgentWithStatus)
+
+  beforeEach(async () => {
+    testDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), 'agent-install-test-')
+    )
+    originalEnv = process.env.SUPERAGENT_DATA_DIR
+    process.env.SUPERAGENT_DATA_DIR = testDir
+    vi.clearAllMocks()
+  })
+
+  afterEach(async () => {
+    process.env.SUPERAGENT_DATA_DIR = originalEnv
+    await fs.promises.rm(testDir, { recursive: true, force: true })
+  })
+
+  it('preserves install-time createdAt when template has an older timestamp', async () => {
+    const slug = 'install-test-agent'
+    const installTime = new Date()
+    const oldTemplateTime = '2020-01-01T00:00:00.000Z'
+
+    const agent = { slug, name: 'My Agent', createdAt: installTime, status: 'stopped' as const, containerPort: null }
+    mockCreateAgent.mockResolvedValue(agent)
+    mockGetAgentWithStatus.mockResolvedValue(agent)
+
+    // Create the workspace dir (createAgentFromExistingWorkspace would do this)
+    const workspaceDir = path.join(testDir, 'agents', slug, 'workspace')
+    fs.mkdirSync(workspaceDir, { recursive: true })
+
+    // Create a fake skillset repo with a CLAUDE.md that has an old createdAt
+    const skillsetId = 'test-skillset'
+    const repoDir = `/tmp/mock-skillset-cache/${skillsetId}`
+    const agentPath = 'agents/my-template'
+    const templateDir = path.join(repoDir, agentPath)
+    fs.mkdirSync(templateDir, { recursive: true })
+    fs.writeFileSync(
+      path.join(templateDir, 'CLAUDE.md'),
+      `---\nname: Template Agent\ncreatedAt: "${oldTemplateTime}"\n---\n# Template\n`,
+    )
+
+    try {
+      await installAgentFromSkillset(
+        { skillsetId, skillsetUrl: 'https://example.com', provider: 'github' },
+        agentPath,
+        'My Agent',
+        '1.0.0',
+      )
+
+      // Read the resulting CLAUDE.md and verify createdAt is the install time, not the template's
+      const claudeMd = fs.readFileSync(path.join(workspaceDir, 'CLAUDE.md'), 'utf-8')
+      expect(claudeMd).toContain(installTime.toISOString())
+      expect(claudeMd).not.toContain(oldTemplateTime)
+      expect(claudeMd).toContain('name: My Agent')
+    } finally {
+      fs.rmSync(repoDir, { recursive: true, force: true })
+    }
   })
 })

@@ -550,12 +550,13 @@ export async function installAgentFromSkillset(
   await copyDirectoryFiltered(agentDirInRepo, workspaceDir)
 
   // The template's CLAUDE.md overwrites the one createAgentFromExistingWorkspace
-  // wrote, so patch the frontmatter name to the user's chosen name.
+  // wrote, so patch the frontmatter name and createdAt to the install time.
   const claudeMdPath = getAgentClaudeMdPath(agent.slug)
   const claudeMdContent = await readFileOrNull(claudeMdPath)
   if (claudeMdContent) {
     const { frontmatter, body } = parseMarkdownWithFrontmatter<AgentFrontmatter>(claudeMdContent)
     frontmatter.name = agentName
+    frontmatter.createdAt = agent.createdAt.toISOString()
     await fs.promises.writeFile(claudeMdPath, serializeMarkdownWithFrontmatter(frontmatter, body), 'utf-8')
   }
 
