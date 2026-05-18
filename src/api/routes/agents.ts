@@ -110,6 +110,7 @@ import { getConfiguredLlmClient, extractTextFromLlmResponse } from '@shared/lib/
 import { revokeProxyToken } from '@shared/lib/proxy/token-store'
 import { getAgentWorkspaceDir } from '@shared/lib/utils/file-storage'
 import { readAgentPreferences, updateAgentPreferences } from '@shared/lib/services/agent-preferences-service'
+import { cleanupAgentData } from '@shared/lib/services/agent-cleanup-service'
 import * as fs from 'fs'
 import { Readable } from 'stream'
 import pLimit from 'p-limit'
@@ -729,14 +730,11 @@ agents.delete('/:id', AgentAdmin(), async (c) => {
       console.error('Failed to revoke proxy token:', error)
     }
 
-    // Clean up ACL entries and message author records
-    await db.delete(agentAcl).where(eq(agentAcl.agentSlug, slug))
-    if (isAuthMode()) {
-      await db.delete(messageAuthor).where(eq(messageAuthor.agentSlug, slug))
-    }
-
     // Clean up x-agent invoke policies referencing this agent (caller or target)
     await deletePoliciesForAgent(slug)
+
+    // Clean up all peripheral data (triggers, integrations, tasks, ACLs, etc.)
+    await cleanupAgentData(slug)
 
     return c.body(null, 204)
   } catch (error) {
