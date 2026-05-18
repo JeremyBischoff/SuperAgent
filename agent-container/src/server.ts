@@ -557,7 +557,7 @@ const browserState: BrowserState = new Proxy({} as BrowserState, {
 
 const execFileAsync = promisify(execFile);
 
-import { buildRunCommandArgs } from './browser-command-args';
+import { buildRunCommandArgs, splitCommandArgs } from './browser-command-args';
 
 // Ensure Chrome download preferences are set in the browser profile directory.
 // Merges with existing preferences to avoid overwriting other settings.
@@ -1313,6 +1313,16 @@ app.post('/browser/run', async (c) => {
 
     if (!browserState.active) {
       return c.json({ error: 'Browser is not active' }, 400);
+    }
+
+    // The agent-browser CLI `upload` command does not work reliably in this
+    // environment — refuse it and steer the model to `browser_upload`, which
+    // routes through the buffer-based path with size verification.
+    if (splitCommandArgs(body.command)[0] === 'upload') {
+      return c.json({
+        error: 'Use the `browser_upload(filePath, selector)` MCP tool for file uploads instead of `browser_run("upload …")`.',
+        success: false,
+      }, 400);
     }
 
     const commandArgs = buildRunCommandArgs(body.command);
