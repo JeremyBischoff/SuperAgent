@@ -43,16 +43,16 @@ If not running, tell the user to start it and stop.
 
 ### 2. Run the benchmark
 
-The benchmark script lives at `scripts/benchmark-container-startup.ts`. Run it with:
+The benchmark script lives at `.claude/skills/container-benchmark/benchmark-container-startup.ts`. Run it with:
 
 ```bash
-npx tsx scripts/benchmark-container-startup.ts $ARGUMENTS
+npx tsx .claude/skills/container-benchmark/benchmark-container-startup.ts $ARGUMENTS
 ```
 
 For piping output (recommended — preserves results if terminal scrolls):
 
 ```bash
-npx tsx scripts/benchmark-container-startup.ts $ARGUMENTS 2>&1 | tee /tmp/bench-results.txt
+npx tsx .claude/skills/container-benchmark/benchmark-container-startup.ts $ARGUMENTS 2>&1 | tee /tmp/bench-results.txt
 ```
 
 ### 3. Interpret results
@@ -89,7 +89,7 @@ If comparing before/after, note that **cross-session timing comparisons are unre
 
 ## Script architecture
 
-The script (`scripts/benchmark-container-startup.ts`) is self-contained with no project source imports. It:
+The script (`.claude/skills/container-benchmark/benchmark-container-startup.ts`) is self-contained with no project source imports. It:
 
 1. Discovers the server's data directory via `GET /api/settings`
 2. Creates a test agent via `POST /api/agents`
@@ -101,7 +101,7 @@ The script (`scripts/benchmark-container-startup.ts`) is self-contained with no 
 
 ## Key files
 
-- `scripts/benchmark-container-startup.ts` — the benchmark script
+- `.claude/skills/container-benchmark/benchmark-container-startup.ts` — the benchmark script
 - `src/shared/lib/container/base-container-client.ts` — health check polling, container start
 - `src/shared/lib/container/container-manager.ts` — ensureRunning, doStartContainer
 - `agent-container/src/dashboard-manager.ts` — scanAndStartAll, bun install, dashboard boot

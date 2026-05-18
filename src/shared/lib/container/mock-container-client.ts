@@ -1204,11 +1204,11 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
 
   // Health checks
 
-  async waitForHealthy(_timeoutMs?: number): Promise<boolean> {
+  async waitForHealthy(_timeoutMs?: number, _knownPort?: number): Promise<boolean> {
     return this.running
   }
 
-  async isHealthy(): Promise<boolean> {
+  async isHealthy(_knownPort?: number): Promise<boolean> {
     return this.running
   }
 
