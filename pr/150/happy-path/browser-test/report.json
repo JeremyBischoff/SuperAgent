@@ -1,0 +1,24 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Browser use feature allows agents to open browsers, navigate to URLs, and retrieve page information successfully",
+  "steps": [
+    "Navigated to http://localhost:47891 - Page loaded successfully showing home view with three agents listed",
+    "Found and clicked the \"QA-20260518-232833-igah\" agent in the sidebar - Agent chat interface opened with input ready",
+    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" - Message entered in chat input field",
+    "Sent the message using send button - Message submitted successfully, agent began processing",
+    "Waited up to 3 minutes for response - Agent completed work in 11 seconds",
+    "Verified response mentions \"Example Domain\" - Response clearly shows \"The page title is \"Example Domain\".\" along with all executed tool calls (ToolSearch, Open Browser, Browser MCP: Browser Get State, Close Browser)"
+  ],
+  "bugs": [],
+  "durationMs": 119078,
+  "sessionId": "07881b37-f8c7-4336-ad70-e264cd7ce2c4",
+  "cost": {
+    "inputTokens": 450,
+    "outputTokens": 14288,
+    "cacheCreationTokens": 63854,
+    "cacheReadTokens": 1824948,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.334202
+  }
+}
