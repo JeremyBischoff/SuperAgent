@@ -278,6 +278,15 @@ describe('containerManager.ensureRunning — env var construction', () => {
     const startOpts = mockStart.mock.calls[0][0]
     expect(startOpts.envVars.TZ).toBe('America/New_York')
   })
+
+  it('disables Claude Code attribution header injection for stable prompt caching', async () => {
+    setupAccountMocks([])
+
+    await containerManager.ensureRunning('test-agent')
+
+    const startOpts = mockStart.mock.calls[0][0]
+    expect(startOpts.envVars.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe('0')
+  })
 })
 
 // ============================================================================
