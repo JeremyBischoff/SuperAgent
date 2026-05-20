@@ -681,7 +681,8 @@ agents.get('/:id', AgentRead(), async (c) => {
       return c.json({ error: 'Agent not found' }, 404)
     }
 
-    return c.json(agent)
+    const [enriched] = await enrichAgentsWithSummary([agent])
+    return c.json(enriched)
   } catch (error) {
     console.error('Failed to fetch agent:', error)
     return c.json({ error: 'Failed to fetch agent' }, 500)
