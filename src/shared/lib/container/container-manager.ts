@@ -560,6 +560,8 @@ class ContainerManager {
         Object.assign(envVars, settings.customEnvVars)
       }
 
+      envVars['CLAUDE_CODE_ATTRIBUTION_HEADER'] = '0'
+
       // Load mounts and build volume flags for healthy ones
       const mountsWithHealth = getMountsWithHealth(agentId)
       const healthyMounts = mountsWithHealth.filter((m) => m.health === 'ok')

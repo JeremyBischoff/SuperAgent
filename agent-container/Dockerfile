@@ -171,6 +171,7 @@ EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOME=/home/claude
+ENV CLAUDE_CODE_ATTRIBUTION_HEADER=0
 ENV AGENT_BROWSER_STREAM_PORT=9223
 # Point agent-browser at the chromium binary installed under PLAYWRIGHT_BROWSERS_PATH.
 # agent-browser's built-in discovery only finds Playwright's chromium at the old
