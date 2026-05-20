@@ -8,7 +8,7 @@ import {
 } from '@shared/lib/config/settings'
 import { getPlatformAccessToken } from '@shared/lib/services/platform-auth-service'
 import { getPlatformProxyBaseUrl } from '@shared/lib/platform-auth/config'
-import { captureMessage } from '@shared/lib/error-reporting'
+import { addErrorBreadcrumb } from '@shared/lib/error-reporting'
 import { ProxyExecuteResponseSchema } from './proxy-execute-schema'
 import { LinkResponseSchema } from './link-response-schema'
 
@@ -180,10 +180,19 @@ function mapAuthConfigListItem(item: AuthConfigListItem): AuthConfig {
 }
 
 /**
- * List all auth configs for the current user.
+ * List auth configs for the current user. When `toolkitSlug` is provided,
+ * Composio filters server-side — necessary to avoid pagination cutoff
+ * hiding existing configs for the toolkit (Composio defaults to 20/page).
  */
-export async function listAuthConfigs(): Promise<AuthConfig[]> {
-  const response = await composioFetch<ListAuthConfigsResponse>('/auth_configs')
+export async function listAuthConfigs(
+  toolkitSlug?: string,
+): Promise<AuthConfig[]> {
+  const query = toolkitSlug
+    ? `?toolkit_slug=${encodeURIComponent(toolkitSlug)}&limit=100`
+    : ''
+  const response = await composioFetch<ListAuthConfigsResponse>(
+    `/auth_configs${query}`,
+  )
   return (response.items || []).map(mapAuthConfigListItem)
 }
 
@@ -195,13 +204,9 @@ export async function getOrCreateAuthConfig(
   providerSlug: string
 ): Promise<AuthConfig> {
   // First, check if an enabled auth config already exists for this provider
-  const existing = await listAuthConfigs()
+  const existing = await listAuthConfigs(providerSlug)
   const matchingConfigs = existing
-    .filter(
-      (config) =>
-        config.toolkitSlug.toLowerCase() === providerSlug.toLowerCase() &&
-        config.status !== 'DISABLED'
-    )
+    .filter((config) => config.status !== 'DISABLED')
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   if (matchingConfigs.length > 0) {
@@ -433,21 +438,17 @@ export async function getConnectionToken(
 
   const redactionPattern = detectRedaction(accessToken)
   if (redactionPattern) {
-    captureMessage('Composio returned a redacted access token', {
+    addErrorBreadcrumb({
+      category: 'composio',
+      message: `Redacted token detected (${redactionPattern}) for connection ${connectionId}`,
       level: 'warning',
-      tags: {
-        component: 'composio-client',
-        operation: 'get-connection-token',
+      data: {
         toolkit: response.toolkit?.slug ?? 'unknown',
         auth_scheme: String(authScheme ?? 'unknown'),
         is_composio_managed: String(response.auth_config?.is_composio_managed ?? 'unknown'),
         redaction_pattern: redactionPattern,
-      },
-      extra: {
         connectionId,
-        authConfigId: response.auth_config?.id,
       },
-      fingerprint: ['composio-redacted-token', redactionPattern],
     })
     throw new ComposioRedactedTokenError(
       'Access token is redacted by Composio. Disable "Mask Connected Account Secrets" in the Composio project settings. If the connection uses a Composio-managed auth config, credentials are redacted regardless of that setting — migrate to a custom auth config (your own OAuth app) to retrieve actual credentials.'
