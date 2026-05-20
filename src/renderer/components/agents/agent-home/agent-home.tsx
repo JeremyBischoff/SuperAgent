@@ -22,6 +22,7 @@ import { HomeTriggers } from './home-triggers'
 import { HomeSkills } from './home-skills'
 import { HomeExtras } from './home-extras'
 import { HomeConnections } from './home-connections'
+import { HomeChatIntegrations } from './home-chat-integrations'
 import { HomeVolumes } from './home-volumes'
 import { HomeBookmarks } from './home-bookmarks'
 import { DashboardCard } from '@renderer/components/home/dashboard-card'
@@ -508,6 +509,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
                 }
               }, 0)
             }} />
+            <HomeChatIntegrations agentSlug={agent.slug} />
             <HomeVolumes agentSlug={agent.slug} />
             <HomeExtras agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
           </div>
