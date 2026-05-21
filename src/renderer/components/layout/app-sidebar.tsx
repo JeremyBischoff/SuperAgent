@@ -76,6 +76,7 @@ import { applyAgentOrder } from '@renderer/lib/agent-ordering'
 import { useRenderTracker } from '@renderer/lib/perf'
 import { useDiscoverableAgents } from '@renderer/hooks/use-agent-templates'
 import { AgentTemplateBrowseDialog } from '@renderer/components/agents/agent-template-browse-dialog'
+import { formatSessionTimestamp } from '@shared/lib/chat-integrations/utils'
 
 // 4px-wide thin scrollbar with a muted-foreground/20 thumb. Reused on the
 // agents-list group; pull out as a constant so the call site stays readable.
@@ -214,6 +215,11 @@ function ChatIntegrationSubItem({
                       >
                         <span className="truncate text-xs">
                           {session.displayName || `Chat ${session.externalChatId.slice(-6)}`}
+                          {session.createdAt && (
+                            <span className="text-muted-foreground/50">
+                              {' — '}{formatSessionTimestamp(new Date(session.createdAt))}
+                            </span>
+                          )}
                         </span>
                         {isArchived && (
                           <span className="ml-auto text-2xs text-muted-foreground/50 shrink-0">archived</span>
