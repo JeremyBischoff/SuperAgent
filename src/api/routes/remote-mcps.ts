@@ -9,6 +9,7 @@ import { getAppBaseUrlFromRequest, getCurrentUserId } from '@shared/lib/auth/con
 import { isAuthMode } from '@shared/lib/auth/mode'
 import { Authenticated, UsersMcpServer, IsAdmin, Or } from '../middleware/auth'
 import { trackServerEvent } from '@shared/lib/analytics/server-analytics'
+import { validateHttpUrl, isPrivateHost, isLocalhostHost } from '@shared/lib/utils/url-safety'
 
 function safeParseTools(json: string | null): McpToolInfo[] {
   if (!json) return []
@@ -40,6 +41,19 @@ function escapeHtml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
+}
+
+function validateMcpServerUrl(url: string): URL {
+  const parsed = validateHttpUrl(url)
+  if (isPrivateHost(parsed.hostname)) {
+    // in electron - allow localhost MCP servers since users may be running them locally, but still block other private addresses
+    const isElectron = process.type === 'browser'
+    if (isElectron && isLocalhostHost(parsed.hostname)) {
+      return parsed
+    }
+    throw new Error(`MCP server URL must not point to a private or loopback address: ${parsed.hostname}`)
+  }
+  return parsed
 }
 
 const remoteMcps = new Hono()
@@ -76,6 +90,8 @@ async function parseMcpResponse(res: Response): Promise<unknown> {
  * Throws on failure.
  */
 async function discoverTools(url: string, accessToken?: string | null): Promise<McpToolInfo[]> {
+  validateMcpServerUrl(url)
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/event-stream',
@@ -165,6 +181,12 @@ remoteMcps.post('/', async (c) => {
 
   if (!body.name?.trim() || !body.url?.trim()) {
     return c.json({ error: 'Name and URL are required' }, 400)
+  }
+
+  try {
+    validateMcpServerUrl(body.url.trim())
+  } catch (e: any) {
+    return c.json({ error: e.message }, 400)
   }
 
   const authType = body.authType || 'none'
@@ -288,6 +310,12 @@ remoteMcps.post('/initiate-oauth', async (c) => {
 
     return c.json({ redirectUrl: result.authorizationUrl, state: result.state })
   } else if (body.name && body.url) {
+    try {
+      validateMcpServerUrl(body.url.trim())
+    } catch (e: any) {
+      return c.json({ error: e.message }, 400)
+    }
+
     // New server: OAuth-first flow (no DB insert yet)
     const result = await initiateNewServerOAuth(body.url.trim(), body.name.trim(), redirectUri, getCurrentUserId(c), clientNameOverride, clientIdOverride, clientSecretOverride)
 
@@ -436,6 +464,14 @@ remoteMcps.patch('/:id', Or(UsersMcpServer(), IsAdmin()), async (c) => {
     return c.json({ error: 'MCP server not found' }, 404)
   }
 
+  if (body.url !== undefined) {
+    try {
+      validateMcpServerUrl(body.url.trim())
+    } catch (e: any) {
+      return c.json({ error: e.message }, 400)
+    }
+  }
+
   const updates: Record<string, unknown> = { updatedAt: new Date() }
   if (body.name !== undefined) updates.name = body.name.trim()
   if (body.url !== undefined) updates.url = body.url.trim()
@@ -537,6 +573,8 @@ remoteMcps.post('/:id/test-connection', Or(UsersMcpServer(), IsAdmin()), async (
   }
 
   try {
+    validateMcpServerUrl(server.url)
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/event-stream',

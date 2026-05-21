@@ -45,6 +45,19 @@ function isPrivateIPv6(host: string): boolean {
   return false
 }
 
+export function isLocalhostHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase()
+  if (lower === 'localhost' || lower.endsWith('.localhost')) return true
+  if (lower === 'ip6-localhost' || lower === 'ip6-loopback') return true
+  if (lower === '0.0.0.0') return true
+  const stripped = lower.replace(/^\[/, '').replace(/\]$/, '')
+  if (stripped === '::1') return true
+  if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(lower)) return true
+  const v4mapped = stripped.match(/::ffff:(127\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
+  if (v4mapped) return true
+  return false
+}
+
 export function isPrivateHost(hostname: string): boolean {
   const lower = hostname.toLowerCase()
   if (PRIVATE_HOSTNAMES.has(lower)) return true
