@@ -155,24 +155,18 @@ export function MainContent() {
 
   if (view.kind === 'notifications') {
     return (
-      <div className="h-full flex flex-col" data-testid="main-content">
-        <header
-          className={`shrink-0 flex min-h-12 py-1.5 md:py-0 md:h-12 items-center gap-2 border-b bg-background pl-4 pr-2 ${isElectron() ? 'app-drag-region' : ''}`}
-        >
-          <SidebarTrigger
-            className={`app-no-drag ${needsTrafficLightPadding ? 'ml-16' : '-ml-1'}`}
-          />
-          <Separator orientation="vertical" className="h-5 hidden md:block" />
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span className="truncate text-sm font-light text-foreground">
-              Notifications
-            </span>
-          </div>
-        </header>
+      <ContentShell
+        needsTrafficLightPadding={needsTrafficLightPadding}
+        headerContent={
+          <span className="truncate text-sm font-light text-foreground">
+            Notifications
+          </span>
+        }
+      >
         <ErrorBoundary>
           <NotificationsView />
         </ErrorBoundary>
-      </div>
+      </ContentShell>
     )
   }
 
@@ -188,15 +182,8 @@ export function MainContent() {
   const isAgentLeaf = !showSessionCrumb && !showTaskCrumb && !showWebhookCrumb && !showApiLogsCrumb && !showConnectionsCrumb
 
   return (
-    <div className="h-full flex flex-col" data-testid="main-content">
-      {/* Fixed header - draggable region for Electron */}
-      <header
-        className={`shrink-0 flex min-h-12 py-1.5 md:py-0 md:h-12 items-center gap-2 border-b bg-background pl-4 pr-2 ${isElectron() ? 'app-drag-region' : ''}`}
-      >
-        <SidebarTrigger
-          className={`app-no-drag ${needsTrafficLightPadding ? 'ml-16' : '-ml-1'}`}
-        />
-        <Separator orientation="vertical" className="h-5 hidden md:block" />
+    <ContentShell needsTrafficLightPadding={needsTrafficLightPadding} headerContent={
+      <>
         <div className="flex flex-col md:flex-row md:items-center gap-0 md:gap-1.5 min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0">
             <button
@@ -347,7 +334,8 @@ export function MainContent() {
             </>
           )}
         </div>
-      </header>
+      </>
+    }>
 
       {/* Image pull progress indicator */}
       {isPulling && readiness?.pullProgress && (
@@ -525,6 +513,31 @@ export function MainContent() {
           />
         </>
       )}
+    </ContentShell>
+  )
+}
+
+function ContentShell({
+  needsTrafficLightPadding,
+  headerContent,
+  children,
+}: {
+  needsTrafficLightPadding: boolean
+  headerContent: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div className="h-full flex flex-col" data-testid="main-content">
+      <header
+        className={`shrink-0 flex min-h-12 py-1.5 md:py-0 md:h-12 items-center gap-2 border-b bg-background pl-4 pr-2 ${isElectron() ? 'app-drag-region' : ''}`}
+      >
+        <SidebarTrigger
+          className={`app-no-drag ${needsTrafficLightPadding ? 'ml-16' : '-ml-1'}`}
+        />
+        <Separator orientation="vertical" className="h-5 hidden md:block" />
+        {headerContent}
+      </header>
+      {children}
     </div>
   )
 }

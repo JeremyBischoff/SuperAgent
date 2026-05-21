@@ -1,5 +1,5 @@
 import { ArrowRight, Bell, CheckCheck, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { format, isToday, isYesterday, isThisYear } from 'date-fns'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -33,7 +33,11 @@ function NotificationRow({
   const { setAgent } = useSelection()
 
   const handleClick = () => {
-    setAgent(notification.agentSlug, { kind: 'session', id: notification.sessionId })
+    if (notification.type === 'session_chat_integration') {
+      setAgent(notification.agentSlug, { kind: 'home' })
+    } else {
+      setAgent(notification.agentSlug, { kind: 'session', id: notification.sessionId })
+    }
     if (!notification.isRead) {
       markRead.mutate(notification.id)
     }
@@ -44,15 +48,15 @@ function NotificationRow({
   return (
     <button
       onClick={handleClick}
-      className="group relative block w-full text-left"
+      className="group relative block w-full text-left focus-visible:outline-none"
     >
-      {/* Bleed background layer — purely visual, does not affect content bounds */}
       <span
         aria-hidden
-        className="absolute inset-y-0 -left-6 -right-2 rounded-md group-hover:bg-accent/40 transition-colors"
+        className="absolute inset-y-0 -left-6 -right-2 rounded-md group-hover:bg-accent/40 group-focus-visible:ring-2 group-focus-visible:ring-ring transition-colors"
       />
       {/* Unread dot — sits in the bled gutter, left of the aligned content */}
       <span
+        role={!notification.isRead ? 'status' : undefined}
         className={cn(
           'absolute -left-4 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full',
           !notification.isRead ? 'bg-blue-500' : 'bg-transparent',
@@ -121,20 +125,23 @@ const PAGE_SIZE = 15
 export function NotificationsView() {
   useRenderTracker('NotificationsView')
   const { setView } = useSelection()
-  const { data: notifications, isLoading } = useNotifications(500)
+  const [page, setPage] = useState(0)
+  const offset = page * PAGE_SIZE
+  const { data, isLoading } = useNotifications(PAGE_SIZE, offset)
   const { data: countData } = useUnreadNotificationCount()
   const { data: agents } = useAgents()
   const markAllRead = useMarkAllNotificationsRead()
   const unreadCount = countData?.count ?? 0
-  const [page, setPage] = useState(0)
 
-  const agentNameBySlug = new Map(agents?.map((a) => [a.slug, a.name]) ?? [])
+  const agentNameBySlug = useMemo(
+    () => new Map(agents?.map((a) => [a.slug, a.name]) ?? []),
+    [agents],
+  )
 
-  const total = notifications?.length ?? 0
+  const items = data?.items ?? []
+  const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages - 1)
-  const pageStart = currentPage * PAGE_SIZE
-  const pageItems = notifications?.slice(pageStart, pageStart + PAGE_SIZE) ?? []
 
   return (
     <SettingsPageContainer fullScreen>
@@ -163,7 +170,7 @@ export function NotificationsView() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading notifications...
         </div>
-      ) : !notifications?.length ? (
+      ) : items.length === 0 ? (
         <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
           <Bell className="h-8 w-8 mx-auto mb-3 opacity-20" />
           No notifications yet.
@@ -171,7 +178,7 @@ export function NotificationsView() {
       ) : (
         <>
           <div>
-            {pageItems.map((notification) => (
+            {items.map((notification) => (
               <NotificationRow
                 key={notification.id}
                 notification={notification}
