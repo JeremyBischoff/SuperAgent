@@ -134,6 +134,13 @@
       "when": 1779329136558,
       "tag": "0018_flashy_randall_flagg",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1779381234820,
+      "tag": "0019_glamorous_mephisto",
+      "breakpoints": true
     }
   ]
 }

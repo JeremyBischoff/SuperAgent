@@ -30,6 +30,7 @@ import {
   touchChatIntegrationSession,
   listChatIntegrationSessions,
 } from '@shared/lib/services/chat-integration-session-service'
+import type { EffortLevel } from '@shared/lib/container/types'
 import type { ChatIntegration } from '@shared/lib/db/schema'
 import { messagePersister } from '@shared/lib/container/message-persister'
 import { runWithOptionalUser } from '@shared/lib/platform-attribution'
@@ -568,11 +569,13 @@ class ChatIntegrationManager {
           })
         }
 
+        const models = getEffectiveModels()
         const containerSession = await client.createSession({
           availableEnvVars: availableEnvVars.length > 0 ? availableEnvVars : undefined,
           initialMessage: messageText,
-          model: getEffectiveModels().agentModel,
-          browserModel: getEffectiveModels().browserModel,
+          model: integration.model || models.agentModel,
+          browserModel: models.browserModel,
+          ...(integration.effort ? { effort: integration.effort as EffortLevel } : {}),
           ...(integration.provider === 'imessage' ? { systemPrompt: IMESSAGE_SYSTEM_PROMPT } : {}),
         })
 

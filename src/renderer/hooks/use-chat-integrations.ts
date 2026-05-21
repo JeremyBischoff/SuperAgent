@@ -112,6 +112,8 @@ export function useCreateChatIntegration() {
       config: Record<string, unknown>
       showToolCalls?: boolean
       sessionTimeout?: number | null
+      model?: string | null
+      effort?: string | null
     }) => {
       const { agentSlug, ...body } = params
       const res = await apiFetch(`/api/chat-integrations/${agentSlug}`, {
@@ -157,6 +159,8 @@ export function useUpdateChatIntegration() {
       config?: Record<string, unknown>
       showToolCalls?: boolean
       sessionTimeout?: number | null
+      model?: string | null
+      effort?: string | null
       status?: 'active' | 'paused'
     }) => {
       const res = await apiFetch(`/api/chat-integrations/${id}`, {
