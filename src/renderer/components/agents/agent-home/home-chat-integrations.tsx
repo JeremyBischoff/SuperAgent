@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import { MessageCircle, MoreVertical, Pause, Trash2, Plus, Pencil } from 'lucide-react'
+import { MessageCircle, MoreVertical, Plus } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
-import { Label } from '@renderer/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { Switch } from '@renderer/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -25,10 +23,11 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { useChatIntegrations, useUpdateChatIntegration, useDeleteChatIntegration } from '@renderer/hooks/use-chat-integrations'
 import { formatProviderName } from '@shared/lib/chat-integrations/utils'
-import { parseChatIntegrationConfig, type ChatProvider, type SlackConfig } from '@shared/lib/chat-integrations/config-schema'
+import type { ChatProvider } from '@shared/lib/chat-integrations/config-schema'
 import { IntegrationRow } from '@renderer/components/connections/integration-row'
 import { ServiceIcon } from '@renderer/components/ui/service-icon'
 import { ChatIntegrationSetupDialog } from '@renderer/components/chat-integrations/chat-integration-setup-dialog'
+import { IntegrationSettingsMenu } from '@renderer/components/chat-integrations/integration-settings-menu'
 import { useSelection } from '@renderer/context/selection-context'
 import { HomeCollapsible } from './home-collapsible'
 
@@ -41,67 +40,6 @@ const PROVIDER_TILES: Array<{ slug: ChatProvider; label: string; icon: React.Rea
   { slug: 'slack', label: 'Slack', icon: null },
   { slug: 'imessage', label: 'iMessage', icon: <MessageCircle className="h-4 w-4 text-[#007AFF]" fill="#007AFF" stroke="none" /> },
 ]
-
-function SessionTimeoutInput({ value, onCommit, disabled, id }: {
-  value: number | null
-  onCommit: (hours: number | null) => void
-  disabled?: boolean
-  id: string
-}) {
-  const [local, setLocal] = useState(value != null && value > 0 ? String(value) : '')
-
-  const commit = () => {
-    const parsed = parseInt(local, 10)
-    const next = parsed > 0 ? parsed : null
-    if (next !== value) onCommit(next)
-  }
-
-  return (
-    <div className="px-2 py-1.5">
-      <Label htmlFor={id} className="text-xs font-normal">
-        New session after
-        <span className="ml-1 font-normal text-muted-foreground/70">hours, blank = never</span>
-      </Label>
-      <Input
-        id={id}
-        type="number"
-        min="1"
-        step="1"
-        className="mt-1 h-7 text-xs shadow-none"
-        placeholder="Never"
-        value={local}
-        onClick={(e) => e.stopPropagation()}
-        onChange={(e) => { e.stopPropagation(); setLocal(e.target.value) }}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
-        disabled={disabled}
-      />
-    </div>
-  )
-}
-
-function ToggleRow({ label, checked, onCheckedChange, disabled, ariaLabel }: {
-  label: string
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-  disabled?: boolean
-  ariaLabel?: string
-}) {
-  return (
-    <div className="flex w-full items-center justify-between px-2 py-1.5">
-      <span className="text-xs">{label}</span>
-      <Switch
-        className="scale-75 origin-right"
-        checked={checked}
-        disabled={disabled}
-        onClick={(e) => e.stopPropagation()}
-        onCheckedChange={onCheckedChange}
-        aria-label={ariaLabel ?? label}
-      />
-    </div>
-  )
-}
-
 
 function statusBadge(status: string) {
   switch (status) {
@@ -132,7 +70,6 @@ export function HomeChatIntegrations({ agentSlug }: HomeChatIntegrationsProps) {
       {rows.length > 0 ? (
         <div className="mt-2 divide-y divide-border/50">
           {rows.map((integration) => {
-            const isPaused = integration.status === 'paused'
             const displayName = integration.name || `${formatProviderName(integration.provider)} Bot`
             return (
               <IntegrationRow
@@ -160,115 +97,14 @@ export function HomeChatIntegrations({ agentSlug }: HomeChatIntegrationsProps) {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-48 p-1">
-                      <div className="flex w-full items-center justify-between px-2 py-1.5">
-                        <div
-                          className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium ${
-                            isPaused
-                              ? 'bg-muted text-muted-foreground'
-                              : 'bg-green-500/10 text-green-700 dark:text-green-400'
-                          }`}
-                        >
-                          {isPaused ? (
-                            <Pause className="h-2.5 w-2.5 fill-current" />
-                          ) : (
-                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                          )}
-                          {isPaused ? 'Paused' : 'Active'}
-                        </div>
-                        <Switch
-                          className="scale-75 origin-right"
-                          checked={!isPaused}
-                          disabled={updateIntegration.isPending}
-                          onClick={(e) => e.stopPropagation()}
-                          onCheckedChange={() =>
-                            updateIntegration.mutate({
-                              id: integration.id,
-                              status: isPaused ? 'active' : 'paused',
-                            })
-                          }
-                          aria-label={isPaused ? 'Resume integration' : 'Pause integration'}
-                        />
-                      </div>
-                      <div className="my-1 h-px bg-border" />
-                      <ToggleRow
-                        label="Show tool calls"
-                        checked={!!integration.showToolCalls}
-                        disabled={updateIntegration.isPending}
-                        onCheckedChange={(checked) =>
-                          updateIntegration.mutate({ id: integration.id, showToolCalls: checked })
-                        }
-                      />
-                      <SessionTimeoutInput
-                        id={`timeout-${integration.id}`}
-                        value={integration.sessionTimeout ?? null}
-                        onCommit={(hours) => updateIntegration.mutate({ id: integration.id, sessionTimeout: hours })}
-                        disabled={updateIntegration.isPending}
-                      />
-                      {integration.provider === 'slack' && (() => {
-                        const config = parseChatIntegrationConfig('slack', integration.config) as SlackConfig | null
-                        if (!config) return null
-                        return (
-                          <>
-                            <ToggleRow
-                              label="Only on @mention"
-                              checked={!!config.onlyMentioned}
-                              disabled={updateIntegration.isPending}
-                              onCheckedChange={(checked) =>
-                                updateIntegration.mutate({
-                                  id: integration.id,
-                                  config: { ...config, onlyMentioned: checked },
-                                })
-                              }
-                            />
-                            <ToggleRow
-                              label="Reply in thread"
-                              checked={!!config.answerInThread}
-                              disabled={updateIntegration.isPending}
-                              onCheckedChange={(checked) =>
-                                updateIntegration.mutate({
-                                  id: integration.id,
-                                  config: { ...config, answerInThread: checked, ...(!checked ? { newSessionPerThread: false } : {}) },
-                                })
-                              }
-                            />
-                            {!!config.answerInThread && (
-                              <ToggleRow
-                                label="New session per thread"
-                                checked={!!config.newSessionPerThread}
-                                disabled={updateIntegration.isPending}
-                                onCheckedChange={(checked) =>
-                                  updateIntegration.mutate({
-                                    id: integration.id,
-                                    config: { ...config, newSessionPerThread: checked },
-                                  })
-                                }
-                              />
-                            )}
-                          </>
-                        )
-                      })()}
-                      <div className="my-1 h-px bg-border" />
-                      <button
-                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation()
+                      <IntegrationSettingsMenu
+                        integration={integration}
+                        onRename={() => {
                           setRenameValue(integration.name || '')
                           setRenameTarget({ id: integration.id, name: displayName })
                         }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Rename
-                      </button>
-                      <button
-                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDeleteTarget({ id: integration.id, name: displayName })
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete
-                      </button>
+                        onDelete={() => setDeleteTarget({ id: integration.id, name: displayName })}
+                      />
                     </PopoverContent>
                   </Popover>
                 }

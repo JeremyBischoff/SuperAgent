@@ -6,11 +6,13 @@
  */
 
 import { useState } from 'react'
-import { MessageCircle, Trash2, Loader2, Pause, Play, ExternalLink, RotateCcw, AlertTriangle } from 'lucide-react'
+import { MessageCircle, MoreVertical, Loader2, ExternalLink, RotateCcw, AlertTriangle } from 'lucide-react'
 import { ServiceIcon } from '@renderer/components/ui/service-icon'
 import { MessageList } from '@renderer/components/messages/message-list'
 import { AgentActivityIndicator } from '@renderer/components/messages/agent-activity-indicator'
 import { Button } from '@renderer/components/ui/button'
+import { Input } from '@renderer/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import {
   useChatIntegration,
   useDeleteChatIntegration,
@@ -23,6 +25,14 @@ import { formatSessionTimestamp } from '@shared/lib/chat-integrations/utils'
 import { useSelection } from '@renderer/context/selection-context'
 import { useUser } from '@renderer/context/user-context'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@renderer/components/ui/dialog'
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -31,9 +41,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@renderer/components/ui/alert-dialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
+import { IntegrationSettingsMenu } from '@renderer/components/chat-integrations/integration-settings-menu'
 import { formatProviderName } from '@shared/lib/chat-integrations/utils'
 
 interface ChatIntegrationViewProps {
@@ -53,6 +63,9 @@ export function ChatIntegrationView({ integrationId, agentSlug }: ChatIntegratio
   const { canUseAgent } = useUser()
   const canManage = canUseAgent(agentSlug)
   const [clearError, setClearError] = useState<string | null>(null)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const handleDelete = async () => {
     try {
@@ -61,12 +74,6 @@ export function ChatIntegrationView({ integrationId, agentSlug }: ChatIntegratio
     } catch (err) {
       console.error('Failed to delete chat integration:', err)
     }
-  }
-
-  const handleTogglePause = async () => {
-    if (!integration) return
-    const newStatus = integration.status === 'paused' ? 'active' : 'paused'
-    await updateIntegration.mutateAsync({ id: integrationId, status: newStatus as 'active' | 'paused' })
   }
 
   if (isLoading) {
@@ -125,51 +132,23 @@ export function ChatIntegrationView({ integrationId, agentSlug }: ChatIntegratio
           </div>
 
           {canManage && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleTogglePause}
-                disabled={updateIntegration.isPending}
-              >
-                {integration.status === 'paused' ? (
-                  <><Play className="h-4 w-4 mr-2" /> Resume</>
-                ) : (
-                  <><Pause className="h-4 w-4 mr-2" /> Pause</>
-                )}
-              </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Chat Integration</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will disconnect the bot and remove this integration permanently.
-                      Existing session history will be preserved.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDelete}
-                      disabled={deleteIntegration.isPending}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      {deleteIntegration.isPending ? (
-                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting...</>
-                      ) : (
-                        'Delete Integration'
-                      )}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" size="icon" variant="outline" className="h-8 w-8" aria-label="Integration settings">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-48 p-1">
+                <IntegrationSettingsMenu
+                  integration={integration}
+                  onRename={() => {
+                    setRenameValue(integration.name || '')
+                    setRenameOpen(true)
+                  }}
+                  onDelete={() => setDeleteConfirmOpen(true)}
+                />
+              </PopoverContent>
+            </Popover>
           )}
         </div>
       </div>
@@ -282,6 +261,60 @@ export function ChatIntegrationView({ integrationId, agentSlug }: ChatIntegratio
           </div>
         )
       })()}
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Chat Integration</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will disconnect the bot and remove this integration permanently.
+              Existing session history will be preserved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteIntegration.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteIntegration.isPending ? 'Deleting...' : 'Delete Integration'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Rename Integration</DialogTitle>
+            <DialogDescription>Enter a new name for this integration.</DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              const trimmed = renameValue.trim()
+              updateIntegration.mutate(
+                { id: integrationId, name: trimmed },
+                { onSuccess: () => setRenameOpen(false) },
+              )
+            }}
+          >
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="Integration name"
+              autoFocus
+            />
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={updateIntegration.isPending}>
+                {updateIntegration.isPending ? 'Renaming...' : 'Rename'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
