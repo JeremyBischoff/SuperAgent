@@ -135,6 +135,11 @@ test.describe('Search palette', () => {
     // The agent should appear in the recent list without typing anything
     await expect(results.getByText(agentName)).toBeVisible()
 
+    // Wait for sessions to load — the expand chevron only renders once sessions
+    // are fetched, so its presence signals the async useQueries completed.
+    const agentItem = results.getByText(agentName).locator('..')
+    await expect(agentItem.locator('svg.lucide-chevron-right')).toBeVisible()
+
     // Sessions should be collapsed (not visible yet)
     await expect(results.getByText(sessionName)).not.toBeVisible()
 
