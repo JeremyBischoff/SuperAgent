@@ -38,30 +38,32 @@ import { useRenameUntitledAgent } from '@renderer/hooks/use-rename-untitled-agen
 import { useRenderTracker } from '@renderer/lib/perf'
 import { formatDistanceToNow } from 'date-fns'
 
+const INTRO_ANIMATION_MS = 2200
+
 interface AgentHomeProps {
   agent: ApiAgent
   onSessionCreated: (sessionId: string, initialMessage: string) => void
   onOpenSettings?: (tab?: string) => void
-  /** Optional inline style on the root — used to attach a view-transition-name. */
-  style?: React.CSSProperties
 }
 
-export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: AgentHomeProps) {
+export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHomeProps) {
   useRenderTracker('AgentHome')
-  const { setView, setAgent, consumePendingDraft, justCreatedSlug } = useSelection()
-  // Snapshot at mount: is this the freshly-created agent landing? Captured
-  // once so the stagger animation isn't cancelled when justCreatedSlug is
-  // cleared mid-animation by the view-transition cleanup.
-  const [introStagger] = useState(() => justCreatedSlug === agent.slug)
-  // Hold a subtle "Initializing" state for ~1s before the sections animate
-  // in, so a freshly created agent feels like it's spinning up rather than
-  // popping in instantly.
+  const { setView, setAgent, consumePendingDraft, justCreatedSlug, setJustCreatedSlug } = useSelection()
+  const [introStagger] = useState(() => {
+    if (justCreatedSlug !== agent.slug) return false
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  })
   const [introPlaying, setIntroPlaying] = useState(!introStagger)
   useEffect(() => {
     if (!introStagger) return
     const t = setTimeout(() => setIntroPlaying(true), 1000)
     return () => clearTimeout(t)
   }, [introStagger])
+  useEffect(() => {
+    if (!introStagger) return
+    const t = setTimeout(() => setJustCreatedSlug(null), INTRO_ANIMATION_MS)
+    return () => clearTimeout(t)
+  }, [introStagger, setJustCreatedSlug])
   const startOnboardingSession = useStartOnboardingSession()
   const { canUseAgent, canAdminAgent } = useUser()
   const isViewOnly = !canUseAgent(agent.slug)
@@ -267,7 +269,6 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
         introStagger && 'agent-home-intro relative',
         introPlaying && 'intro-play'
       )}
-      style={style}
     >
       {introStagger && !introPlaying && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
@@ -280,7 +281,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
       <div className={`grid gap-10 items-start ${showRightColumn ? 'grid-cols-1 xl:grid-cols-[1fr_minmax(320px,400px)] w-full max-w-6xl mx-auto' : 'max-w-2xl mx-auto'}`}>
         {/* Left Column — Chat composer + Sessions */}
         <div className="space-y-6 w-full min-w-0 xl:min-w-[480px] xl:max-w-[720px]">
-          <div className="flex items-center justify-between gap-2" data-intro-step="1">
+          <div className="flex items-center justify-between gap-2 intro-step intro-step-1">
             {isEditingName && isOwner ? (
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <Input
@@ -364,8 +365,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
               />
               <form
                 onSubmit={composer.handleSubmit}
-                className={composer.isDragOver ? 'rounded-2xl ring-2 ring-primary ring-inset' : ''}
-                data-intro-step="2"
+                className={cn('intro-step intro-step-2', composer.isDragOver && 'rounded-2xl ring-2 ring-primary ring-inset')}
                 {...composer.dragHandlers}
               >
                 <ChatComposerBox
@@ -453,7 +453,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
                 />
               </form>
 
-              <div className="space-y-6" data-intro-step="3">
+              <div className="space-y-6 intro-step intro-step-3">
               {/* Bookmarks */}
               <HomeBookmarks agentSlug={agent.slug} isOwner={isOwner} />
 
@@ -515,26 +515,17 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings, style }: Ag
         {/* Right Column — Triggers + Connections + Skills + Volumes */}
         {showRightColumn && (
           <div className="space-y-3">
-            <div data-intro-step="4">
-              <HomeTriggers
-                agentSlug={agent.slug}
-                scheduledTasks={scheduledTasks}
-                onSelectTask={(taskId: string) => setView({ kind: 'task', id: taskId })}
-                onSelectWebhook={(webhookId: string) => setView({ kind: 'webhook', id: webhookId })}
-              />
-            </div>
-            <div data-intro-step="5">
-              <HomeConnections agentSlug={agent.slug} />
-            </div>
-            <div data-intro-step="6">
-              <HomeSkills agentSlug={agent.slug} />
-            </div>
-            <div data-intro-step="7">
-              <HomeVolumes agentSlug={agent.slug} />
-            </div>
-            <div data-intro-step="8">
-              <HomeExtras agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
-            </div>
+            <HomeTriggers
+              className="intro-step intro-step-4"
+              agentSlug={agent.slug}
+              scheduledTasks={scheduledTasks}
+              onSelectTask={(taskId: string) => setView({ kind: 'task', id: taskId })}
+              onSelectWebhook={(webhookId: string) => setView({ kind: 'webhook', id: webhookId })}
+            />
+            <HomeConnections className="intro-step intro-step-5" agentSlug={agent.slug} />
+            <HomeSkills className="intro-step intro-step-6" agentSlug={agent.slug} />
+            <HomeVolumes className="intro-step intro-step-7" agentSlug={agent.slug} />
+            <HomeExtras className="intro-step intro-step-8" agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
           </div>
         )}
       </div>

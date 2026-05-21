@@ -42,6 +42,7 @@ interface HomeTriggersProps {
   scheduledTasks: ApiScheduledTask[]
   onSelectTask: (taskId: string) => void
   onSelectWebhook: (webhookId: string) => void
+  className?: string
 }
 
 type TriggerItem =
@@ -53,6 +54,7 @@ export function HomeTriggers({
   scheduledTasks,
   onSelectTask,
   onSelectWebhook,
+  className,
 }: HomeTriggersProps) {
   const { data: webhookTriggersData } = useWebhookTriggers(agentSlug, 'active')
 
@@ -71,7 +73,7 @@ export function HomeTriggers({
   }, [scheduledTasks, webhookTriggersData])
 
   return (
-    <HomeCollapsible title="Triggers">
+    <HomeCollapsible title="Triggers" className={className}>
       {items.length > 0 ? (
         <div className="mt-2 divide-y divide-border/50">
           {items.map((item) =>
