@@ -163,6 +163,7 @@ export function ConnectedAccountRequestItem({
 
     // Web: use postMessage from OAuth popup
     const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
       if (event.data?.type === 'oauth-callback') {
         handleOAuthComplete(event.data.success, event.data.error, event.data.accountId)
       }

@@ -507,14 +507,7 @@ function generateCallbackHtml(result: CallbackResult): string {
   </div>
   <script>
     if (window.opener) {
-      try {
-        // Get the opener's origin for secure postMessage
-        var targetOrigin = window.opener.location.origin;
-        window.opener.postMessage(${message}, targetOrigin);
-      } catch (e) {
-        // Cross-origin - use fallback (opener will validate message type)
-        window.opener.postMessage(${message}, '*');
-      }
+      window.opener.postMessage(${message}, window.location.origin);
       setTimeout(function() { window.close(); }, ${result.success ? 1000 : 3000});
     }
   </script>

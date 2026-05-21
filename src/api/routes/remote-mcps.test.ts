@@ -1053,3 +1053,73 @@ describe('GET /:id/agents', () => {
     expect(res.status).toBe(500)
   })
 })
+
+// ---------------------------------------------------------------------------
+// OAuth callback — postMessage uses window.location.origin, not '*'
+// ---------------------------------------------------------------------------
+describe('OAuth callback — postMessage origin', () => {
+  let app: ReturnType<typeof createApp>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    app = createApp()
+  })
+
+  it('uses window.location.origin (not wildcard) on error', async () => {
+    const res = await app.request(
+      'http://localhost/api/remote-mcps/oauth-callback?error=access_denied'
+    )
+
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('window.location.origin')
+    expect(html).not.toContain("'*'")
+  })
+
+  it('uses window.location.origin (not wildcard) on token exchange failure', async () => {
+    mockCompleteOAuthFlow.mockResolvedValue({ success: false })
+
+    const res = await app.request(
+      'http://localhost/api/remote-mcps/oauth-callback?code=abc&state=xyz'
+    )
+
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('window.location.origin')
+    expect(html).not.toContain("'*'")
+  })
+
+  it('uses window.location.origin (not wildcard) on success', async () => {
+    mockCompleteOAuthFlow.mockResolvedValue({ success: true, mcpId: 'mcp-new' })
+    mockDbFrom.mockReturnValue({ where: mockWhere })
+    mockWhere.mockReturnValue({ limit: mockLimit })
+    mockLimit.mockResolvedValue([
+      { id: 'mcp-new', url: 'https://mcp.example.com', accessToken: 'tok' },
+    ])
+
+    // discoverTools fetches
+    mockFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ jsonrpc: '2.0', result: {}, id: 1 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    mockFetch.mockResolvedValueOnce(new Response(null, { status: 200 }))
+    mockFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ jsonrpc: '2.0', result: { tools: [] }, id: 2 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+    mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) })
+
+    const res = await app.request(
+      'http://localhost/api/remote-mcps/oauth-callback?code=abc&state=xyz'
+    )
+
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('window.location.origin')
+    expect(html).not.toContain("'*'")
+  })
+})

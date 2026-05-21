@@ -344,7 +344,7 @@ remoteMcps.get('/oauth-callback', async (c) => {
     const errorPayload = JSON.stringify({ type: 'mcp-oauth-callback', success: false, error: safeError })
     return c.html(`
       <html><body><script>
-        window.opener?.postMessage(${errorPayload}, '*');
+        window.opener?.postMessage(${errorPayload}, window.location.origin);
         window.close();
       </script><p>OAuth error: ${safeError}. You can close this window.</p></body></html>
     `)
@@ -360,7 +360,7 @@ remoteMcps.get('/oauth-callback', async (c) => {
     const failPayload = JSON.stringify({ type: 'mcp-oauth-callback', success: false, error: 'Token exchange failed' })
     return c.html(`
       <html><body><script>
-        window.opener?.postMessage(${failPayload}, '*');
+        window.opener?.postMessage(${failPayload}, window.location.origin);
         window.close();
       </script><p>OAuth failed. You can close this window.</p></body></html>
     `)
@@ -394,7 +394,7 @@ remoteMcps.get('/oauth-callback', async (c) => {
     const payload = JSON.stringify({ type: 'mcp-oauth-callback', success: false, error: `Connected but failed to discover tools: ${errorMsg}` })
     return c.html(`
       <html><body><script>
-        window.opener?.postMessage(${payload}, '*');
+        window.opener?.postMessage(${payload}, window.location.origin);
         window.close();
       </script><p>OAuth succeeded but tool discovery failed. You can close this window.</p></body></html>
     `)
@@ -404,7 +404,7 @@ remoteMcps.get('/oauth-callback', async (c) => {
   const successPayload = JSON.stringify({ type: 'mcp-oauth-callback', success: true, mcpId: result.mcpId })
   return c.html(`
     <html><body><script>
-      window.opener?.postMessage(${successPayload}, '*');
+      window.opener?.postMessage(${successPayload}, window.location.origin);
       window.close();
     </script><p>OAuth successful! You can close this window.</p></body></html>
   `)
