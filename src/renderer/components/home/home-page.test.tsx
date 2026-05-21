@@ -113,6 +113,10 @@ vi.mock('@renderer/context/selection-context', () => ({
   useSelection: () => ({ setAgent: mockSetAgent, view: { kind: 'home' }, selectedAgentSlug: null }),
 }))
 
+vi.mock('@renderer/context/search-context', () => ({
+  useSearch: () => ({ open: false, openSearch: vi.fn(), closeSearch: vi.fn() }),
+}))
+
 vi.mock('@renderer/hooks/use-sessions', () => ({
   useSessions: () => ({ data: [] }),
 }))
@@ -124,10 +128,6 @@ vi.mock('@renderer/hooks/use-agents', () => ({
 
 vi.mock('@renderer/hooks/use-user-settings', () => ({
   useUserSettings: () => ({ data: null }),
-}))
-
-vi.mock('@renderer/hooks/use-agent-templates', () => ({
-  useDiscoverableAgents: () => ({ data: [] }),
 }))
 
 vi.mock('@renderer/hooks/use-usage', () => ({
@@ -155,10 +155,6 @@ vi.mock('@renderer/hooks/use-create-untitled-agent', () => ({
   UNTITLED_AGENT_NAME: 'Untitled',
 }))
 
-vi.mock('@renderer/components/agents/template-install-dialog', () => ({
-  TemplateInstallDialog: () => null,
-}))
-
 vi.mock('@renderer/components/ui/sidebar', () => ({
   SidebarTrigger: () => <button>sidebar</button>,
   useSidebar: () => ({ state: 'expanded' }),
@@ -178,13 +174,6 @@ vi.mock('@renderer/lib/env', () => ({
   isElectron: () => false,
   getPlatform: () => 'web',
   getApiBaseUrl: () => '',
-}))
-
-// Palette extraction is async and network-bound (fetches the image). In tests
-// we short-circuit to `status: 'ready', palette: null` so the overlay renders
-// immediately with theme-default fallback, without flashing.
-vi.mock('@renderer/hooks/use-image-palette', () => ({
-  useImagePalette: () => ({ status: 'ready', palette: null }),
 }))
 
 // Import after mocks
@@ -290,8 +279,8 @@ describe('HomePage AgentCard', () => {
       isLoading: false,
     })
     renderWithProviders(<HomePage />)
-    expect(screen.getByText('Sales')).toBeInTheDocument()
-    expect(screen.getByText('Metrics')).toBeInTheDocument()
+    const cards = document.querySelectorAll('[class*="h-24"]')
+    expect(cards.length).toBeGreaterThanOrEqual(2)
   })
 
   it('renders a screenshot img when hasScreenshot is true', () => {
@@ -318,7 +307,6 @@ describe('HomePage AgentCard', () => {
     renderWithProviders(<HomePage />)
     const img = document.querySelector('img[src*="/screenshot.png"]')
     expect(img).toBeNull()
-    expect(screen.getByText('Sales')).toBeInTheDocument()
   })
 
   it('renders no dashboard cards when count is 0', () => {
@@ -356,7 +344,6 @@ describe('HomePage AgentCard', () => {
     expect(screen.getByText('1h ago')).toBeInTheDocument()
     expect(screen.getByText('2 tasks')).toBeInTheDocument()
     expect(screen.getByText(/in 1h/)).toBeInTheDocument()
-    expect(screen.getByText('Overview')).toBeInTheDocument()
   })
 
   it('passes pre-aggregated status to AgentStatus', () => {

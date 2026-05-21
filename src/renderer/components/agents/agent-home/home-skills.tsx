@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Button } from '@renderer/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { MoreVertical, FileCode, CloudUpload, GitPullRequest, Send, RefreshCw, Loader2, Plus } from 'lucide-react'
+import { MoreVertical, FileCode, CloudUpload, GitPullRequest, Send, RefreshCw, Loader2, Plus, Play } from 'lucide-react'
 import { StatusBadge } from '../status-badge'
 import { SkillFilesDialog } from '../skill-files-dialog'
 import { SkillPublishDialog } from '../skill-publish-dialog'
@@ -16,9 +16,10 @@ import type { ApiSkillWithStatus } from '@shared/lib/types/api'
 interface HomeSkillsProps {
   agentSlug: string
   className?: string
+  onRunSkill?: (skillName: string) => void
 }
 
-export function HomeSkills({ agentSlug, className }: HomeSkillsProps) {
+export function HomeSkills({ agentSlug, className, onRunSkill }: HomeSkillsProps) {
   const [browseOpen, setBrowseOpen] = useState(false)
 
   const { data: skillsData } = useAgentSkills(agentSlug)
@@ -41,7 +42,7 @@ export function HomeSkills({ agentSlug, className }: HomeSkillsProps) {
       ) : (
         <div className="mt-2 divide-y divide-border/50" data-testid="installed-skills-list">
           {skills.map((skill) => (
-            <SkillRow key={skill.path} skill={skill} agentSlug={agentSlug} />
+            <SkillRow key={skill.path} skill={skill} agentSlug={agentSlug} onRunSkill={onRunSkill} />
           ))}
         </div>
       )}
@@ -71,7 +72,7 @@ export function HomeSkills({ agentSlug, className }: HomeSkillsProps) {
   )
 }
 
-function SkillRow({ skill, agentSlug }: { skill: ApiSkillWithStatus; agentSlug: string }) {
+function SkillRow({ skill, agentSlug, onRunSkill }: { skill: ApiSkillWithStatus; agentSlug: string; onRunSkill?: (skillName: string) => void }) {
   const [filesOpen, setFilesOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -90,7 +91,19 @@ function SkillRow({ skill, agentSlug }: { skill: ApiSkillWithStatus; agentSlug: 
         {skill.description && (
           <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{skill.description}</div>
         )}
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+          {onRunSkill && (
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-6 w-6"
+              aria-label={`Run ${skill.name ?? 'skill'}`}
+              onClick={(e) => { e.stopPropagation(); onRunSkill(skill.path) }}
+            >
+              <Play className="h-3 w-3" />
+            </Button>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -112,7 +125,7 @@ function SkillRow({ skill, agentSlug }: { skill: ApiSkillWithStatus; agentSlug: 
                 <FileCode className="h-3.5 w-3.5" />
                 View Files
               </button>
-              {skill.status.type === 'local' && skill.status.publishable !== false && (
+              {skill.status.type === 'local' && skill.status.publishable !== false && publishMode !== 'none' && (
                 <button
                   className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
                   onClick={(e) => { e.stopPropagation(); setPublishOpen(true) }}
@@ -135,7 +148,7 @@ function SkillRow({ skill, agentSlug }: { skill: ApiSkillWithStatus; agentSlug: 
                   Update
                 </button>
               )}
-              {skill.status.type === 'locally_modified' && (
+              {skill.status.type === 'locally_modified' && publishMode !== 'none' && (
                 <button
                   className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
                   onClick={(e) => { e.stopPropagation(); setReviewOpen(true) }}

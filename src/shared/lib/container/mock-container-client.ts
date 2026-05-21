@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { randomUUID } from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import type {
@@ -9,6 +10,7 @@ import type {
   ContainerStats,
   CreateSessionOptions,
   StartOptions,
+  StopOptions,
   StreamMessage,
 } from './types'
 import type { RuntimeOptions } from './runtime-options'
@@ -595,6 +597,90 @@ export class ProxyReviewScenario implements MockScenario {
   }
 }
 
+export class XAgentReviewScenario implements MockScenario {
+  constructor(
+    private targetAgentSlug: string,
+    private targetAgentName: string,
+    private operation: 'list' | 'read' | 'invoke' | 'create',
+  ) {}
+
+  execute(sessionId: string, client: MockContainerClient, userMessage: string): void {
+    const agentSlug = client.getAgentId()
+    let delay = 10
+
+    setTimeout(() => {
+      client.emitStreamMessage(sessionId, {
+        type: 'stream_event',
+        content: { type: 'stream_event', event: { type: 'message_start' } },
+      })
+    }, delay)
+    delay += 10
+
+    const text = `Requesting x-agent ${this.operation} on ${this.targetAgentName}`
+    setTimeout(() => {
+      client.emitStreamMessage(sessionId, {
+        type: 'stream_event',
+        content: { type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'text' } } },
+      })
+    }, delay)
+    delay += 10
+
+    setTimeout(() => {
+      client.emitStreamMessage(sessionId, {
+        type: 'stream_event',
+        content: { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } },
+      })
+    }, delay)
+    delay += 10
+
+    setTimeout(() => {
+      client.emitStreamMessage(sessionId, {
+        type: 'stream_event',
+        content: { type: 'stream_event', event: { type: 'content_block_stop' } },
+      })
+    }, delay)
+    delay += 10
+
+    setTimeout(() => {
+      client.emitStreamMessage(sessionId, {
+        type: 'stream_event',
+        content: { type: 'stream_event', event: { type: 'message_stop' } },
+      })
+    }, delay)
+    delay += 20
+
+    const capturedDelay = delay
+    setTimeout(() => {
+      reviewManager.requestXAgentReview(
+        agentSlug,
+        this.targetAgentSlug,
+        this.targetAgentName,
+        this.operation,
+      ).then((decision) => {
+        client.writeJsonlEntry(sessionId, {
+          type: 'user',
+          message: { content: userMessage },
+          timestamp: new Date().toISOString(),
+        })
+        client.writeJsonlEntry(sessionId, {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: `X-agent ${this.operation} ${decision === 'allow' ? 'approved' : 'denied'} by user.` }] },
+          timestamp: new Date().toISOString(),
+        })
+        client.emitStreamMessage(sessionId, {
+          type: 'result',
+          content: { type: 'result', subtype: 'success' },
+        })
+      }).catch(() => {
+        client.emitStreamMessage(sessionId, {
+          type: 'result',
+          content: { type: 'result', subtype: 'success' },
+        })
+      })
+    }, capturedDelay)
+  }
+}
+
 /**
  * Mock implementation of ContainerClient for E2E testing.
  * Simulates container behavior without requiring Docker/Podman.
@@ -650,6 +736,85 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
         },
       },
     ])],
+    // Note: scenarios are matched by substring in insertion order, so
+    // longer/more-specific triggers must come first to avoid being shadowed
+    // by shorter prefixes.
+    ['ask multi parallel', new UserInputRequestScenario([
+      {
+        name: 'mcp__user-input__request_secret',
+        input: { secretName: 'DATABASE_URL', reason: 'Connection string for the database' },
+      },
+      {
+        name: 'AskUserQuestion',
+        input: {
+          questions: [
+            {
+              question: 'Which database should we use?',
+              header: 'Database',
+              options: [
+                { label: 'PostgreSQL', description: 'Reliable relational database' },
+                { label: 'MongoDB', description: 'Flexible document store' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Which cloud provider do you prefer?',
+              header: 'Cloud',
+              options: [
+                { label: 'AWS', description: 'Amazon Web Services' },
+                { label: 'GCP', description: 'Google Cloud Platform' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Preferred language?',
+              header: 'Language',
+              options: [
+                { label: 'TypeScript', description: 'Typed JavaScript' },
+                { label: 'Go', description: 'Compiled' },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      },
+    ])],
+    ['ask multi', new UserInputRequestScenario([
+      {
+        name: 'AskUserQuestion',
+        input: {
+          questions: [
+            {
+              question: 'Which database should we use?',
+              header: 'Database',
+              options: [
+                { label: 'PostgreSQL', description: 'Reliable relational database' },
+                { label: 'MongoDB', description: 'Flexible document store' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Which cloud provider do you prefer?',
+              header: 'Cloud',
+              options: [
+                { label: 'AWS', description: 'Amazon Web Services' },
+                { label: 'GCP', description: 'Google Cloud Platform' },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: 'Preferred language?',
+              header: 'Language',
+              options: [
+                { label: 'TypeScript', description: 'Typed JavaScript' },
+                { label: 'Go', description: 'Compiled' },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      },
+    ])],
     ['ask script', new UserInputRequestScenario([
       {
         name: 'mcp__user-input__request_script_run',
@@ -690,6 +855,8 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       ['chat:write'],
       { 'chat:write': 'Send a message to a channel' }
     )],
+    // X-agent review scenario for E2E tests
+    ['x-agent review', new XAgentReviewScenario('helper-bot', 'Helper Bot', 'list')],
     // Tool rendering scenarios for E2E tests
     ['read file', new ToolUseScenario(
       'Read',
@@ -847,6 +1014,11 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
         fs.mkdirSync(dir, { recursive: true })
       }
 
+      // Ensure uuid/parentUuid/sessionId so entries conform to JsonlMessageEntry
+      if (!entry.uuid) entry.uuid = randomUUID()
+      if (!('parentUuid' in entry)) entry.parentUuid = null
+      if (!entry.sessionId) entry.sessionId = apiSessionId
+
       // Append the entry as a JSON line
       fs.appendFileSync(jsonlPath, JSON.stringify(entry) + '\n')
       console.log(`[MockContainerClient] Wrote JSONL entry to ${jsonlPath}`)
@@ -907,7 +1079,7 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     console.log(`[MockContainerClient] Started mock container for agent ${this.config.agentId}`)
   }
 
-  async stop(): Promise<{ forceStopUsed: boolean }> {
+  async stop(_options?: StopOptions): Promise<{ forceStopUsed: boolean }> {
     if (this.activeBrowserSessionId && cleanupBrowserSessionFn) {
       cleanupBrowserSessionFn(this.activeBrowserSessionId)
       this.activeBrowserSessionId = null
@@ -967,6 +1139,15 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       })
     }
 
+    // Dashboard artifact HTML — serves a minimal page for E2E testing of polyfill injection
+    if (fetchPath.match(/^\/artifacts\/[^/]+\/?$/) || fetchPath.match(/^\/artifacts\/[^/]+\/index\.html$/)) {
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mock Dashboard</title></head><body><h1>Mock Dashboard</h1><script>window.__DASHBOARD_LOADED__ = true;</script></body></html>`
+      return new Response(html, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      })
+    }
+
     // Handle input resolve/reject — decrement pending count and complete session when all done
     const resolveMatch = fetchPath.match(/^\/inputs\/[^/]+\/(resolve|reject)$/)
     if (resolveMatch) {
@@ -1023,11 +1204,11 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
 
   // Health checks
 
-  async waitForHealthy(_timeoutMs?: number): Promise<boolean> {
+  async waitForHealthy(_timeoutMs?: number, _knownPort?: number): Promise<boolean> {
     return this.running
   }
 
-  async isHealthy(): Promise<boolean> {
+  async isHealthy(_knownPort?: number): Promise<boolean> {
     return this.running
   }
 
@@ -1053,6 +1234,12 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       initialMessage: options.initialMessage,
       timestamp: new Date().toISOString(),
     })
+
+    // Simulate container startup latency for onboarding sessions so the
+    // "Setting up your agent…" modal is visible long enough for E2E assertions.
+    if (options.initialMessage?.includes('agent-onboarding')) {
+      await new Promise((r) => setTimeout(r, 2000))
+    }
 
     const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
     const now = new Date().toISOString()

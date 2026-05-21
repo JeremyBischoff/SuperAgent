@@ -19,6 +19,7 @@ import { db } from '@shared/lib/db'
 import { agentAcl } from '@shared/lib/db/schema'
 import { isAuthMode } from '@shared/lib/auth/mode'
 import { hasMinRole, type AgentRole } from '@shared/lib/types/agent'
+import { runWithOptionalUser } from '@shared/lib/platform-attribution'
 import { validateProxyToken } from '@shared/lib/proxy/token-store'
 import {
   createAgent,
@@ -248,11 +249,13 @@ xAgent.post('/create', zValidator('json', createBodySchema), async (c) => {
 
 const getSessionsBodySchema = z.object({
   slug: z.string(),
+  limit: z.number().int().min(1).max(200).optional(),
+  offset: z.number().int().min(0).optional(),
 })
 
 xAgent.post('/get-sessions', zValidator('json', getSessionsBodySchema), async (c) => {
   const callerSlug = getCallerSlug(c)
-  const { slug: targetSlug } = c.req.valid('json')
+  const { slug: targetSlug, limit = 50, offset = 0 } = c.req.valid('json')
 
   const target = await getAgent(targetSlug)
   if (!target) return c.json({ error: 'Target agent not found' }, 404)
@@ -266,9 +269,10 @@ xAgent.post('/get-sessions', zValidator('json', getSessionsBodySchema), async (c
     return c.json({ error: policy.reason ?? 'Forbidden' }, 403)
   }
 
-  const sessions = await listSessions(targetSlug)
+  const allSessions = await listSessions(targetSlug)
+  const page = allSessions.slice(offset, offset + limit)
   return c.json({
-    sessions: sessions.map((s) => ({
+    sessions: page.map((s) => ({
       id: s.id,
       name: s.name,
       createdAt: s.createdAt,
@@ -276,6 +280,9 @@ xAgent.post('/get-sessions', zValidator('json', getSessionsBodySchema), async (c
       messageCount: s.messageCount,
       isRunning: messagePersister.isSessionActive(s.id),
     })),
+    total: allSessions.length,
+    offset,
+    limit,
   })
 })
 
@@ -457,19 +464,19 @@ xAgent.post('/invoke', zValidator('json', invokeBodySchema), async (c) => {
 
   // One-hop rule: a session that was started by another agent cannot itself
   // start invocations into other agents. Prevents A→B→C chains and A→B→A
-  // cycles transitively.
-  if (_callerSessionId) {
-    const callerMeta = await getSessionMetadata(callerSlug, _callerSessionId)
-    if (callerMeta?.invokedByAgentSlug) {
-      return c.json(
-        {
-          error:
-            `This session was invoked by agent "${callerMeta.invokedByAgentSlug}" and cannot invoke other agents. ` +
-            'Cross-agent invocation is one hop deep.',
-        },
-        403,
-      )
-    }
+  // cycles transitively. Hoisted out so attribution lookup below can reuse it.
+  const callerMeta = _callerSessionId
+    ? await getSessionMetadata(callerSlug, _callerSessionId)
+    : null
+  if (callerMeta?.invokedByAgentSlug) {
+    return c.json(
+      {
+        error:
+          `This session was invoked by agent "${callerMeta.invokedByAgentSlug}" and cannot invoke other agents. ` +
+          'Cross-agent invocation is one hop deep.',
+      },
+      403,
+    )
   }
 
   const target = await getAgent(targetSlug)
@@ -490,6 +497,14 @@ xAgent.post('/invoke', zValidator('json', invokeBodySchema), async (c) => {
     return c.json({ error: policy.reason ?? 'Forbidden' }, 403)
   }
 
+  // Attribute to the originating user: caller session's creator → caller
+  // agent's first owner (legacy fallback for pre-attribution sessions).
+  let attributedUserId: string | undefined = callerMeta?.createdByUserId
+  if (!attributedUserId && isAuthMode()) {
+    attributedUserId = (await getOwnersOfAgent(callerSlug))[0]
+  }
+
+  return runWithOptionalUser(attributedUserId, async () => {
   // Existing session: must exist, must not be running
   if (existingSessionId) {
     if (messagePersister.isSessionActive(existingSessionId)) {
@@ -566,7 +581,10 @@ xAgent.post('/invoke', zValidator('json', invokeBodySchema), async (c) => {
   // usable), but don't silently swallow — log so we can debug missing
   // cross-agent provenance later.
   try {
-    await updateSessionMetadata(targetSlug, newSessionId, { invokedByAgentSlug: callerSlug })
+    await updateSessionMetadata(targetSlug, newSessionId, {
+      invokedByAgentSlug: callerSlug,
+      ...(attributedUserId ? { createdByUserId: attributedUserId } : {}),
+    })
   } catch (metaErr) {
     console.warn('[x-agent] updateSessionMetadata failed (session usable, provenance not recorded)', metaErr)
   }
@@ -594,6 +612,7 @@ xAgent.post('/invoke', zValidator('json', invokeBodySchema), async (c) => {
     })
   }
   return c.json({ sessionId: newSessionId, status: 'running' })
+  })
 })
 
 export default xAgent

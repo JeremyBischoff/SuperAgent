@@ -22,6 +22,7 @@ vi.mock('@renderer/lib/api', () => ({
 const mockUseAgents = vi.fn()
 vi.mock('@renderer/hooks/use-agents', () => ({
   useAgents: () => mockUseAgents(),
+  useDeleteAgent: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 const mockCreateUntitledAgent = vi.fn()
@@ -35,6 +36,7 @@ vi.mock('@renderer/hooks/use-create-untitled-agent', () => ({
 const mockUseSessions = vi.fn()
 vi.mock('@renderer/hooks/use-sessions', () => ({
   useSessions: (slug: string | null) => mockUseSessions(slug),
+  useCreateSession: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@renderer/hooks/use-message-stream', () => ({
@@ -87,6 +89,7 @@ type MockView =
   | { kind: 'dashboard'; slug: string }
   | { kind: 'apiLogs' }
   | { kind: 'connections' }
+  | { kind: 'notifications' }
 
 const mockSelectionContext = {
   selectedAgentSlug: null as string | null,
@@ -127,6 +130,11 @@ const mockDialogContext = {
   settingsTab: undefined,
   openWizard: vi.fn(),
 }
+vi.mock('@renderer/context/onboarding-context', () => ({
+  useOnboarding: () => ({ isOnboarding: false, setOnboarding: vi.fn() }),
+  OnboardingProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
+
 vi.mock('@renderer/context/dialog-context', () => ({
   useDialogs: () => mockDialogContext,
   DialogProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -163,14 +171,6 @@ vi.mock('@renderer/components/dashboards/dashboard-context-menu', () => ({
 
 vi.mock('@renderer/components/settings/container-setup-dialog', () => ({
   ContainerSetupDialog: () => null,
-}))
-
-vi.mock('@renderer/components/notifications/notifications-popover', () => ({
-  NotificationsPopoverContent: ({ onNavigate }: { onNavigate: () => void }) => (
-    <button data-testid="popover-content" onClick={onNavigate}>
-      popover content
-    </button>
-  ),
 }))
 
 vi.mock('@renderer/components/ui/error-boundary', () => ({
@@ -439,16 +439,11 @@ describe('AppSidebar — notifications', () => {
     expect(button.querySelector('[aria-label="3 unread"]')).not.toBeNull()
   })
 
-  it('closes the popover when a notification is clicked (onNavigate wired)', async () => {
+  it('navigates to the notifications page when the button is clicked', async () => {
     const user = userEvent.setup()
     renderWithProviders(<AppSidebar />)
-    // Our Popover mock exposes the controlled open state on data-open and
-    // forwards onNavigate to onOpenChange(false). Click the popover content to
-    // simulate a notification click; the popover should flip to closed.
-    const popover = screen.getByTestId('popover')
-    expect(popover).toHaveAttribute('data-open', 'false')
-    await user.click(screen.getByTestId('popover-content'))
-    expect(popover).toHaveAttribute('data-open', 'false')
+    await user.click(screen.getByTestId('notifications-button'))
+    expect(mockSelectionContext.setView).toHaveBeenCalledWith({ kind: 'notifications' })
   })
 })
 

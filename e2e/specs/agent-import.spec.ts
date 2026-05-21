@@ -41,7 +41,7 @@ test.describe('Agent Import Onboarding', () => {
 
   test('importing a template with the onboarding skill creates an onboarding session', async ({ page }) => {
     const agentName = `Imported Onboarding ${Date.now()}`
-    const zipPath = buildAgentTemplateZip(
+    const zipPath = await buildAgentTemplateZip(
       path.join(tmpDir, 'with-onboarding.zip'),
       { name: agentName, withOnboardingSkill: true },
     )
@@ -72,9 +72,38 @@ test.describe('Agent Import Onboarding', () => {
     await expect(agentPage.getAgentItem(agentName)).toBeVisible()
   })
 
+  test('onboarding setup dialog is visible while the session is being created', async ({ page }) => {
+    const agentName = `Imported Onboarding Dialog ${Date.now()}`
+    const zipPath = await buildAgentTemplateZip(
+      path.join(tmpDir, 'onboarding-dialog.zip'),
+      { name: agentName, withOnboardingSkill: true },
+    )
+
+    await agentPage.clickCreateAgent()
+    await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText('Untitled', { timeout: 10000 })
+
+    await page.getByRole('button', { name: 'Import an Agent — Import' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+
+    await dialog.locator('input[type="file"]').setInputFiles(zipPath)
+    await dialog.locator('button[type="submit"]').click()
+
+    // MockContainerClient delays onboarding session creation by 2 s —
+    // the "Setting up your agent…" dialog should be visible during this window.
+    const setupDialog = page.locator('[data-testid="onboarding-setup-dialog"]')
+    await expect(setupDialog).toBeVisible({ timeout: 10000 })
+    await expect(setupDialog).toContainText('Setting up your agent')
+
+    // After the delay resolves, the dialog disappears and the session appears.
+    await expect(setupDialog).not.toBeVisible({ timeout: 15000 })
+    await expect(sessionPage.getMessageList()).toBeVisible({ timeout: 15000 })
+    await sessionPage.expectUserMessage(ONBOARDING_MESSAGE)
+  })
+
   test('importing a template without the onboarding skill skips session creation', async ({ page }) => {
     const agentName = `Imported Plain ${Date.now()}`
-    const zipPath = buildAgentTemplateZip(
+    const zipPath = await buildAgentTemplateZip(
       path.join(tmpDir, 'plain.zip'),
       { name: agentName, withOnboardingSkill: false },
     )

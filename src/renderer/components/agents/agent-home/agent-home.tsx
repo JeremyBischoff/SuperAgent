@@ -23,8 +23,10 @@ import { HomeTriggers } from './home-triggers'
 import { HomeSkills } from './home-skills'
 import { HomeExtras } from './home-extras'
 import { HomeConnections } from './home-connections'
+import { HomeChatIntegrations } from './home-chat-integrations'
 import { HomeVolumes } from './home-volumes'
 import { HomeBookmarks } from './home-bookmarks'
+import { DashboardCard } from '@renderer/components/home/dashboard-card'
 import { useUpdateAgent, useDeleteAgent, type ApiAgent } from '@renderer/hooks/use-agents'
 import { AgentCreationAids, type ImportResult } from '@renderer/components/agents/agent-creation-aids'
 import { useStartOnboardingSession } from '@renderer/hooks/use-start-onboarding-session'
@@ -274,7 +276,7 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Initializing
+            Creating
           </div>
         </div>
       )}
@@ -515,6 +517,13 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
         {/* Right Column — Triggers + Connections + Skills + Volumes */}
         {showRightColumn && (
           <div className="space-y-3">
+            {(Array.isArray(agent.dashboards) ? agent.dashboards : []).map((d) => (
+              <DashboardCard
+                key={d.slug}
+                dashboard={d}
+                agentSlug={agent.slug}
+              />
+            ))}
             <HomeTriggers
               className="intro-step intro-step-4"
               agentSlug={agent.slug}
@@ -523,7 +532,19 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
               onSelectWebhook={(webhookId: string) => setView({ kind: 'webhook', id: webhookId })}
             />
             <HomeConnections className="intro-step intro-step-5" agentSlug={agent.slug} />
-            <HomeSkills className="intro-step intro-step-6" agentSlug={agent.slug} />
+            <HomeSkills className="intro-step intro-step-6" agentSlug={agent.slug} onRunSkill={(skillPath) => {
+              const text = `/${skillPath} `
+              composer.setMessage(text)
+              composerTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              setTimeout(() => {
+                const el = composerTextareaRef.current
+                if (el) {
+                  el.focus()
+                  el.selectionStart = el.selectionEnd = text.length
+                }
+              }, 0)
+            }} />
+            <HomeChatIntegrations agentSlug={agent.slug} />
             <HomeVolumes className="intro-step intro-step-7" agentSlug={agent.slug} />
             <HomeExtras className="intro-step intro-step-8" agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
           </div>

@@ -1,5 +1,5 @@
 
-import { Bell, ChevronDown, ChevronRight, Plus, Search, Settings, AlertTriangle, LayoutGrid, Loader2, SquareMousePointer, WifiOff, LogOut, User, Users } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, Plus, Search, Settings, AlertTriangle, LayoutGrid, Loader2, SquareMousePointer, WifiOff, LogOut, User, Users, Compass } from 'lucide-react'
 import { cn } from '@shared/lib/utils/cn'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { ErrorBoundary } from '@renderer/components/ui/error-boundary'
@@ -50,8 +50,9 @@ import { useArtifacts, type ArtifactInfo } from '@renderer/hooks/use-artifacts'
 import { useChatIntegrations, useChatIntegrationSessions, type ChatIntegration } from '@renderer/hooks/use-chat-integrations'
 import { formatProviderName } from '@shared/lib/chat-integrations/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useUser } from '@renderer/context/user-context'
-import { NotificationsPopoverContent } from '@renderer/components/notifications/notifications-popover'
+import { useUpdateStatus } from '@renderer/context/update-status-context'
 import { useUnreadNotificationCount } from '@renderer/hooks/use-notifications'
 import { useIsOnline } from '@renderer/context/connectivity-context'
 import {
@@ -73,6 +74,8 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { SortableAgentMenuItem } from './sortable-agent-item'
 import { applyAgentOrder } from '@renderer/lib/agent-ordering'
 import { useRenderTracker } from '@renderer/lib/perf'
+import { useDiscoverableAgents } from '@renderer/hooks/use-agent-templates'
+import { AgentTemplateBrowseDialog } from '@renderer/components/agents/agent-template-browse-dialog'
 
 // 4px-wide thin scrollbar with a muted-foreground/20 thumb. Reused on the
 // agents-list group; pull out as a constant so the call site stays readable.
@@ -658,28 +661,24 @@ if (__RENDER_TRACKING__) {
 function NotificationsMenuButton() {
   const { data: countData } = useUnreadNotificationCount()
   const unreadCount = countData?.count ?? 0
-  const [open, setOpen] = useState(false)
+  const { view, setView } = useSelection()
+  const isActive = view.kind === 'notifications'
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <SidebarMenuButton data-testid="notifications-button">
-          <Bell className="h-4 w-4" />
-          <span>Notifications</span>
-          {unreadCount > 0 && (
-            <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-500" aria-label={`${unreadCount} unread`} />
-          )}
-        </SidebarMenuButton>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-80 p-0"
-        align="start"
-        side="right"
-        sideOffset={8}
-      >
-        <NotificationsPopoverContent onNavigate={() => setOpen(false)} />
-      </PopoverContent>
-    </Popover>
+    <SidebarMenuButton
+      data-testid="notifications-button"
+      isActive={isActive}
+      onClick={() => setView({ kind: 'notifications' })}
+    >
+      <Bell className="h-4 w-4" />
+      <span>Notifications</span>
+      {unreadCount > 0 && (
+        <span
+          className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-500"
+          aria-label={`${unreadCount} unread`}
+        />
+      )}
+    </SidebarMenuButton>
   )
 }
 
@@ -744,6 +743,8 @@ export function AppSidebar() {
   useRenderTracker('AppSidebar')
   const { setSettingsOpen, openSettings } = useDialogs()
   const { createUntitledAgent, isPending: isCreatingAgent } = useCreateUntitledAgent()
+  const updateStatus = useUpdateStatus()
+  const updateAvailable = updateStatus.state === 'available' || updateStatus.state === 'downloaded'
 
   // Electron menu → New Agent
   useEffect(() => {
@@ -756,6 +757,9 @@ export function AppSidebar() {
   const { clearSelection, selectedAgentSlug } = useSelection()
   const { openSearch } = useSearch()
   const { data: agents, isLoading, error } = useAgents()
+  const { data: discoverableAgents } = useDiscoverableAgents()
+  const hasMarketplace = !!(discoverableAgents && discoverableAgents.length > 0)
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false)
   const { data: userSettings } = useUserSettings()
   const updateSettings = useUpdateUserSettings()
   const { data: runtimeStatus } = useRuntimeStatus()
@@ -818,7 +822,8 @@ export function AppSidebar() {
   const showHeaderBar = needsTrafficLightPadding
 
   return (
-    <Sidebar variant="inset" data-testid="app-sidebar">
+    <>
+      <Sidebar variant="inset" data-testid="app-sidebar">
       {/*
         Always rendered so height/border can transition smoothly when entering
         or leaving fullscreen on macOS. Collapses to 0 height (with no border)
@@ -848,12 +853,12 @@ export function AppSidebar() {
             */}
             <div
               className={cn(
-                'px-2 pb-4 text-base font-semibold select-none transition-[margin-top] duration-200 ease-out flex items-center gap-1',
+                'px-2 pb-2 text-base font-semibold select-none transition-[margin-top] duration-200 ease-out flex items-center gap-1',
                 isWindowsElectron && 'app-drag-region'
               )}
-              style={{ marginTop: showHeaderBar ? '-4px' : '12px' }}
+              style={{ marginTop: showHeaderBar ? '-8px' : '8px' }}
             >
-              SuperAgent
+              <span>SuperAgent</span>
               {isWindowsElectron && (
                 <button
                   className="app-no-drag p-0.5 rounded hover:bg-foreground/10 transition-colors cursor-default"
@@ -865,6 +870,25 @@ export function AppSidebar() {
                   <ChevronDown className="h-4 w-4 text-foreground/60" />
                 </button>
               )}
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={openSearch}
+                      aria-label="Search"
+                      className="app-no-drag ml-auto -mr-2 h-7 w-7 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/10 transition-colors"
+                      data-testid="search-button"
+                    >
+                      <Search className="h-4 w-4 -translate-y-[1px]" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="flex items-center gap-2">
+                    <span>Search</span>
+                    <span className="opacity-70">{getPlatform() === 'darwin' ? '⌘K' : 'Ctrl+K'}</span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
             {/* Status banners — render under the wordmark so they sit inside the
@@ -923,7 +947,7 @@ export function AppSidebar() {
 
             <ApiKeyWarning onOpenSettings={() => openSettings('llm')} />
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="gap-0.5 py-2">
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={clearSelection}
@@ -937,6 +961,17 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <NotificationsMenuButton />
                 </SidebarMenuItem>
+                {hasMarketplace && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      onClick={() => setMarketplaceOpen(true)}
+                      data-testid="marketplace-button"
+                    >
+                      <Compass className="h-4 w-4" />
+                      <span>Explore</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     onClick={() => { void createUntitledAgent() }}
@@ -947,20 +982,11 @@ export function AppSidebar() {
                     <span>New Agent</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    onClick={openSearch}
-                    data-testid="search-button"
-                  >
-                    <Search className="h-4 w-4" />
-                    <span>Search</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
           <SidebarGroup className={cn('flex-1 min-h-0 overflow-y-auto p-0', THIN_SCROLLBAR)}>
-            <SidebarGroupLabel className="mt-2 font-normal text-sidebar-foreground/50">Your Agents</SidebarGroupLabel>
+            <SidebarGroupLabel className="mt-0.5 font-normal text-sidebar-foreground/50">Your Agents</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu className="gap-1">
                 {isLoading ? (
@@ -1002,7 +1028,7 @@ export function AppSidebar() {
         </SidebarContent>
       </ErrorBoundary>
 
-      <SidebarFooter className="border-t p-0 px-2 pt-4">
+      <SidebarFooter className="border-t p-0 px-2 pt-1">
         <UserMenu />
         <div className="flex items-center justify-between gap-2">
           <SidebarMenuButton
@@ -1013,12 +1039,26 @@ export function AppSidebar() {
             <Settings className="h-4 w-4" />
             <span>Settings</span>
           </SidebarMenuButton>
-          <span className="px-2 text-xs text-muted-foreground shrink-0">v{__APP_VERSION__}</span>
+          <button
+            type="button"
+            onClick={() => openSettings('general')}
+            className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground shrink-0 hover:text-foreground"
+            title={updateAvailable ? `Update available: v${updateStatus.version}` : undefined}
+            data-testid="sidebar-version"
+          >
+            {updateAvailable && (
+              <span className="h-2 w-2 rounded-full bg-blue-500" aria-label="Update available" />
+            )}
+            <span>v{__APP_VERSION__}</span>
+          </button>
         </div>
       </SidebarFooter>
 
       <SidebarRail />
-    </Sidebar>
+      </Sidebar>
+
+      <AgentTemplateBrowseDialog open={marketplaceOpen} onOpenChange={setMarketplaceOpen} />
+    </>
   )
 }
 

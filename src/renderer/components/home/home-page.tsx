@@ -1,15 +1,13 @@
 
-import { useMemo, useState } from 'react'
-import { TemplateInstallDialog } from '@renderer/components/agents/template-install-dialog'
-import { TemplateCard } from '@renderer/components/agents/template-card'
+import { useMemo } from 'react'
 import { useAgents } from '@renderer/hooks/use-agents'
 import { useUserSettings } from '@renderer/hooks/use-user-settings'
 import { applyAgentOrder } from '@renderer/lib/agent-ordering'
-import { useDiscoverableAgents } from '@renderer/hooks/use-agent-templates'
 import { useUsageData } from '@renderer/hooks/use-usage'
 import { useSessions } from '@renderer/hooks/use-sessions'
 import { useSelection } from '@renderer/context/selection-context'
-import { AgentStatus, getAgentActivityStatus } from '@renderer/components/agents/agent-status'
+import { AgentStatus } from '@renderer/components/agents/agent-status'
+import { getAgentActivityStatus } from '@shared/lib/types/agent-activity-status'
 import { WorkingDots, AwaitingDot } from '@renderer/components/agents/status-indicators'
 import { AgentContextMenu } from '@renderer/components/agents/agent-context-menu'
 import { useCreateUntitledAgent } from '@renderer/hooks/use-create-untitled-agent'
@@ -17,18 +15,12 @@ import { SidebarTrigger } from '@renderer/components/ui/sidebar'
 import { Button } from '@renderer/components/ui/button'
 import { useSidebar } from '@renderer/components/ui/sidebar'
 import { useFullScreen } from '@renderer/hooks/use-fullscreen'
-import { useImagePalette } from '@renderer/hooks/use-image-palette'
-import {
-  pickDashboardSwatch,
-  buildGradient,
-  deriveForegroundColor,
-} from './dashboard-card-colors'
-import { isElectron, getPlatform, getApiBaseUrl } from '@renderer/lib/env'
+import { DashboardCard } from './dashboard-card'
+import { isElectron, getPlatform } from '@renderer/lib/env'
 import { Plus, Bot, Loader2, Clock, CalendarClock, SquareMousePointer, Search } from 'lucide-react'
 import { useSearch } from '@renderer/context/search-context'
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
-import type { ApiAgent, ApiAgentDashboard } from '@shared/lib/types/api'
-import type { ApiDiscoverableAgent } from '@shared/lib/types/api'
+import type { ApiAgent } from '@shared/lib/types/api'
 import type { DailyUsageEntry } from '@shared/lib/types/usage'
 import { useRenderTracker } from '@renderer/lib/perf'
 
@@ -249,10 +241,10 @@ function AgentCard({ agent, dailyUsage }: { agent: ApiAgent; dailyUsage?: DailyU
         const hasUnread = !session.isActive && !session.isAwaitingInput && session.hasUnreadNotifications
 
         const colors = isAwaiting
-          ? 'bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800'
+          ? 'bg-orange-50 border-orange-200 dark:bg-orange-900 dark:border-orange-800'
           : isWorking
-          ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800'
-          : 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800'
+          ? 'bg-green-50 border-green-200 dark:bg-green-900 dark:border-green-800'
+          : 'bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800'
 
         return (
           <div
@@ -288,7 +280,7 @@ function AgentCard({ agent, dailyUsage }: { agent: ApiAgent; dailyUsage?: DailyU
         >
           <button
             onClick={() => setAgent(agent.slug)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 pt-3 text-left text-xs border rounded-b-lg transition-colors hover:brightness-95 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800"
+            className="w-full flex items-center gap-2 px-3 py-1.5 pt-3 text-left text-xs border rounded-b-lg transition-colors hover:brightness-95 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800"
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
             <span className="font-medium">{collapsedUnreadCount} more notification{collapsedUnreadCount !== 1 ? 's' : ''}</span>
@@ -299,100 +291,21 @@ function AgentCard({ agent, dailyUsage }: { agent: ApiAgent; dailyUsage?: DailyU
   )
 }
 
-function DashboardCard({
-  dashboard,
-  agentSlug,
-}: {
-  dashboard: ApiAgentDashboard
-  agentSlug: string
-}) {
-  const { setAgent } = useSelection()
-
-  const handleClick = () => {
-    setAgent(agentSlug, { kind: 'dashboard', slug: dashboard.slug })
-  }
-
-  // Prefix with getApiBaseUrl() so the <img> resolves to the dynamic Electron
-  // API port (and to same-origin in web mode). Bare `/api/...` would resolve
-  // against the renderer's origin and 404.
-  const screenshotUrl = dashboard.hasScreenshot
-    ? `${getApiBaseUrl()}/api/agents/${encodeURIComponent(agentSlug)}/artifacts/${encodeURIComponent(dashboard.slug)}/screenshot.png`
-    : null
-
-  const { status: paletteStatus, palette } = useImagePalette(screenshotUrl)
-  const swatch = palette ? pickDashboardSwatch(palette) : null
-
-  // Hold off on rendering the overlay while we're still extracting colours —
-  // otherwise the first paint uses theme defaults and flashes when the palette
-  // resolves. Once we're ready (or failed), render with whatever we have.
-  const overlayReady = !screenshotUrl || paletteStatus !== 'loading'
-
-  return (
-    // Outer div holds the grid's layout slot at a fixed 96px — the button
-    // inside grows via absolute positioning on hover, overlaying rows below
-    // rather than pushing them. z-index sits on the outer div (not the
-    // animating button) with an asymmetric transition: it snaps to 20 on
-    // mouseenter but waits 420ms on mouseleave, so the card stays above
-    // sibling rows for the full duration of the shrink-back animation.
-    <div className="relative h-24 group z-0 hover:z-20 [transition:z-index_0s_420ms] hover:[transition:z-index_0s]">
-      <button
-        onClick={handleClick}
-        className="absolute inset-x-0 top-0 h-24 group-hover:h-40 group-hover:scale-x-[1.04] group-hover:shadow-lg rounded-lg border bg-card hover:border-accent-foreground/20 text-left overflow-hidden origin-top [transition:transform_150ms_ease-out,height_300ms_cubic-bezier(0.2,0.8,0.2,1)_120ms,box-shadow_250ms_ease-out,border-color_200ms_ease-out]"
-      >
-        {screenshotUrl ? (
-          <img
-            src={screenshotUrl}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover object-top"
-            loading="lazy"
-            draggable={false}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-muted/40">
-            <SquareMousePointer className="h-8 w-8 text-muted-foreground/50" />
-          </div>
-        )}
-        {overlayReady && (
-          <>
-            <div
-              className="absolute inset-0"
-              style={{ background: buildGradient(swatch) }}
-            />
-            <div
-              className="relative z-10 flex h-full flex-col justify-end p-3"
-              style={swatch ? { color: deriveForegroundColor(swatch) } : undefined}
-            >
-              <div className="flex items-center gap-1.5 min-w-0">
-                <SquareMousePointer className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                <span className="font-medium text-sm truncate">{dashboard.name}</span>
-              </div>
-            </div>
-          </>
-        )}
-      </button>
-    </div>
-  )
-}
-
 export function HomePage() {
   useRenderTracker('HomePage')
   const { data: agents, isLoading: agentsLoading } = useAgents()
   const { data: userSettings } = useUserSettings()
-  const { data: discoverableAgents } = useDiscoverableAgents()
   const { data: usageData } = useUsageData(7)
   const orderedAgents = useMemo(
     () => applyAgentOrder(agents ?? [], userSettings?.agentOrder),
     [agents, userSettings?.agentOrder]
   )
   const { createUntitledAgent, isPending: isCreatingAgent } = useCreateUntitledAgent()
-  const { setAgent } = useSelection()
-  const [templateToInstall, setTemplateToInstall] = useState<ApiDiscoverableAgent | null>(null)
   const { state: sidebarState } = useSidebar()
   const isFullScreen = useFullScreen()
   const needsTrafficLightPadding = isElectron() && getPlatform() === 'darwin' && sidebarState === 'collapsed' && !isFullScreen
 
   const hasAgents = orderedAgents.length > 0
-  const hasTemplates = discoverableAgents && discoverableAgents.length > 0
   const { openSearch } = useSearch()
   const isMac = getPlatform() === 'darwin'
 
@@ -444,7 +357,7 @@ export function HomePage() {
             ) : hasAgents ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {orderedAgents.flatMap((agent) => {
-                  const dashboards = agent.dashboards ?? []
+                  const dashboards = Array.isArray(agent.dashboards) ? agent.dashboards : []
                   const cells = [
                     <AgentCard key={agent.slug} agent={agent} dailyUsage={usageData?.daily} />,
                   ]
@@ -454,6 +367,7 @@ export function HomePage() {
                         key={`${agent.slug}::dashboard::${d.slug}`}
                         dashboard={d}
                         agentSlug={agent.slug}
+                        variant="overlay"
                       />
                     )
                   }
@@ -472,29 +386,8 @@ export function HomePage() {
             )}
           </section>
 
-          {/* Templates Section */}
-          {hasTemplates && (
-            <section>
-              <h2 className="text-lg font-semibold mb-4">Agent Templates</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                {discoverableAgents.map((template) => (
-                  <TemplateCard
-                    key={`${template.skillsetId}::${template.path}`}
-                    template={template}
-                    onClick={() => setTemplateToInstall(template)}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
         </div>
       </div>
-
-      <TemplateInstallDialog
-        template={templateToInstall}
-        onClose={() => setTemplateToInstall(null)}
-        onInstalled={(agent) => setAgent(agent.slug)}
-      />
     </div>
   )
 }

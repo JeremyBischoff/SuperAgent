@@ -38,6 +38,7 @@ export interface ApiAgent {
   dashboardNames?: string[]
   dashboardSlugs?: string[]
   dashboards?: ApiAgentDashboard[]
+  autoDeleteInactiveDays?: number
 }
 
 export interface ApiAgentDashboard {
@@ -273,10 +274,11 @@ export interface ApiSkillsetConfig {
   skillCount: number
   agentCount: number
   addedAt: string
-  provider?: 'github' | 'platform'
+  provider?: 'github' | 'platform' | 'public'
   badgeLabel?: string
   showUrl: boolean
-  publishMode: 'pull_request' | 'hosted_submit'
+  publishMode: 'pull_request' | 'hosted_submit' | 'none'
+  error?: string
 }
 
 // ============================================================================
@@ -301,6 +303,8 @@ export interface ApiScheduledTask {
   lastSessionId: string | null
   createdBySessionId: string | null
   timezone: string | null
+  model: string | null
+  effort: string | null
   createdAt: Date
   cancelledAt: Date | null
   pausedAt: Date | null
@@ -315,7 +319,7 @@ export interface ApiScheduledTask {
  */
 export interface ApiNotification {
   id: string
-  type: 'session_complete' | 'session_waiting' | 'session_scheduled'
+  type: 'session_complete' | 'session_waiting' | 'session_scheduled' | 'session_webhook' | 'session_chat_integration'
   sessionId: string
   agentSlug: string
   title: string

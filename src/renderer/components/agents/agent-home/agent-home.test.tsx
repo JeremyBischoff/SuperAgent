@@ -119,6 +119,10 @@ vi.mock('@renderer/hooks/use-message-composer', () => ({
   },
 }))
 
+vi.mock('@renderer/hooks/use-start-onboarding-session', () => ({
+  useStartOnboardingSession: () => vi.fn(),
+}))
+
 vi.mock('@renderer/hooks/use-humanized-cron', () => ({
   useHumanizedCron: () => null,
 }))
