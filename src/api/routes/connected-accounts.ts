@@ -15,6 +15,7 @@ import { isAuthMode } from '@shared/lib/auth/mode'
 import { getComposioUserId } from '@shared/lib/config/settings'
 import { Authenticated, OwnsAccount, IsAdmin, Or } from '../middleware/auth'
 import { trackServerEvent } from '@shared/lib/analytics/server-analytics'
+import { logAuditEvent } from '@shared/lib/services/audit-log-service'
 import { countActiveTriggersPerAccount } from '@shared/lib/services/webhook-trigger-service'
 
 const connectedAccountsRouter = new Hono()
@@ -83,6 +84,8 @@ connectedAccountsRouter.post('/', async (c) => {
       .from(connectedAccounts)
       .where(eq(connectedAccounts.id, id))
       .limit(1)
+
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'account', objectId: id, action: 'connected', details: { toolkitSlug, displayName } })
 
     return c.json({
       account: { ...created, provider: getProvider(toolkitSlug) },
@@ -218,6 +221,8 @@ connectedAccountsRouter.post('/complete', async (c) => {
 
     trackServerEvent('account_oauth_succeeded', { toolkitSlug })
 
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'account', objectId: id, action: 'connected', details: { toolkitSlug } })
+
     return c.json({
       success: true,
       account: {
@@ -292,6 +297,8 @@ connectedAccountsRouter.get('/callback', async (c) => {
     })
 
     trackServerEvent('account_oauth_succeeded', { toolkitSlug })
+
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'account', objectId: id, action: 'connected', details: { toolkitSlug } })
 
     return c.html(
       generateCallbackHtml({
@@ -425,6 +432,8 @@ connectedAccountsRouter.delete('/:id', Or(OwnsAccount(), IsAdmin()), async (c) =
     }
 
     await db.delete(connectedAccounts).where(eq(connectedAccounts.id, id))
+
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'account', objectId: id, action: 'disconnected', details: { toolkitSlug: existing.toolkitSlug } })
 
     return c.body(null, 204)
   } catch (error) {

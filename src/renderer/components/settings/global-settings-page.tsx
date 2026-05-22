@@ -1,4 +1,4 @@
-import { Settings, Container, Bell, Globe, Library, BarChart3, Plug, Brain, Users, Shield, ShieldEllipsis, User, Mic, Activity, Terminal, Waypoints } from 'lucide-react'
+import { Settings, Container, Bell, Globe, Library, BarChart3, Plug, Brain, Users, Shield, ShieldEllipsis, User, Mic, Activity, Terminal, Waypoints, ClipboardList } from 'lucide-react'
 import { SettingsPage, type SettingsPageSection, type SettingsPageSectionGroup } from '@renderer/components/settings/settings-page'
 import { ProfileTab } from './profile-tab'
 import { GeneralTab } from './general-tab'
@@ -18,6 +18,7 @@ import { VoiceTab } from './voice-tab'
 import { AnalyticsTab } from './analytics-tab'
 import { PlatformTab } from './platform-tab'
 import { ComputerUseTab } from './computer-use-tab'
+import { AuditLogTab } from './audit-log-tab'
 import { useUser } from '@renderer/context/user-context'
 import { isElectron } from '@renderer/lib/env'
 
@@ -51,6 +52,7 @@ export function GlobalSettingsPage({ onClose, onOpenWizard, initialSection }: Gl
     { id: 'voice', label: 'Voice', icon: <Mic className="h-4 w-4" />, render: () => <VoiceTab /> },
     { id: 'skillsets', label: 'Skillsets', icon: <Library className="h-4 w-4" />, render: () => <SkillsetsTab /> },
     ...(isAuthMode ? [{ id: 'analytics', label: 'Analytics', icon: <Activity className="h-4 w-4" />, render: () => <AnalyticsTab /> }] : []),
+    { id: 'audit-log', label: 'Audit Log', icon: <ClipboardList className="h-4 w-4" />, render: () => <AuditLogTab /> },
     { id: 'admin', label: 'Admin', icon: <Settings className="h-4 w-4" />, render: () => <AdminTab /> },
   ]
 

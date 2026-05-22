@@ -440,6 +440,23 @@ export const chatIntegrationSessions = sqliteTable('chat_integration_sessions', 
   integrationIdIdx: index('chat_integration_sessions_integration_id_idx').on(table.integrationId),
 }))
 
+// Audit log - tracks key user actions across the app
+export const auditLog = sqliteTable('audit_log', {
+  id: text('id').primaryKey(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' })
+    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+    .notNull(),
+  userId: text('user_id'),
+  object: text('object').notNull(),
+  objectId: text('object_id').notNull(),
+  action: text('action').notNull(),
+  details: text('details'), // JSON
+}, (table) => ({
+  createdAtIdx: index('audit_log_created_at_idx').on(table.createdAt),
+  objectIdx: index('audit_log_object_idx').on(table.object),
+  userIdIdx: index('audit_log_user_id_idx').on(table.userId),
+}))
+
 // Type exports for convenience
 export type ConnectedAccount = typeof connectedAccounts.$inferSelect
 export type NewConnectedAccount = typeof connectedAccounts.$inferInsert
@@ -479,3 +496,5 @@ export type ChatIntegration = typeof chatIntegrations.$inferSelect
 export type NewChatIntegration = typeof chatIntegrations.$inferInsert
 export type ChatIntegrationSession = typeof chatIntegrationSessions.$inferSelect
 export type NewChatIntegrationSession = typeof chatIntegrationSessions.$inferInsert
+export type AuditLogEntry = typeof auditLog.$inferSelect
+export type NewAuditLogEntry = typeof auditLog.$inferInsert

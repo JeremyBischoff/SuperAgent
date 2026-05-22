@@ -5,6 +5,8 @@ import type { BedrockLlmProvider } from '@shared/lib/llm-provider/bedrock-provid
 import { getDataDir, getAgentsDataDir } from '@shared/lib/config/data-dir'
 import { Authenticated, IsAdmin } from '../middleware/auth'
 import { isAuthMode } from '@shared/lib/auth/mode'
+import { getCurrentUserId } from '@shared/lib/auth/config'
+import { logAuditEvent } from '@shared/lib/services/audit-log-service'
 import {
   getSettings,
   updateSettings,
@@ -29,7 +31,7 @@ import { VALID_LIMA_VM_MEMORY_OPTIONS } from '@shared/lib/container/types'
 import { detectAllProviders } from '../../main/host-browser'
 import { revokePlatformToken } from '@shared/lib/services/platform-auth-service'
 import { db } from '@shared/lib/db'
-import { proxyAuditLog, proxyTokens, agentConnectedAccounts, scheduledTasks, notifications, connectedAccounts, userSettings } from '@shared/lib/db/schema'
+import { proxyAuditLog, proxyTokens, agentConnectedAccounts, scheduledTasks, notifications, connectedAccounts, userSettings, auditLog } from '@shared/lib/db/schema'
 import fs from 'fs'
 
 const settings = new Hono()
@@ -234,6 +236,7 @@ settings.put('/', async (c) => {
     }
 
     const runnerAvailability = await checkAllRunnersAvailability()
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'settings', objectId: 'global', action: 'updated' })
     return c.json(buildSettingsResponse(newSettings, hasRunningAgents, runnerAvailability))
   } catch (error) {
     console.error('Failed to update settings:', error)
@@ -512,6 +515,7 @@ settings.post('/factory-reset', async (c) => {
     db.delete(notifications).run()
     db.delete(connectedAccounts).run()
     db.delete(userSettings).run()
+    db.delete(auditLog).run()
 
     // Delete settings file (includes platform auth token)
     const settingsPath = path.join(getDataDir(), 'settings.json')
@@ -521,7 +525,6 @@ settings.post('/factory-reset', async (c) => {
     // Remove platform device identity so a fresh key is issued on next login
     const platformDeviceDir = path.join(getDataDir(), '.platform-auth')
     await fs.promises.rm(platformDeviceDir, { recursive: true, force: true })
-
     return c.json({ success: true })
   } catch (error) {
     console.error('Factory reset failed:', error)

@@ -17,6 +17,8 @@ import {
 import { listChatIntegrationSessions, archiveChatIntegrationSession, getChatIntegrationSessionById, deleteChatIntegrationSessionsByIntegration } from '@shared/lib/services/chat-integration-session-service'
 import { chatIntegrationManager } from '@shared/lib/chat-integrations/chat-integration-manager'
 import { validateChatIntegrationConfig, CHAT_PROVIDERS, IMESSAGE_GATEWAY_URL, imessageSetupSchema, type ChatProvider } from '@shared/lib/chat-integrations/config-schema'
+import { getCurrentUserId } from '@shared/lib/auth/config'
+import { logAuditEvent } from '@shared/lib/services/audit-log-service'
 import { Authenticated, AgentUser, EntityAgentRole } from '../middleware/auth'
 import { captureException } from '@shared/lib/error-reporting'
 
@@ -213,6 +215,7 @@ chatIntegrationsRouter.post('/:id', AgentUser(), async (c) => {
     }
 
     const integration = getChatIntegration(id)
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'chat_integration', objectId: id, action: 'created', details: { provider, agentSlug } })
     return c.json(integration, 201)
   } catch (error) {
     console.error('Failed to create chat integration:', error)
@@ -266,6 +269,7 @@ chatIntegrationsRouter.patch('/:integrationId', IntegrationAgentRole('user'), as
     }
 
     const updated = getChatIntegration(id)
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'chat_integration', objectId: id, action: 'updated' })
     return c.json(updated)
   } catch (error) {
     if (error instanceof DuplicateBotTokenError) {
@@ -300,6 +304,8 @@ chatIntegrationsRouter.delete('/:integrationId', IntegrationAgentRole('user'), a
     if (!deleted) {
       return c.json({ error: 'Chat integration not found' }, 404)
     }
+
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'chat_integration', objectId: id, action: 'deleted' })
 
     return c.body(null, 204)
   } catch (error) {

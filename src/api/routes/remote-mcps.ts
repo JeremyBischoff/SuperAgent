@@ -9,6 +9,7 @@ import { getAppBaseUrlFromRequest, getCurrentUserId } from '@shared/lib/auth/con
 import { isAuthMode } from '@shared/lib/auth/mode'
 import { Authenticated, UsersMcpServer, IsAdmin, Or } from '../middleware/auth'
 import { trackServerEvent } from '@shared/lib/analytics/server-analytics'
+import { logAuditEvent } from '@shared/lib/services/audit-log-service'
 import { validateHttpUrl, isPrivateHost, isLocalhostHost } from '@shared/lib/utils/url-safety'
 
 function safeParseTools(json: string | null): McpToolInfo[] {
@@ -246,6 +247,8 @@ remoteMcps.post('/', async (c) => {
     .from(remoteMcpServers)
     .where(eq(remoteMcpServers.id, id))
     .limit(1)
+
+  logAuditEvent({ userId: getCurrentUserId(c), object: 'mcp', objectId: id, action: 'created', details: { name: body.name.trim(), url: body.url.trim() } })
 
   return c.json({
     server: sanitizeServer(server),
@@ -490,6 +493,8 @@ remoteMcps.patch('/:id', Or(UsersMcpServer(), IsAdmin()), async (c) => {
     .where(eq(remoteMcpServers.id, id))
     .limit(1)
 
+  logAuditEvent({ userId: getCurrentUserId(c), object: 'mcp', objectId: id, action: 'updated' })
+
   return c.json({
     server: sanitizeServer(updated),
   })
@@ -510,6 +515,9 @@ remoteMcps.delete('/:id', Or(UsersMcpServer(), IsAdmin()), async (c) => {
   }
 
   await db.delete(remoteMcpServers).where(eq(remoteMcpServers.id, id))
+
+  logAuditEvent({ userId: getCurrentUserId(c), object: 'mcp', objectId: id, action: 'deleted', details: { name: existing.name } })
+
   return c.json({ success: true })
 })
 

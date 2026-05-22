@@ -25,6 +25,7 @@ import { getPolyfillJs } from './speech-recognition-polyfill'
 import { getLlmPolyfillJs } from './llm-polyfill'
 import { ANTHROPIC_SDK_BUNDLE } from './llm-sdk-bundle'
 import adminUsersRouter from './routes/admin-users'
+import auditLogRouter from './routes/audit-log'
 import debugRouter from './routes/debug'
 import platformAuth from './routes/platform-auth'
 import { initializeServices } from '@shared/lib/startup'
@@ -183,6 +184,7 @@ app.route('/api/user-settings', userSettingsRouter)
 app.route('/api/policies', policies)
 app.route('/api/runtime-status', runtimeStatusRouter)
 app.route('/api/admin/users', adminUsersRouter)
+app.route('/api/audit-log', auditLogRouter)
 app.route('/api/platform-auth', platformAuth)
 app.route('/api/stt', sttRouter)
 app.route('/api/llm', llmRouter)
