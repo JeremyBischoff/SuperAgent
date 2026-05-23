@@ -310,6 +310,12 @@ export class SessionPage {
     return { index: idx, total }
   }
 
+  async expectStackPagination(expected: { index: number; total: number }) {
+    const el = this.page.locator('[data-testid="request-stack-pagination"]:visible').first()
+    await expect(el).toHaveAttribute('data-current-index', String(expected.index))
+    await expect(el).toHaveAttribute('data-count', String(expected.total))
+  }
+
   /** Click the visible header "next" chevron in the pending-request stack. */
   async clickStackNext() {
     await this.page.locator('[data-testid="request-stack-next"]:visible').first().click()

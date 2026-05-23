@@ -49,7 +49,7 @@ function validateMcpServerUrl(url: string): URL {
   if (isPrivateHost(parsed.hostname)) {
     // in electron - allow localhost MCP servers since users may be running them locally, but still block other private addresses
     const isElectron = process.type === 'browser'
-    if (isElectron && isLocalhostHost(parsed.hostname)) {
+    if ((isElectron || process.env.E2E_MOCK) && isLocalhostHost(parsed.hostname)) {
       return parsed
     }
     throw new Error(`MCP server URL must not point to a private or loopback address: ${parsed.hostname}`)

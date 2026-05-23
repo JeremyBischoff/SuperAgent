@@ -59,12 +59,17 @@ test.describe('Getting Started Wizard', () => {
     await wizardPage.chooseManualSetup()
     await wizardPage.expectStep(0)
 
-    // Dismiss it for cleanup
+    // Dismiss it for cleanup (wait for each step to render before clicking)
     await wizardPage.clickNext()  // LLM -> Browser
+    await wizardPage.expectStep(1)
     await wizardPage.clickNext()  // Browser -> Composio
+    await wizardPage.expectStep(2)
     await wizardPage.clickSkip()  // Composio -> Runtime
+    await wizardPage.expectStep(3)
     await wizardPage.clickNext()  // Runtime -> Privacy
+    await wizardPage.expectStep(4)
     await wizardPage.clickNext()  // Privacy -> Agent
+    await wizardPage.expectStep(5)
     await wizardPage.clickSkip()  // Agent (skip = finish)
     await wizardPage.expectNotVisible()
   })
@@ -188,12 +193,17 @@ test.describe('Getting Started Wizard', () => {
     await wizardPage.expectVisible()
     await wizardPage.chooseManualSetup()
 
-    // Navigate through and finish
+    // Navigate through and finish (wait for each step to render)
     await wizardPage.clickNext()  // LLM -> Browser
+    await wizardPage.expectStep(1)
     await wizardPage.clickNext()  // Browser -> Composio
+    await wizardPage.expectStep(2)
     await wizardPage.clickSkip()  // Composio -> Runtime
+    await wizardPage.expectStep(3)
     await wizardPage.clickNext()  // Runtime -> Privacy
+    await wizardPage.expectStep(4)
     await wizardPage.clickNext()  // Privacy -> Agent
+    await wizardPage.expectStep(5)
     await wizardPage.clickSkip()  // Agent (skip = finish)
     await wizardPage.expectNotVisible()
 
@@ -244,9 +254,13 @@ test.describe('Getting Started Wizard', () => {
     // Don't click Chrome — the bug is that users rely on the auto-selection.
     // Just advance through the rest of the wizard.
     await wizardPage.clickNext()  // Browser -> Composio
+    await wizardPage.expectStep(2)
     await wizardPage.clickSkip()  // Composio -> Runtime
+    await wizardPage.expectStep(3)
     await wizardPage.clickNext()  // Runtime -> Privacy
+    await wizardPage.expectStep(4)
     await wizardPage.clickNext()  // Privacy -> Agent
+    await wizardPage.expectStep(5)
     await wizardPage.clickSkip()  // Agent -> finish
     await wizardPage.expectNotVisible()
 
@@ -276,12 +290,17 @@ test.describe('Getting Started Wizard', () => {
     await wizardPage.chooseManualSetup()
     await wizardPage.expectStep(0)
 
-    // Dismiss it
+    // Dismiss it (wait for each step to render)
     await wizardPage.clickNext()  // LLM -> Browser
+    await wizardPage.expectStep(1)
     await wizardPage.clickNext()  // Browser -> Composio
+    await wizardPage.expectStep(2)
     await wizardPage.clickSkip()  // Composio -> Runtime
+    await wizardPage.expectStep(3)
     await wizardPage.clickNext()  // Runtime -> Privacy
+    await wizardPage.expectStep(4)
     await wizardPage.clickNext()  // Privacy -> Agent
+    await wizardPage.expectStep(5)
     await wizardPage.clickSkip()  // Agent (skip = finish)
     await wizardPage.expectNotVisible()
   })

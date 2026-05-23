@@ -143,6 +143,11 @@ test.describe('Search palette', () => {
     // Sessions should be collapsed (not visible yet)
     await expect(results.getByText(sessionName)).not.toBeVisible()
 
+    // Hover over the agent to set keyboard focus to it (activeIndex).
+    // Other agents from parallel tests may be more recent, so the agent
+    // might not be at index 0.
+    await results.getByText(agentName).hover()
+
     // ArrowRight expands the agent's sessions
     await page.keyboard.press('ArrowRight')
     await expect(results.getByText(sessionName)).toBeVisible()

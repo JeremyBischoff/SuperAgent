@@ -135,16 +135,16 @@ test.describe('User Input Requests', () => {
 
     await sessionPage.clickStackNext()
     await expect(container).toContainText('Which cloud provider do you prefer?')
-    expect(await sessionPage.getStackPagination()).toEqual({ index: 1, total: 3 })
+    await sessionPage.expectStackPagination({ index: 1, total: 3 })
 
     await sessionPage.clickStackNext()
     await expect(container).toContainText('Preferred language?')
-    expect(await sessionPage.getStackPagination()).toEqual({ index: 2, total: 3 })
+    await sessionPage.expectStackPagination({ index: 2, total: 3 })
 
     // Walking back returns to the prior question with the chevron index in sync.
     await sessionPage.clickStackPrev()
     await expect(container).toContainText('Which cloud provider do you prefer?')
-    expect(await sessionPage.getStackPagination()).toEqual({ index: 1, total: 3 })
+    await sessionPage.expectStackPagination({ index: 1, total: 3 })
   })
 
   test('multi-question request: bottom Next button stays in sync with header chevrons', async ({ page }) => {

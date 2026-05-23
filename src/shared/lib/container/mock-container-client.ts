@@ -399,6 +399,15 @@ export class UserInputRequestScenario implements MockScenario {
     // resolve/reject calls from the API can find and decrement the count.
     client.registerPendingInputs(sessionId, this.tools.length)
 
+    // Write the user message entry immediately so the JSONL file exists on disk.
+    // The backend's getSession() checks fileExists(jsonlPath) and returns 404 if
+    // missing — without this, a fast deny/resolve can race the delayed write below.
+    client.writeJsonlEntry(sessionId, {
+      type: 'user',
+      message: { content: userMessage },
+      timestamp: new Date().toISOString(),
+    })
+
     // Start assistant message
     setTimeout(() => {
       client.emitStreamMessage(sessionId, {
@@ -468,19 +477,12 @@ export class UserInputRequestScenario implements MockScenario {
     }, delay)
     delay += 10
 
-    // Write JSONL entries (for message-based recovery on page refresh)
+    // Write assistant JSONL entry after streaming completes (user message was
+    // already written synchronously above so the file exists on disk).
     const capturedToolIds = [...toolIds]
     const capturedTools = [...this.tools]
     const finalDelay = delay
     setTimeout(() => {
-      // Write user message
-      client.writeJsonlEntry(sessionId, {
-        type: 'user',
-        message: { content: userMessage },
-        timestamp: new Date().toISOString(),
-      })
-
-      // Write assistant message with all tool use blocks
       client.writeJsonlEntry(sessionId, {
         type: 'assistant',
         message: {
