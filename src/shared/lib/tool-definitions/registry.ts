@@ -52,6 +52,11 @@ import {
   getAgentSessionsDef,
   getAgentSessionTranscriptDef,
 } from './x-agent-tools'
+import {
+  taskCreateDef,
+  taskUpdateDef,
+  taskListDef,
+} from './task-management'
 
 const definitions: Record<string, ToolDefinition> = {
   // Agent tools
@@ -72,6 +77,9 @@ const definitions: Record<string, ToolDefinition> = {
 
   // Task management
   TodoWrite: todoWriteDef,
+  TaskCreate: taskCreateDef,
+  TaskUpdate: taskUpdateDef,
+  TaskList: taskListDef,
 
   // User interaction
   AskUserQuestion: askUserQuestionDef,
