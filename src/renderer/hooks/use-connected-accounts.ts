@@ -88,7 +88,7 @@ export function useInitiateConnection() {
       })
 
       if (!res.ok) {
-        const error = await res.json()
+        const error = await res.json().catch(() => ({}))
         throw new Error(error.error || 'Failed to initiate connection')
       }
 
@@ -113,7 +113,7 @@ export function useDeleteConnectedAccount() {
       })
 
       if (!res.ok) {
-        const error = await res.json()
+        const error = await res.json().catch(() => ({}))
         throw new Error(error.error || 'Failed to delete account')
       }
     },
@@ -141,7 +141,7 @@ export function useRenameConnectedAccount() {
       })
 
       if (!res.ok) {
-        const error = await res.json()
+        const error = await res.json().catch(() => ({}))
         throw new Error(error.error || 'Failed to rename account')
       }
 

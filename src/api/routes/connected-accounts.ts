@@ -169,8 +169,9 @@ connectedAccountsRouter.post('/initiate', async (c) => {
     }
 
     // Never forward upstream 401s as our own — 401 is reserved for session auth
-    // and triggers auto-sign-out on the frontend.
-    const status = error.statusCode === 401 ? 502 : (error.statusCode || 500)
+    // and triggers auto-sign-out on the frontend. Use 424 (Failed Dependency)
+    // so reverse proxies like Cloudflare don't intercept the response.
+    const status = error.statusCode === 401 ? 424 : (error.statusCode || 500)
     return c.json(
       { error: error.message || 'Failed to initiate connection' },
       status
