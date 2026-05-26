@@ -1712,7 +1712,7 @@ class MessagePersister {
           return
         }
 
-        const composioConnectionId = account.composioConnectionId
+        const providerConnectionId = account.providerConnectionId
 
         // Validate trigger type against available triggers for this account
         const availableTriggers = await getAvailableTriggers(account.toolkitSlug)
@@ -1729,7 +1729,7 @@ class MessagePersister {
         // 1. Enable trigger on Composio via proxy (using Composio's ca_* ID)
         const composioTriggerId = await enableComposioTrigger(
           input.trigger_type,
-          composioConnectionId,
+          providerConnectionId,
           input.trigger_config,
         )
 

@@ -20,7 +20,8 @@ vi.mock('@renderer/hooks/use-connected-accounts', () => ({
           displayName: 'My GitHub Account',
           status: 'active',
           createdAt: new Date('2025-01-01').toISOString(),
-          composioConnectionId: 'conn-1',
+          providerConnectionId: 'conn-1',
+            providerName: 'composio',
           toolkitSlug: 'github',
         },
       ],
@@ -35,7 +36,7 @@ vi.mock('@renderer/hooks/use-connected-accounts', () => ({
   })),
 }))
 
-vi.mock('@shared/lib/composio/providers', () => ({
+vi.mock('@shared/lib/account-providers', () => ({
   getProvider: (slug: string) => ({
     slug,
     displayName: slug.charAt(0).toUpperCase() + slug.slice(1),
@@ -71,7 +72,8 @@ describe('ConnectedAccountRequestItem', () => {
             displayName: 'My GitHub Account',
             status: 'active',
             createdAt: new Date('2025-01-01').toISOString(),
-            composioConnectionId: 'conn-1',
+            providerConnectionId: 'conn-1',
+            providerName: 'composio',
             toolkitSlug: 'github',
           },
         ],
@@ -162,7 +164,8 @@ describe('ConnectedAccountRequestItem', () => {
             displayName: 'My GitHub Account',
             status: 'active',
             createdAt: new Date('2025-01-01').toISOString(),
-            composioConnectionId: 'conn-1',
+            providerConnectionId: 'conn-1',
+            providerName: 'composio',
             toolkitSlug: 'github',
           },
           {
@@ -170,7 +173,8 @@ describe('ConnectedAccountRequestItem', () => {
             displayName: 'Work GitHub Account',
             status: 'active',
             createdAt: new Date('2025-02-01').toISOString(),
-            composioConnectionId: 'conn-2',
+            providerConnectionId: 'conn-2',
+            providerName: 'composio',
             toolkitSlug: 'github',
           },
         ],

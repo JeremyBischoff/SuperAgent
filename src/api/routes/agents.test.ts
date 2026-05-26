@@ -232,7 +232,7 @@ vi.mock('@shared/lib/services/scheduled-task-service', () => ({
   listCancelledScheduledTasks: vi.fn(),
 }))
 
-vi.mock('@shared/lib/composio/providers', () => ({
+vi.mock('@shared/lib/account-providers', () => ({
   getProvider: vi.fn(),
 }))
 

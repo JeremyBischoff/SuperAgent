@@ -28,7 +28,7 @@ import {
   useRenameConnectedAccount,
   type ConnectedAccount,
 } from '@renderer/hooks/use-connected-accounts'
-import { getProvider } from '@shared/lib/composio/providers'
+import { getProvider } from '@shared/lib/account-providers/service-catalog'
 import { useAnalyticsTracking } from '@renderer/context/analytics-context'
 
 interface ConnectedAccountRequestItemProps {

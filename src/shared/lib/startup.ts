@@ -7,6 +7,7 @@ import { triggerManager } from './scheduler/trigger-manager'
 import { chatIntegrationManager } from './chat-integrations/chat-integration-manager'
 import { captureException } from './error-reporting'
 import { isPlatformComposioActive } from './composio/client'
+import { registerAllAccountProviders } from './account-providers/register'
 import { autoSleepMonitor } from './scheduler/auto-sleep-monitor'
 import { sessionAutoDeleteMonitor } from './scheduler/session-auto-delete-monitor'
 import { getActiveProvider, stopAllProviders } from '../../main/host-browser'
@@ -57,6 +58,9 @@ export async function initializeServices() {
 
   // Initialize server-side analytics version
   setServerAnalyticsVersion(APP_VERSION)
+
+  // Register account providers (Composio, Nango if configured)
+  registerAllAccountProviders()
 
   // Drop any skillset configs invalid for the current auth state (e.g. a
   // platform skillset left over from a previous org). Filesystem cleanup of

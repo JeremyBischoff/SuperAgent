@@ -2,17 +2,16 @@ import { Hono } from 'hono'
 import { db } from '@shared/lib/db'
 import { connectedAccounts, agentConnectedAccounts } from '@shared/lib/db/schema'
 import { desc, eq } from 'drizzle-orm'
-import { getProvider, isProviderSupported } from '@shared/lib/composio/providers'
 import {
-  getOrCreateAuthConfig,
-  initiateConnection,
-  getConnection,
-  deleteConnection,
-  getAccountDisplayName,
-} from '@shared/lib/composio/client'
+  getProvider,
+  isProviderSupported,
+  getDefaultAccountProvider,
+  getAccountProviderByName,
+  isValidProviderName,
+} from '@shared/lib/account-providers'
 import { getAppBaseUrlFromRequest, getCurrentUserId } from '@shared/lib/auth/config'
 import { isAuthMode } from '@shared/lib/auth/mode'
-import { getComposioUserId } from '@shared/lib/config/settings'
+import { getAccountProviderUserId } from '@shared/lib/config/settings'
 import { Authenticated, OwnsAccount, IsAdmin, Or } from '../middleware/auth'
 import { trackServerEvent } from '@shared/lib/analytics/server-analytics'
 import { logAuditEvent } from '@shared/lib/services/audit-log-service'
@@ -53,13 +52,13 @@ connectedAccountsRouter.get('/', async (c) => {
 connectedAccountsRouter.post('/', async (c) => {
   try {
     const body = await c.req.json()
-    const { composioConnectionId, toolkitSlug, displayName } = body
+    const { providerConnectionId, providerName, toolkitSlug, displayName } = body
 
-    if (!composioConnectionId || !toolkitSlug || !displayName) {
+    if (!providerConnectionId || !toolkitSlug || !displayName) {
       return c.json(
         {
           error:
-            'Missing required fields: composioConnectionId, toolkitSlug, displayName',
+            'Missing required fields: providerConnectionId, toolkitSlug, displayName',
         },
         400
       )
@@ -70,7 +69,8 @@ connectedAccountsRouter.post('/', async (c) => {
 
     await db.insert(connectedAccounts).values({
       id,
-      composioConnectionId,
+      providerConnectionId,
+      providerName: providerName ?? 'composio',
       toolkitSlug,
       displayName,
       userId: getCurrentUserId(c),
@@ -111,44 +111,41 @@ connectedAccountsRouter.post('/initiate', async (c) => {
       return c.json({ error: 'Missing required field: providerSlug' }, 400)
     }
 
-    if (!isProviderSupported(providerSlug)) {
+    const provider = getDefaultAccountProvider()
+
+    if (!isProviderSupported(providerSlug, provider.name)) {
       return c.json(
-        { error: `Provider '${providerSlug}' is not supported` },
+        { error: `Provider '${providerSlug}' is not supported by ${provider.name}` },
         400
       )
     }
-
-    const authConfig = await getOrCreateAuthConfig(providerSlug)
 
     // Build the callback URL
     // For Electron, use custom protocol; for web, use HTTP callback
     let callbackUrl: string
     if (electron) {
-      // Electron: use custom protocol that the app handles
       const protocol = process.env.SUPERAGENT_PROTOCOL || 'superagent'
-      callbackUrl = `${protocol}://oauth-callback?toolkit=${encodeURIComponent(providerSlug)}`
+      callbackUrl = `${protocol}://oauth-callback?toolkit=${encodeURIComponent(providerSlug)}&providerName=${encodeURIComponent(provider.name)}`
     } else {
-      // Web: use HTTP callback endpoint
       const origin = getAppBaseUrlFromRequest(c)
-      callbackUrl = `${origin}/api/connected-accounts/callback?toolkit=${encodeURIComponent(providerSlug)}`
+      callbackUrl = `${origin}/api/connected-accounts/callback?toolkit=${encodeURIComponent(providerSlug)}&providerName=${encodeURIComponent(provider.name)}`
     }
 
-    // Platform proxy injects user_id server-side, so it's only required
-    // for local API key users and auth-mode users.
-    const composioUserId = isAuthMode()
+    const userId = isAuthMode()
       ? getCurrentUserId(c)
-      : getComposioUserId()
+      : getAccountProviderUserId()
 
-    const { connectionId, redirectUrl } = await initiateConnection(
-      authConfig.id,
+    const { connectionId, redirectUrl } = await provider.initiateConnection(
+      providerSlug,
       callbackUrl,
-      composioUserId
+      userId
     )
 
     return c.json({
       connectionId,
       redirectUrl,
       providerSlug,
+      providerName: provider.name,
     })
   } catch (error: any) {
     console.error('Failed to initiate connection:', error)
@@ -162,7 +159,7 @@ connectedAccountsRouter.post('/initiate', async (c) => {
     if (isNoManagedAuth) {
       return c.json(
         {
-          error: `This provider requires custom OAuth credentials. Composio does not have managed credentials for it. Please set up your own app credentials in the Composio dashboard and configure a custom auth config for this provider.`,
+          error: `This provider requires custom OAuth credentials. The account provider does not have managed credentials for it.`,
         },
         400
       )
@@ -183,7 +180,7 @@ connectedAccountsRouter.post('/initiate', async (c) => {
 connectedAccountsRouter.post('/complete', async (c) => {
   try {
     const body = await c.req.json()
-    const { connectionId, toolkit } = body
+    const { connectionId, toolkit, providerName: reqProviderName } = body
 
     if (!connectionId) {
       return c.json({ error: 'Missing connectionId' }, 400)
@@ -193,25 +190,30 @@ connectedAccountsRouter.post('/complete', async (c) => {
       return c.json({ error: 'Missing toolkit' }, 400)
     }
 
-    const connection = await getConnection(connectionId)
+    const providerName = reqProviderName ?? 'composio'
+    if (!isValidProviderName(providerName)) {
+      return c.json({ error: `Unknown account provider: "${providerName}"` }, 400)
+    }
+    const accountProvider = getAccountProviderByName(providerName)
+    const toolkitSlug = toolkit.toLowerCase()
+
+    const connection = await accountProvider.getConnection(connectionId, toolkitSlug)
 
     if (connection.status !== 'ACTIVE') {
       return c.json({ error: `Connection status: ${connection.status}` }, 400)
     }
+    const serviceProvider = getProvider(toolkitSlug)
+    const fallbackName = serviceProvider?.displayName || toolkit
 
-    const toolkitSlug = toolkit.toLowerCase()
-    const provider = getProvider(toolkitSlug)
-    const fallbackName = provider?.displayName || toolkit
-
-    // Try to get user-specific display name (e.g., email for Gmail)
-    const displayName = await getAccountDisplayName(connectionId, toolkitSlug, fallbackName)
+    const displayName = await accountProvider.getAccountDisplayName(connectionId, toolkitSlug, fallbackName)
 
     const id = crypto.randomUUID()
     const now = new Date()
 
     await db.insert(connectedAccounts).values({
       id,
-      composioConnectionId: connectionId,
+      providerConnectionId: connectionId,
+      providerName,
       toolkitSlug,
       displayName,
       userId: getCurrentUserId(c),
@@ -228,7 +230,8 @@ connectedAccountsRouter.post('/complete', async (c) => {
       success: true,
       account: {
         id,
-        composioConnectionId: connectionId,
+        providerConnectionId: connectionId,
+        providerName,
         toolkitSlug,
         displayName,
         status: 'active',
@@ -248,11 +251,18 @@ connectedAccountsRouter.post('/complete', async (c) => {
 // GET /api/connected-accounts/callback - OAuth callback handler (for web)
 connectedAccountsRouter.get('/callback', async (c) => {
   try {
-    // Composio's /link flow may use either casing — accept both.
+    // Provider callback may use either casing — accept both.
     const connectionId =
       c.req.query('connectedAccountId') || c.req.query('connected_account_id')
     const status = c.req.query('status')
     const toolkit = c.req.query('toolkit')
+    const providerName = c.req.query('providerName') ?? 'composio'
+
+    if (!isValidProviderName(providerName)) {
+      return c.html(
+        generateCallbackHtml({ success: false, error: `Unknown account provider: "${providerName}"` })
+      )
+    }
 
     if (status === 'failed' || !connectionId) {
       const error = c.req.query('error') || 'OAuth flow failed'
@@ -265,7 +275,9 @@ connectedAccountsRouter.get('/callback', async (c) => {
       )
     }
 
-    const connection = await getConnection(connectionId)
+    const accountProvider = getAccountProviderByName(providerName)
+    const toolkitSlug = toolkit.toLowerCase()
+    const connection = await accountProvider.getConnection(connectionId, toolkitSlug)
 
     if (connection.status !== 'ACTIVE') {
       return c.html(
@@ -275,20 +287,18 @@ connectedAccountsRouter.get('/callback', async (c) => {
         })
       )
     }
+    const serviceProvider = getProvider(toolkitSlug)
+    const fallbackName = serviceProvider?.displayName || toolkit
 
-    const toolkitSlug = toolkit.toLowerCase()
-    const provider = getProvider(toolkitSlug)
-    const fallbackName = provider?.displayName || toolkit
-
-    // Try to get user-specific display name (e.g., email for Gmail)
-    const displayName = await getAccountDisplayName(connectionId, toolkitSlug, fallbackName)
+    const displayName = await accountProvider.getAccountDisplayName(connectionId, toolkitSlug, fallbackName)
 
     const id = crypto.randomUUID()
     const now = new Date()
 
     await db.insert(connectedAccounts).values({
       id,
-      composioConnectionId: connectionId,
+      providerConnectionId: connectionId,
+      providerName,
       toolkitSlug,
       displayName,
       userId: getCurrentUserId(c),
@@ -427,9 +437,10 @@ connectedAccountsRouter.delete('/:id', Or(OwnsAccount(), IsAdmin()), async (c) =
     }
 
     try {
-      await deleteConnection(existing.composioConnectionId)
+      const accountProvider = getAccountProviderByName(existing.providerName)
+      await accountProvider.deleteConnection(existing.providerConnectionId, existing.toolkitSlug)
     } catch (error) {
-      console.warn('Failed to delete connection from Composio:', error)
+      console.warn('Failed to delete connection from provider:', error)
     }
 
     await db.delete(connectedAccounts).where(eq(connectedAccounts.id, id))

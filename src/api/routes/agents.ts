@@ -56,7 +56,7 @@ import { connectedAccounts, agentConnectedAccounts, proxyAuditLog, remoteMcpServ
 import { eq, and, inArray, desc, count, like, or } from 'drizzle-orm'
 import { isAuthMode } from '@shared/lib/auth/mode'
 import { getCurrentUserId } from '@shared/lib/auth/config'
-import { getProvider } from '@shared/lib/composio/providers'
+import { getProvider } from '@shared/lib/account-providers'
 // getAgentSkills is superseded by getAgentSkillsWithStatus from skillset-service
 // import { getAgentSkills } from '@shared/lib/skills'
 import {

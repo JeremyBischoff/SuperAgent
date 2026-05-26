@@ -7,7 +7,8 @@ import type { RemoteMcpServer } from '@renderer/hooks/use-remote-mcps'
 function account(overrides: Partial<ConnectedAccount> = {}): ConnectedAccount {
   return {
     id: 'a1',
-    composioConnectionId: 'comp-1',
+    providerConnectionId: 'comp-1',
+    providerName: 'composio',
     toolkitSlug: 'slack',
     displayName: 'Slack',
     status: 'active',

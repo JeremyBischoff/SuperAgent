@@ -90,7 +90,7 @@ vi.mock('@shared/lib/db', () => ({
   },
 }))
 vi.mock('@shared/lib/db/schema', () => ({
-  connectedAccounts: { id: 'id', composioConnectionId: 'composio_connection_id', toolkitSlug: 'toolkit_slug' },
+  connectedAccounts: { id: 'id', providerConnectionId: 'provider_connection_id', providerName: 'provider_name', toolkitSlug: 'toolkit_slug' },
 }))
 
 // Mock container-manager (used by resolveContainerInput / rejectContainerInput)
@@ -2534,7 +2534,7 @@ describe('MessagePersister', () => {
     }
 
     // Helper to set up the db.select() mock chain for connected account lookups
-    function mockDbSelectAccount(account: { id: string; composioConnectionId: string; toolkitSlug: string } | null) {
+    function mockDbSelectAccount(account: { id: string; providerConnectionId: string; providerName: string; toolkitSlug: string } | null) {
       const result = account ? [account] : []
       mockDbSelect.mockReturnValue({
         from: () => ({
@@ -2570,7 +2570,7 @@ describe('MessagePersister', () => {
         { slug: 'GMAIL_NEW_EMAIL', name: 'New Email', description: 'Fires on new email', type: 'webhook' },
         { slug: 'SLACK_NEW_MESSAGE', name: 'New Message', description: 'Fires on new Slack message', type: 'webhook' },
       ])
-      mockDbSelectAccount({ id: 'ca_1', composioConnectionId: 'composio_ca_1', toolkitSlug: 'gmail' })
+      mockDbSelectAccount({ id: 'ca_1', providerConnectionId: 'composio_ca_1', providerName: 'composio', toolkitSlug: 'gmail' })
     })
 
     describe('setup_trigger', () => {

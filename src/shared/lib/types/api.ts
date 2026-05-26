@@ -347,7 +347,8 @@ export interface ApiProvider {
  */
 export interface ApiConnectedAccount {
   id: string
-  composioConnectionId: string
+  providerConnectionId: string
+  providerName: string
   toolkitSlug: string
   displayName: string
   status: 'active' | 'revoked' | 'expired'

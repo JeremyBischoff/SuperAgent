@@ -10,7 +10,7 @@ import { ConnectionRow } from '@renderer/components/connections/connection-row'
 import { ScopePolicyEditor } from '@renderer/components/settings/scope-policy-editor'
 import { ToolPolicyEditor } from '@renderer/components/settings/tool-policy-editor'
 import { ConnectionSuccessHeader } from '@renderer/components/connections/connection-success-header'
-import { getProvider } from '@shared/lib/composio/providers'
+import { getProvider } from '@shared/lib/account-providers/service-catalog'
 import {
   useConnectedAccounts,
   useAgentConnectedAccounts,

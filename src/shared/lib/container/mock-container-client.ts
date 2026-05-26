@@ -31,7 +31,8 @@ async function seedMockConnectedAccount(): Promise<void> {
   const now = new Date()
   await db.insert(connectedAccounts).values({
     id: MOCK_ACCOUNT_ID,
-    composioConnectionId: MOCK_ACCOUNT_ID,
+    providerConnectionId: MOCK_ACCOUNT_ID,
+    providerName: 'composio',
     toolkitSlug: 'slack',
     displayName: 'Mock Account',
     status: 'active',
