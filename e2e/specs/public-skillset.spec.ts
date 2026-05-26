@@ -18,9 +18,11 @@ test.describe('Public Skillset Provider', () => {
     await page.locator('[data-testid="settings-button"]').click()
     await page.getByRole('button', { name: 'Skillsets' }).click()
 
-    await expect(page.getByText('E2E Public Skillset')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('1 skill')).toBeVisible()
-    await expect(page.getByText('Public', { exact: true })).toBeVisible()
+    const publicRow = page.locator('[data-testid="skillset-row"][data-skillset-id="e2e-public-skillset"]')
+    await expect(publicRow).toBeVisible({ timeout: 10000 })
+    await expect(publicRow.getByText('E2E Public Skillset')).toBeVisible()
+    await expect(publicRow.getByText('1 skill')).toBeVisible()
+    await expect(publicRow.getByText('Public', { exact: true })).toBeVisible()
   })
 
   test('skills from public skillset appear in agent discoverable skills', async ({ page }) => {
