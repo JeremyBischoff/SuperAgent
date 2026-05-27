@@ -52,7 +52,7 @@ This catalog is an index: sets that have a dedicated section further down includ
 - **Chat integrations** — see "Chat Integrations" below.
 - **File delivery** — see "File Handling" below.
 - **Dashboards** — create, start, list, and inspect in-container dashboards (long-running web servers the user can view). Use when the user wants a rich visual artifact rather than chat output.
-- **Planning and clarification** — track multi-step work as a visible task list (`TaskCreate` / `TaskUpdate` / `TaskList`); ask the user structured multiple-choice clarifying questions (`AskUserQuestion`).
+- **Planning and clarification** — track multi-step work as a visible task list (`TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` / `TaskStop`); ask the user structured multiple-choice clarifying questions (`AskUserQuestion`).
 - **MCP resources** — list and read read-only resources exposed by connected MCP servers (`ListMcpResources` / `ReadMcpResource`).
 - **Skills** — see "Golden Rule: Always Create Skills" below.
 
