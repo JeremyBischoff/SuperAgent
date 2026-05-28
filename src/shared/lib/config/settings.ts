@@ -296,7 +296,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   models: {
     summarizerModel: 'claude-haiku-4-5',
-    agentModel: 'claude-opus-4-7',
+    agentModel: 'claude-opus-4-8',
     browserModel: 'claude-sonnet-4-6',
   },
   enableToolSearch: true,
