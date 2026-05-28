@@ -30,19 +30,16 @@ interface SettingRowProps {
   name: string
   subtitle: ReactNode
   right: ReactNode
+  htmlFor?: string
 }
 
-/**
- * One row inside a settings card — name + supporting line on the left, control
- * on the right. Mirrors the agent-level connections list aesthetic, minus the
- * leading service icon.
- */
-function SettingRow({ name, subtitle, right }: SettingRowProps) {
+function SettingRow({ name, subtitle, right, htmlFor }: SettingRowProps) {
+  const Name = htmlFor ? 'label' : 'div'
   return (
     <div className="py-3 px-4">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium truncate">{name}</div>
+          <Name htmlFor={htmlFor} className="text-xs font-medium truncate block cursor-default">{name}</Name>
           <div className="text-[11px] text-muted-foreground mt-0.5">{subtitle}</div>
         </div>
         <div className="flex items-center gap-2 shrink-0">{right}</div>
@@ -66,7 +63,7 @@ function KeepAwakeRow({ enabled, onToggle, disabled }: KeepAwakeRowProps) {
     <div className="py-3 px-4">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium truncate">Keep Awake</div>
+          <label htmlFor="keep-awake" className="text-xs font-medium truncate block cursor-default">Keep Awake</label>
           <div className="text-[11px] text-muted-foreground mt-0.5">
             Prevent your Mac from sleeping with the lid closed. Requires administrator access.
           </div>
@@ -192,7 +189,8 @@ export function GeneralTab({ onOpenWizard }: GeneralTabProps) {
           {isElectronApp && (
             <SettingRow
               name="Show in Menu Bar"
-              subtitle="Display agent status icon in the macOS menu bar"
+              subtitle={`Display agent status icon in the ${isMacElectron ? 'menu bar' : 'system tray'}`}
+              htmlFor="show-menu-bar-icon"
               right={
                 <Switch
                   id="show-menu-bar-icon"
@@ -223,6 +221,7 @@ export function GeneralTab({ onOpenWizard }: GeneralTabProps) {
             <SettingRow
               name="Share Error Reports"
               subtitle="Send error reports to help us diagnose and fix issues faster"
+              htmlFor="share-error-reports"
               right={
                 <Switch
                   id="share-error-reports"
@@ -237,6 +236,7 @@ export function GeneralTab({ onOpenWizard }: GeneralTabProps) {
             <SettingRow
               name="Share Anonymous Analytics"
               subtitle="Help improve Superagent by sharing anonymous usage data"
+              htmlFor="share-analytics"
               right={
                 <Switch
                   id="share-analytics"
@@ -347,6 +347,7 @@ function UpdatesCard() {
       <SettingRow
         name="Automatically check for updates"
         subtitle="Check on startup and periodically while the app is running"
+        htmlFor="auto-check-updates"
         right={
           <Switch
             id="auto-check-updates"
@@ -360,6 +361,7 @@ function UpdatesCard() {
       <SettingRow
         name="Include pre-release versions"
         subtitle="Get early access to release candidates and beta versions"
+        htmlFor="prerelease-updates"
         right={
           <Switch
             id="prerelease-updates"
