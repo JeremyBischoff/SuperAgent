@@ -123,7 +123,7 @@ export class KubernetesContainerClient extends BaseContainerClient {
     return `http://${this.serviceName()}.${namespace}.svc.cluster.local:${port}`
   }
 
-  protected getWebSocketBaseUrl(port: number): string {
+  public getWebSocketBaseUrl(port: number): string {
     const { namespace } = getKubeConfig()
     return `ws://${this.serviceName()}.${namespace}.svc.cluster.local:${port}`
   }

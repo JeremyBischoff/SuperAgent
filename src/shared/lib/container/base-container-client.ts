@@ -716,7 +716,12 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
     return `http://127.0.0.1:${port}`
   }
 
-  protected getWebSocketBaseUrl(port: number): string {
+  /**
+   * WebSocket origin for the container (no trailing slash). Subclasses override
+   * to route through cluster DNS, port-forwards, etc. Public so callers like
+   * the browser stream proxy can avoid hardcoding localhost.
+   */
+  public getWebSocketBaseUrl(port: number): string {
     return `ws://127.0.0.1:${port}`
   }
 
