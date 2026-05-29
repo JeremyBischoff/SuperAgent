@@ -2,7 +2,7 @@ name: Build and Push App Container
 
 on:
   push:
-    branches: [main]
+    branches: [main, exp/remote_runtime]
 
 env:
   REGISTRY: ghcr.io
