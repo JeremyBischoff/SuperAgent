@@ -38,6 +38,10 @@ EXPOSE 47891
 
 ENV NODE_ENV=production
 
+# Run as the prebuilt `node` user (uid 1000) so cloud Kubernetes pods can
+# enforce runAsNonRoot. fsGroup 1000 on the pod gives PVC access.
+USER node
+
 # umask 000: all files/dirs are world-readable/writable so agent containers
 # (running as non-root "claude" user) can access bind-mounted workspaces.
 CMD ["sh", "-c", "umask 000 && exec node dist/web/server.mjs"]
