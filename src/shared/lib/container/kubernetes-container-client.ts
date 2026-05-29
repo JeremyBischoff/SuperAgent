@@ -87,6 +87,7 @@ export class KubernetesContainerClient extends BaseContainerClient {
   }
 
   async stop(_options?: StopOptions): Promise<{ forceStopUsed: boolean }> {
+    this.terminateWebSocketConnections()
     const { namespace } = getKubeConfig()
     await deleteResource(`/api/v1/namespaces/${namespace}/pods/${this.podName()}`)
     await deleteResource(`/api/v1/namespaces/${namespace}/services/${this.serviceName()}`)
@@ -94,7 +95,9 @@ export class KubernetesContainerClient extends BaseContainerClient {
   }
 
   stopSync(): void {
-    // The in-cluster Kubernetes API is async-only; process shutdown cleanup is best-effort elsewhere.
+    // Pod/service teardown uses the async-only in-cluster API; on sync shutdown we can still
+    // tear down the WS connections so they don't linger after the host-app process exits.
+    this.terminateWebSocketConnections()
   }
 
   async getInfoFromRuntime(): Promise<ContainerInfo> {

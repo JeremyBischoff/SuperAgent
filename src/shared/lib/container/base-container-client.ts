@@ -546,23 +546,27 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
     }
   }
 
+  // Terminate all WebSocket connections immediately (no graceful close handshake)
+  // to avoid ECONNRESET when the container/pod is torn down. Safe to call from any runtime.
+  protected terminateWebSocketConnections(): void {
+    for (const ws of this.wsConnections.values()) {
+      ws.removeAllListeners()
+      try {
+        ws.terminate()
+      } catch {
+        // ws.terminate() throws if the socket is still in CONNECTING state
+      }
+    }
+    this.wsConnections.clear()
+  }
+
   async stop(options?: StopOptions): Promise<{ forceStopUsed: boolean }> {
     let forceStopUsed = false
     const stopTimeoutMs = options?.stopTimeoutMs ?? 10_000
     const killTimeoutMs = options?.killTimeoutMs ?? 5_000
 
     try {
-      // Terminate all WebSocket connections immediately (no graceful close handshake)
-      // to avoid ECONNRESET errors when the container is stopped
-      for (const ws of this.wsConnections.values()) {
-        ws.removeAllListeners()
-        try {
-          ws.terminate()
-        } catch {
-          // ws.terminate() throws if the socket is still in CONNECTING state
-        }
-      }
-      this.wsConnections.clear()
+      this.terminateWebSocketConnections()
 
       // Stop and remove container by name, with escalation if the container is unresponsive.
       // 1. Try graceful stop with 5s SIGTERM grace period (enough for clean Node.js shutdown)
@@ -620,17 +624,7 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
 
   stopSync(): void {
     try {
-      // Terminate all WebSocket connections immediately (no graceful close handshake)
-      // to avoid ECONNRESET errors when the container is stopped
-      for (const ws of this.wsConnections.values()) {
-        ws.removeAllListeners()
-        try {
-          ws.terminate()
-        } catch {
-          // ws.terminate() throws if the socket is still in CONNECTING state
-        }
-      }
-      this.wsConnections.clear()
+      this.terminateWebSocketConnections()
 
       // Stop and remove container by name synchronously, with escalation.
       // Use 5s grace period so process can shut down cleanly before SIGKILL.
