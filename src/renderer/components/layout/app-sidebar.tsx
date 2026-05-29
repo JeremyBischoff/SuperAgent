@@ -454,7 +454,6 @@ function AgentRowIndicator({
   return (
     <AgentStatus
       status={agent.status}
-      runtime={agent.runtime}
       hasActiveSessions={isWorking}
       hasSessionsAwaitingInput={isAwaiting}
       iconOnly

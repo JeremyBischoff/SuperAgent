@@ -13,7 +13,6 @@ const statusLabels: Record<AgentActivityStatus, string> = {
 
 interface AgentStatusProps {
   status: ContainerStatus
-  runtime?: 'local' | 'cloud'
   hasActiveSessions?: boolean
   hasSessionsAwaitingInput?: boolean
   size?: 'sm' | 'default'
@@ -22,10 +21,9 @@ interface AgentStatusProps {
   className?: string
 }
 
-export function AgentStatus({ status, runtime = 'local', hasActiveSessions = false, hasSessionsAwaitingInput = false, size = 'default', iconOnly = false, workingDotClassName, className }: AgentStatusProps) {
+export function AgentStatus({ status, hasActiveSessions = false, hasSessionsAwaitingInput = false, size = 'default', iconOnly = false, workingDotClassName, className }: AgentStatusProps) {
   const activityStatus = getAgentActivityStatus(status, hasActiveSessions, hasSessionsAwaitingInput)
   const isSmall = size === 'sm'
-  const label = `${runtime === 'cloud' ? 'Cloud' : 'Local'} ${statusLabels[activityStatus]}`
 
   return (
     <div
@@ -37,9 +35,8 @@ export function AgentStatus({ status, runtime = 'local', hasActiveSessions = fal
       role={iconOnly ? 'img' : undefined}
       data-testid="agent-status"
       data-status={activityStatus}
-      data-runtime={runtime}
-      aria-label={iconOnly ? label : undefined}
-      title={iconOnly ? label : undefined}
+      aria-label={iconOnly ? statusLabels[activityStatus] : undefined}
+      title={iconOnly ? statusLabels[activityStatus] : undefined}
     >
       {activityStatus === 'sleeping' ? (
         <Moon className="h-2.5 w-2.5 text-muted-foreground/70" />
@@ -58,7 +55,7 @@ export function AgentStatus({ status, runtime = 'local', hasActiveSessions = fal
             'text-orange-500': activityStatus === 'awaiting_input',
           })}
         >
-          {label}
+          {statusLabels[activityStatus]}
         </span>
       )}
     </div>
