@@ -22,6 +22,7 @@ import {
   getPlatformAuthStatus,
   initEnvManagedPlatformStatus,
   savePlatformAuth,
+  refreshStoredPlatformAccount,
   revokePlatformToken,
   verifyPlatformOrgAccessTokenSigned,
 } from './platform-auth-service'
@@ -336,13 +337,83 @@ describe('platform-auth-service', () => {
     await expect(
       savePlatformAuth('local', { token: 'plat_bad_token_000000000000000000000000' }),
     ).rejects.toMatchObject({
-      name: 'PlatformTokenValidationError',
+      name: 'PlatformRequestError',
       status: 400,
       message: 'This access key is invalid or has been revoked.',
     })
 
     // Nothing should have been persisted for a rejected key.
     expect(getPlatformAuthStatus('local').connected).toBe(false)
+  })
+
+  it('refreshStoredPlatformAccount updates the record when identity changed', async () => {
+    // Seed a record with metadata (orgId present → no introspection on save).
+    await savePlatformAuth('local', {
+      token: 'plat_superagent_token_1234567890abcdef',
+      email: 'old@example.com',
+      orgId: 'org_old',
+      orgName: 'Old Org',
+      role: 'member',
+      userId: 'user_old',
+      memberId: 'sub_old',
+    })
+
+    process.env.PLATFORM_PROXY_URL = 'http://proxy.test'
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          memberId: 'sub_new',
+          orgId: 'org_new',
+          orgName: 'New Org',
+          role: 'admin',
+          userId: 'user_new',
+          email: 'new@example.com',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const updated = await refreshStoredPlatformAccount()
+    expect(updated).toBe(true)
+    expect(getPlatformAuthStatus('local')).toMatchObject({
+      email: 'new@example.com',
+      orgId: 'org_new',
+      role: 'admin',
+      userId: 'user_new',
+      memberId: 'sub_new',
+    })
+  })
+
+  it('refreshStoredPlatformAccount is a no-op when identity is unchanged', async () => {
+    await savePlatformAuth('local', {
+      token: 'plat_superagent_token_1234567890abcdef',
+      email: 'same@example.com',
+      orgId: 'org_same',
+      orgName: 'Same Org',
+      role: 'member',
+      userId: 'user_same',
+      memberId: 'sub_same',
+    })
+    const before = getPlatformAuthStatus('local').updatedAt
+
+    process.env.PLATFORM_PROXY_URL = 'http://proxy.test'
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          memberId: 'sub_same',
+          orgId: 'org_same',
+          orgName: 'Same Org',
+          role: 'member',
+          userId: 'user_same',
+          email: 'same@example.com',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const updated = await refreshStoredPlatformAccount()
+    expect(updated).toBe(false)
+    expect(getPlatformAuthStatus('local').updatedAt).toBe(before) // record not rewritten
   })
 
   // Helpers for the org-switch / lifecycle tests below.

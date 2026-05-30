@@ -2,6 +2,7 @@ import { errors as joseErrors } from 'jose'
 
 import { getSettings, updateSettings, type PlatformAuthSettings } from '@shared/lib/config/settings'
 import { getPlatformProxyBaseUrl } from '@shared/lib/platform-auth/config'
+import { fetchPlatformJson } from '@shared/lib/platform-auth/platform-fetch'
 import { PlatformAuthSettingsSchema, PlatformAccountInfoSchema } from '@shared/lib/types/skillset-schema'
 import { captureException } from '@shared/lib/error-reporting'
 import { isAuthMode } from '@shared/lib/auth/mode'
@@ -90,59 +91,23 @@ interface SavePlatformAuthInput {
 }
 
 /**
- * Raised when a token can't be validated against the platform. `status` is the
- * HTTP status the API route should surface (400 = bad/revoked key, 5xx =
- * transient). `message` is user-facing.
- */
-export class PlatformTokenValidationError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message)
-    this.name = 'PlatformTokenValidationError'
-  }
-}
-
-/**
  * Validate a personal access key against the platform proxy and return its
  * account identity. Used for manually-pasted keys (the OAuth flow already
- * carries this metadata in the redirect). Throws PlatformTokenValidationError
- * on an invalid/revoked key or an unreachable platform.
+ * carries this metadata in the redirect). Throws {@link PlatformRequestError}
+ * (status 400) on an invalid/revoked key or (5xx) an unreachable platform.
  */
 async function fetchPlatformAccountInfo(token: string) {
-  const proxyBase = getPlatformProxyBaseUrl()
-  if (!proxyBase) {
-    throw new PlatformTokenValidationError('Platform proxy is not configured.', 500)
-  }
-
-  let res: Response
-  try {
-    res = await fetch(`${proxyBase}/v1/account`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-  } catch (error) {
-    captureException(error, { tags: { area: 'platform-auth', op: 'account-introspect' } })
-    throw new PlatformTokenValidationError(
-      'Could not reach the platform to validate this key. Please try again.',
-      502,
-    )
-  }
-
-  if (res.status === 401 || res.status === 403 || res.status === 400) {
-    throw new PlatformTokenValidationError('This access key is invalid or has been revoked.', 400)
-  }
-  if (!res.ok) {
-    throw new PlatformTokenValidationError(
-      'Could not validate this access key right now. Please try again.',
-      502,
-    )
-  }
-
-  const data = await res.json().catch(() => null)
-  const parsed = PlatformAccountInfoSchema.safeParse(data)
-  if (!parsed.success) {
-    captureException(parsed.error, { tags: { area: 'platform-auth', op: 'account-parse' } })
-    throw new PlatformTokenValidationError('The platform returned an unexpected response.', 502)
-  }
-  return parsed.data
+  return fetchPlatformJson({
+    path: '/v1/account',
+    token,
+    schema: PlatformAccountInfoSchema,
+    area: 'platform-auth',
+    // Any auth/bad-request failure for a pasted key means it's invalid/revoked.
+    mapStatusError: (status) =>
+      status === 400 || status === 401 || status === 403
+        ? { message: 'This access key is invalid or has been revoked.', status: 400 }
+        : { message: 'Could not validate this access key right now. Please try again.', status: 502 },
+  })
 }
 
 function buildTokenPreview(token: string): string {
@@ -256,6 +221,17 @@ async function reconcileAfterAuthChange(): Promise<void> {
   }
 }
 
+/**
+ * Notify the PlatformService of a connect/disconnect so it can refresh or clear
+ * its cached billing/account snapshot. Dynamic import breaks the module cycle
+ * (platform-service → platform-auth-service → here).
+ */
+function notifyPlatformServiceAuthChanged(connected: boolean): void {
+  void import('./platform-service')
+    .then((mod) => mod.platformService.onAuthChanged(connected))
+    .catch((error) => captureException(error, { tags: { area: 'platform-auth', op: 'notify-service' } }))
+}
+
 function getEnvManagedStatus(): PlatformAuthStatus | null {
   if (cachedEnvManagedStatus !== undefined) return cachedEnvManagedStatus
   // Pre-init fallback: orgId stays null until verification completes.
@@ -354,6 +330,7 @@ export async function savePlatformAuth(_userId: string, input: SavePlatformAuthI
     await reconcileAfterAuthChange()
   }
 
+  notifyPlatformServiceAuthChanged(true)
   return getPlatformAuthStatus()
 }
 
@@ -375,9 +352,56 @@ export function getStoredPlatformMemberId(): string | null {
   return readRecord()?.memberId ?? null
 }
 
+/**
+ * Re-introspect the settings-stored token via `/v1/account` and update the
+ * record if the identity changed (email/org/role/userId/memberId). Keeps the
+ * analytics userId and org details fresh and catches org switches.
+ *
+ * No-op for env-managed connections (org-scoped tokens are rejected by
+ * `/v1/account`) and on transient/invalid-token errors (teardown is the
+ * revoke flow's job). Returns true if the record was updated.
+ */
+export async function refreshStoredPlatformAccount(): Promise<boolean> {
+  if (isAuthMode() && process.env.PLATFORM_TOKEN?.trim()) return false
+  const record = readRecord()
+  if (!record) return false
+
+  let account
+  try {
+    account = await fetchPlatformAccountInfo(record.token)
+  } catch {
+    // Transient or now-invalid token — leave the existing record untouched.
+    return false
+  }
+
+  const unchanged =
+    record.email === (account.email ?? null) &&
+    record.orgId === account.orgId &&
+    record.orgName === account.orgName &&
+    record.role === account.role &&
+    record.userId === account.userId &&
+    record.memberId === account.memberId
+  if (unchanged) return false
+
+  // Pass the resolved metadata through so savePlatformAuth persists it without
+  // re-introspecting (orgId present → enrichment is skipped).
+  await savePlatformAuth('local', {
+    token: record.token,
+    email: account.email,
+    label: record.label,
+    orgId: account.orgId,
+    orgName: account.orgName,
+    role: account.role,
+    userId: account.userId,
+    memberId: account.memberId,
+  })
+  return true
+}
+
 async function clearPlatformAuth(): Promise<void> {
   writeRecord(null)
   await reconcileAfterAuthChange()
+  notifyPlatformServiceAuthChanged(false)
 }
 
 export async function revokePlatformTokenRemotely(): Promise<boolean> {

@@ -82,6 +82,28 @@ export const PlatformAccountInfoSchema = z.object({
 })
 export type ParsedPlatformAccountInfo = z.infer<typeof PlatformAccountInfoSchema>
 
+// Shape returned by the platform proxy's `GET /v1/billing` route. Validated at
+// the boundary before it's surfaced to the renderer. `configured: false` means
+// the org has no billing workspace yet.
+export const PlatformBillingInfoSchema = z.object({
+  configured: z.boolean(),
+  subscription: z.object({
+    status: z.string().nullish().transform((v) => v ?? null),
+    paymentStatus: z.string().nullish().transform((v) => v ?? null),
+    currentPeriodEnd: z.string().nullish().transform((v) => v ?? null),
+  }),
+  seat: z
+    .object({
+      balanceCents: z.number(),
+      startingBalanceCents: z.number(),
+    })
+    .nullable(),
+  orgPool: z.object({
+    poolBalanceCents: z.number(),
+  }),
+})
+export type ParsedPlatformBillingInfo = z.infer<typeof PlatformBillingInfoSchema>
+
 export type ParsedSkillsetConfig = z.infer<typeof SkillsetConfigSchema>
 export type ParsedInstalledSkillMetadata = z.infer<typeof InstalledSkillMetadataSchema>
 export type ParsedInstalledAgentMetadata = z.infer<typeof InstalledAgentMetadataSchema>
