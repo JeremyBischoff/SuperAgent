@@ -227,7 +227,12 @@
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "azureSignOptions": {
+        "endpoint": "${env.AZURE_CODE_SIGNING_ENDPOINT}",
+        "certificateProfileName": "${env.AZURE_CODE_SIGNING_PROFILE}",
+        "codeSigningAccountName": "${env.AZURE_CODE_SIGNING_ACCOUNT}"
+      }
     },
     "nsis": {
       "oneClick": false,
