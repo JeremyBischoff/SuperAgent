@@ -1,6 +1,8 @@
 {
   "name": "superagent",
   "version": "0.3.35-rc.1",
+  "description": "AI agent management platform",
+  "author": "Datawizz Inc.",
   "private": true,
   "main": "dist/main/index.js",
   "scripts": {
@@ -228,6 +230,11 @@
         }
       ],
       "icon": "build/icon.png",
+      "signExts": [
+        ".exe",
+        ".dll",
+        ".node"
+      ],
       "azureSignOptions": {
         "endpoint": "https://eus.codesigning.azure.net",
         "certificateProfileName": "gamut-windows",
