@@ -114,7 +114,7 @@ export function BrowserTrayContent({
   }, [latestRequest, submitBrowserInput])
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden" data-testid="browser-drawer-panel">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground select-none shrink-0">
         <Globe className="h-4 w-4 shrink-0" />

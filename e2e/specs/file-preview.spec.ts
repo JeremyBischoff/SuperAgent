@@ -107,19 +107,47 @@ test.describe('File Preview', () => {
     await expect(page.locator('.prose h1')).toContainText('Version 2', { timeout: 10000 })
   })
 
-  test('multiple file tabs and switching', async ({ page }) => {
+  test('multiple file tabs, switching, and image rendering', async ({ page }) => {
     await agentPage.createAgent(`MultiFile ${Date.now()}`)
     const agentSlug = await getLatestAgentSlug(page)
     seedWorkspaceFile(agentSlug, 'output/report.md', '# Report Content\n\nDetails here.')
+    // A real 1x1 PNG so the <img> actually loads and is visible (the `deliver
+    // image` scenario points at output/chart.png — see mock-container-client).
+    const onePxPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    seedWorkspaceFile(agentSlug, 'output/chart.png', onePxPng)
 
+    // Deliver and open the markdown file → first tab.
     await sessionPage.sendMessage('deliver file')
     await sessionPage.waitForResponse(15000)
-
     const reportPill = page.locator('.file-pill', { hasText: 'report.md' }).first()
     await expect(reportPill).toBeVisible({ timeout: 10000 })
     await reportPill.click()
-
     await expect(page.locator('text=Files').first()).toBeVisible({ timeout: 5000 })
     await expect(page.locator('.prose h1')).toContainText('Report Content', { timeout: 10000 })
+
+    // Deliver and open the image file → second tab, image renderer.
+    await sessionPage.sendMessage('deliver image')
+    await sessionPage.waitForResponse(15000)
+    const chartPill = page.locator('.file-pill', { hasText: 'chart.png' }).first()
+    await expect(chartPill).toBeVisible({ timeout: 10000 })
+    await chartPill.click()
+    await expect(page.locator('img[alt="chart.png"]')).toBeVisible({ timeout: 10000 })
+
+    // Both files now have tabs.
+    const tabBar = page.locator('[data-testid="file-tab-bar"]')
+    await expect(tabBar.locator('button', { hasText: 'report.md' })).toBeVisible()
+    await expect(tabBar.locator('button', { hasText: 'chart.png' })).toBeVisible()
+
+    // Switch back to the markdown tab → markdown content returns, image is gone.
+    await tabBar.locator('button', { hasText: 'report.md' }).click()
+    await expect(page.locator('.prose h1')).toContainText('Report Content', { timeout: 5000 })
+    await expect(page.locator('img[alt="chart.png"]')).not.toBeVisible()
+
+    // Switch forward to the image tab again → image renderer returns.
+    await tabBar.locator('button', { hasText: 'chart.png' }).click()
+    await expect(page.locator('img[alt="chart.png"]')).toBeVisible({ timeout: 5000 })
   })
 })
