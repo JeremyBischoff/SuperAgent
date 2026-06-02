@@ -273,6 +273,9 @@ export interface GlobalSettingsResponse {
  * WSL2 on Windows (bundled, no install needed), Docker elsewhere.
  */
 function getDefaultContainerRunner(): string {
+  // TODO: use better container signal — KUBERNETES_SERVICE_HOST means "in any
+  // k8s pod", not specifically "should use the SuperAgent Cloud runtime".
+  if (process.env.KUBERNETES_SERVICE_HOST) return 'kubernetes'
   const p = os.platform()
   if (p === 'darwin') return 'lima'
   if (p === 'win32') return 'wsl2'

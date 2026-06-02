@@ -26,7 +26,6 @@ import {
   getAgentSessionsDir,
   getSessionJsonlPath,
 } from './file-storage'
-
 // ============================================================================
 // Test Utilities
 // ============================================================================
@@ -609,6 +608,10 @@ describe('path helpers', () => {
   // These tests verify the path helper functions build correct paths
   // We use the actual getDataDir since the paths are relative to it
 
+  afterEach(() => {
+    delete process.env.SUPERAGENT_WORKSPACE_ROOT
+  })
+
   it('getAgentsDir returns path ending with /agents', () => {
     expect(getAgentsDir()).toMatch(/\/agents$/)
   })
@@ -645,5 +648,15 @@ describe('path helpers', () => {
     expect(getSessionJsonlPath('my-agent', 'session-123')).toMatch(
       /\/agents\/my-agent\/workspace\/\.claude\/projects\/-workspace\/session-123\.jsonl$/
     )
+  })
+
+  it('routes agent workspace to SUPERAGENT_WORKSPACE_ROOT while host metadata stays local', () => {
+    const workspaceRoot = path.join(os.tmpdir(), 'file-storage-workspace-root')
+    process.env.SUPERAGENT_WORKSPACE_ROOT = workspaceRoot
+
+    expect(getAgentWorkspaceDir('my-agent')).toBe(path.join(workspaceRoot, 'my-agent'))
+    expect(getAgentClaudeMdPath('my-agent')).toMatch(/\/agents\/my-agent\/workspace\/CLAUDE\.md$/)
+    expect(getAgentSessionMetadataPath('my-agent')).toMatch(/\/agents\/my-agent\/workspace\/session-metadata\.json$/)
+    expect(getAgentEnvPath('my-agent')).toBe(path.join(workspaceRoot, 'my-agent', '.env'))
   })
 })

@@ -32,6 +32,7 @@ vi.mock('./client-factory', () => ({
     getInfoFromRuntime: (...args: unknown[]) => mockGetInfoFromRuntime(...args),
     getStats: mockGetStats,
     fetch: vi.fn(),
+    getHostApiBaseUrl: () => 'http://127.0.0.1:3000',
     buildVolumeFlag: (...args: unknown[]) => mockBuildVolumeFlag(...args as [string, string]),
     createSession: vi.fn(),
   }),

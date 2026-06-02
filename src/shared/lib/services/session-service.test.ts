@@ -427,6 +427,44 @@ describe('session-service', () => {
         '2026-01-24T01:31:19.827Z'
       )
     })
+
+    it('derives the name from a multimodal first user message', async () => {
+      await createSessionFile('test-agent', 'multimodal-session', [
+        {
+          type: 'user',
+          timestamp: '2026-02-01T00:00:00.000Z',
+          message: {
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', data: 'x' } },
+              { type: 'text', text: 'Summarize this screenshot for me' },
+            ],
+          },
+        },
+      ])
+
+      const session = await getSession('test-agent', 'multimodal-session')
+
+      expect(session?.name).toBe('Summarize this screenshot for me')
+      expect(session?.messageCount).toBe(1)
+    })
+
+    it('returns a metadata-only stub when the JSONL is not written yet', async () => {
+      await createSessionMetadata('test-agent', {
+        'pending-session': { name: 'Queued task', createdAt: '2026-02-02T00:00:00.000Z' },
+      })
+
+      const session = await getSession('test-agent', 'pending-session')
+
+      expect(session).toEqual({
+        id: 'pending-session',
+        agentSlug: 'test-agent',
+        name: 'Queued task',
+        createdAt: new Date('2026-02-02T00:00:00.000Z'),
+        lastActivityAt: new Date('2026-02-02T00:00:00.000Z'),
+        messageCount: 0,
+      })
+    })
   })
 
   describe('getSessionMessages', () => {

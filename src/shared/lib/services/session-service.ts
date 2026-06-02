@@ -129,25 +129,28 @@ export async function isSessionRegistered(
 // Session JSONL Parsing
 // ============================================================================
 
-/**
- * Check if a JSONL entry is a message (not a file-history-snapshot)
- */
 function isMessageEntry(entry: JsonlEntry): entry is JsonlMessageEntry {
   return entry.type === 'user' || entry.type === 'assistant'
 }
 
-/**
- * Parse session info from JSONL entries
- */
+function getMessageText(entry: JsonlMessageEntry): string {
+  const content = entry.message.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((block) => block.type === 'text' ? block.text : '')
+    .join('')
+    .trim()
+}
+
 function parseSessionInfo(
   sessionId: string,
   agentSlug: string,
   entries: JsonlEntry[],
-  metadata?: SessionMetadata
+  metadata?: SessionMetadata,
 ): SessionInfo {
   const messages = entries.filter(isMessageEntry)
 
-  // Get timestamps
   let createdAt = new Date()
   let lastActivityAt = new Date()
 
@@ -156,15 +159,11 @@ function parseSessionInfo(
     lastActivityAt = new Date(messages[messages.length - 1].timestamp)
   }
 
-  // Generate name from first user message if no custom name
   let name = metadata?.name || 'New Session'
   if (!metadata?.name && messages.length > 0) {
-    const firstUserMessage = messages.find(
-      (m) => m.type === 'user' && typeof m.message.content === 'string'
-    )
-    if (firstUserMessage && typeof firstUserMessage.message.content === 'string') {
-      // Use first 50 chars of first message as name
-      const content = firstUserMessage.message.content
+    const firstUserMessage = messages.find((m) => m.type === 'user')
+    const content = firstUserMessage ? getMessageText(firstUserMessage) : ''
+    if (content) {
       name = content.substring(0, 50).trim()
       if (content.length > 50) {
         name += '...'
@@ -329,12 +328,23 @@ export async function getSession(
   sessionId: string
 ): Promise<SessionInfo | null> {
   const jsonlPath = getSessionJsonlPath(agentSlug, sessionId)
+  const metadata = await getSessionMetadata(agentSlug, sessionId)
 
   if (!(await fileExists(jsonlPath))) {
+    if (metadata?.createdAt) {
+      const createdAt = new Date(metadata.createdAt)
+      return {
+        id: sessionId,
+        agentSlug,
+        name: metadata.name || 'New Session',
+        createdAt,
+        lastActivityAt: createdAt,
+        messageCount: 0,
+      }
+    }
     return null
   }
 
-  const metadata = await getSessionMetadata(agentSlug, sessionId)
   const entries = await readJsonlFile<JsonlEntry>(jsonlPath)
 
   return parseSessionInfo(sessionId, agentSlug, entries, metadata || undefined)

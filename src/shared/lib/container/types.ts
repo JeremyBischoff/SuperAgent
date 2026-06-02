@@ -128,6 +128,14 @@ export interface ContainerClient {
   // Throws if container is not running
   fetch(path: string, init?: RequestInit): Promise<Response>
 
+  // WebSocket origin for the container, given a known port, so callers don't
+  // hardcode localhost when the runtime is remote (e.g. Kubernetes).
+  getWebSocketBaseUrl(port: number): string
+
+  // Base URL the container uses to reach the host app (remote runtimes use a
+  // public URL instead of the host's localhost).
+  getHostApiBaseUrl(): string
+
   // Health checks
   waitForHealthy(timeoutMs?: number, knownPort?: number): Promise<boolean>
   isHealthy(knownPort?: number): Promise<boolean>

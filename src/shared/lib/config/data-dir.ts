@@ -37,8 +37,14 @@ export function getAgentsDataDir(): string {
 
 /**
  * Get the workspace directory for a specific agent.
+ * When SUPERAGENT_WORKSPACE_ROOT is set, agent workspaces live directly under it
+ * (a shared volume) instead of under the data dir.
  */
 export function getAgentWorkspaceDir(agentId: string): string {
+  const workspaceRoot = process.env.SUPERAGENT_WORKSPACE_ROOT
+  if (workspaceRoot) {
+    return path.join(path.resolve(workspaceRoot), agentId)
+  }
   return path.join(getAgentsDataDir(), agentId, 'workspace')
 }
 

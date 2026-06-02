@@ -11,7 +11,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { getDataDir } from '@shared/lib/config/data-dir'
+import { getDataDir, getAgentWorkspaceDir as resolveAgentWorkspaceDir } from '@shared/lib/config/data-dir'
 
 // ============================================================================
 // Slug Generation
@@ -381,15 +381,20 @@ export function getAgentDir(slug: string): string {
  * ~/.superagent/agents/{slug}/workspace/
  */
 export function getAgentWorkspaceDir(slug: string): string {
+  return resolveAgentWorkspaceDir(slug)
+}
+
+// Host metadata dir; always local, never on the cloud workspace root.
+function getLocalAgentWorkspaceDir(slug: string): string {
   return path.join(getAgentDir(slug), 'workspace')
 }
 
 /**
- * Get CLAUDE.md path for agent (inside workspace)
+ * Get CLAUDE.md path for agent (host metadata dir; stays local in cloud mode)
  * ~/.superagent/agents/{slug}/workspace/CLAUDE.md
  */
 export function getAgentClaudeMdPath(slug: string): string {
-  return path.join(getAgentWorkspaceDir(slug), 'CLAUDE.md')
+  return path.join(getLocalAgentWorkspaceDir(slug), 'CLAUDE.md')
 }
 
 /**
@@ -405,7 +410,7 @@ export function getAgentEnvPath(slug: string): string {
  * ~/.superagent/agents/{slug}/workspace/session-metadata.json
  */
 export function getAgentSessionMetadataPath(slug: string): string {
-  return path.join(getAgentWorkspaceDir(slug), 'session-metadata.json')
+  return path.join(getLocalAgentWorkspaceDir(slug), 'session-metadata.json')
 }
 
 /**
