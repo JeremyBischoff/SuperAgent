@@ -7,9 +7,10 @@ import { createUserMessage, createAssistantMessage, createToolCall, createCompac
 import type { ApiMessageOrBoundary } from '@shared/lib/types/api'
 
 // Mock useMessages
-const mockMessagesData: { data: ApiMessageOrBoundary[] | undefined; isLoading: boolean } = {
+const mockMessagesData: { data: ApiMessageOrBoundary[] | undefined; isLoading: boolean; error: Error | null } = {
   data: undefined,
   isLoading: false,
+  error: null,
 }
 
 const mockDeleteMessage = vi.fn()
@@ -19,6 +20,13 @@ vi.mock('@renderer/hooks/use-messages', () => ({
   useMessages: () => mockMessagesData,
   useDeleteMessage: () => ({ mutate: mockDeleteMessage }),
   useDeleteToolCall: () => ({ mutate: mockDeleteToolCall }),
+  // Real class so `error instanceof TranscriptNotFoundError` works in the component.
+  TranscriptNotFoundError: class TranscriptNotFoundError extends Error {
+    constructor() {
+      super('Session transcript not found')
+      this.name = 'TranscriptNotFoundError'
+    }
+  },
 }))
 
 // Mock useMessageStream
