@@ -316,8 +316,14 @@ function createWindow() {
 
   // Spellcheck context menu — show correction suggestions on right-click
   mainWindow.webContents.on('context-menu', (_event, params) => {
+    // Only show a native menu for editable fields (e.g. the message composer). Non-editable
+    // elements use their own in-renderer Radix context menus, so we leave them alone.
+    if (!params.isEditable) return
+
+    const menu = new Menu()
+
+    // Spellcheck suggestions for the misspelled word under the cursor, if any.
     if (params.misspelledWord) {
-      const menu = new Menu()
       for (const suggestion of params.dictionarySuggestions) {
         menu.append(new MenuItem({
           label: suggestion,
@@ -331,8 +337,19 @@ function createWindow() {
         label: 'Add to Dictionary',
         click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
       }))
-      menu.popup()
+      menu.append(new MenuItem({ type: 'separator' }))
     }
+
+    // Standard editing roles — Electron wires these to the focused field and applies the
+    // correct enabled state from params.editFlags.
+    const { editFlags } = params
+    menu.append(new MenuItem({ role: 'cut', enabled: editFlags.canCut }))
+    menu.append(new MenuItem({ role: 'copy', enabled: editFlags.canCopy }))
+    menu.append(new MenuItem({ role: 'paste', enabled: editFlags.canPaste }))
+    menu.append(new MenuItem({ type: 'separator' }))
+    menu.append(new MenuItem({ role: 'selectAll', enabled: editFlags.canSelectAll }))
+
+    menu.popup()
   })
 
   // Handle window.open() calls - prevent popup windows
