@@ -875,14 +875,10 @@ ipcMain.handle('create-dock-shortcut', (_event, { agentSlug, dashboardSlug, dash
 ipcMain.handle('set-native-theme', (_event, theme: string) => {
   nativeTheme.themeSource = theme as 'system' | 'light' | 'dark'
 
-  // Update Windows title bar overlay symbol color to match theme
-  if (process.platform === 'win32' && mainWindow) {
-    const isDark = nativeTheme.shouldUseDarkColors
-    mainWindow.setTitleBarOverlay({
-      symbolColor: isDark ? '#cccccc' : '#333333',
-      color: '#00000000',
-    })
-  }
+  // Windows uses titleBarStyle: 'hidden' WITHOUT a native overlay (see window
+  // creation above) and draws its own title-bar buttons in the renderer, which
+  // recolor via CSS. Calling setTitleBarOverlay here would throw
+  // "Titlebar overlay is not enabled", so there is nothing native to recolor.
 })
 
 // IPC handler for popping up the full app menu at a position (Windows custom title bar)
