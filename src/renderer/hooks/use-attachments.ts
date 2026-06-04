@@ -5,6 +5,15 @@ import { getItemsFromDataTransfer, getFolderFromDirectoryInput, type FileWithPat
 // 500 MB max folder size for in-browser zip upload (no Electron fs.cp available)
 const MAX_WEB_FOLDER_SIZE = 500 * 1024 * 1024
 
+// macOS cloud-synced locations (iCloud Drive, Dropbox/OneDrive/Google Drive via
+// File Provider) can't be shared into the agent sandbox. Detect by the stable
+// path segment — the server-side addMount() is the authoritative guard.
+const CLOUD_PATH_SEGMENTS = ['/Library/Mobile Documents/', '/Library/CloudStorage/']
+
+function isCloudStorageHostPath(hostPath: string): boolean {
+  return CLOUD_PATH_SEGMENTS.some((seg) => hostPath.includes(seg))
+}
+
 interface UseAttachmentsOptions {
   onFoldersReceived?: (folders: FolderGroup[]) => void
 }
@@ -52,7 +61,19 @@ export function useAttachments(options?: UseAttachmentsOptions) {
   }, [])
 
   const addMounts = useCallback((mounts: { folderName: string; hostPath: string }[]) => {
-    const newAttachments: Attachment[] = mounts.map((m) => ({
+    // Warn before attaching cloud-synced folders — the agent sandbox can't read
+    // iCloud Drive / File Provider paths, and the failure at run time is cryptic.
+    const cloudMounts = mounts.filter((m) => isCloudStorageHostPath(m.hostPath))
+    if (cloudMounts.length > 0) {
+      alert(
+        `${cloudMounts.map((m) => m.folderName).join(', ')} ${cloudMounts.length === 1 ? 'is' : 'are'} in iCloud Drive or a cloud-synced location ` +
+        `(Dropbox, OneDrive, Google Drive), which can't be shared into the agent sandbox. ` +
+        `Please copy the folder to a regular local folder and mount that instead.`
+      )
+    }
+    const mountable = mounts.filter((m) => !isCloudStorageHostPath(m.hostPath))
+    if (mountable.length === 0) return
+    const newAttachments: Attachment[] = mountable.map((m) => ({
       type: 'mount' as const,
       id: crypto.randomUUID(),
       folderName: m.folderName,

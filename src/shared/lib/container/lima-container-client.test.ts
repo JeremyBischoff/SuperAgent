@@ -435,3 +435,36 @@ describe('LimaContainerClient.isRunning', () => {
     expect(await LimaContainerClient.isRunning()).toBe(true)
   })
 })
+
+// ============================================================================
+// extractInaccessibleMountPath — EPERM-on-stat for cloud-synced bind mounts
+// ============================================================================
+
+describe('LimaContainerClient.extractInaccessibleMountPath', () => {
+  // The base class is mocked above, so the subclass method runs standalone.
+  const client = new LimaContainerClient({ agentId: 'test-agent' } as any) as any
+
+  it('parses the host path from a quoted "failed to stat ... operation not permitted" error', () => {
+    const stderr =
+      'failed to mount: failed to stat "/Users/x/Library/CloudStorage/Dropbox/foo": operation not permitted'
+    expect(client.extractInaccessibleMountPath(new Error(stderr))).toBe(
+      '/Users/x/Library/CloudStorage/Dropbox/foo'
+    )
+  })
+
+  it('parses an iCloud Mobile Documents path', () => {
+    const stderr =
+      'stat "/Users/x/Library/Mobile Documents/com~apple~CloudDocs/proj": operation not permitted'
+    expect(client.extractInaccessibleMountPath({ stderr })).toBe(
+      '/Users/x/Library/Mobile Documents/com~apple~CloudDocs/proj'
+    )
+  })
+
+  it('returns null when the error is not an EPERM-on-mount', () => {
+    expect(client.extractInaccessibleMountPath(new Error('no such image: foo'))).toBe(null)
+  })
+
+  it('returns null for permission errors without a parseable path', () => {
+    expect(client.extractInaccessibleMountPath(new Error('operation not permitted'))).toBe(null)
+  })
+})
