@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
 import { MessageList } from './message-list'
 import { renderWithProviders } from '@renderer/test/test-utils'
 import { createUserMessage, createAssistantMessage, createToolCall, createCompactBoundary } from '@renderer/test/factories'
@@ -1209,6 +1209,100 @@ describe('MessageList', () => {
       // (the "AB" initials will appear on the peer message avatar instead)
       const dots = screen.queryAllByText('...')
       expect(dots).toHaveLength(0)
+    })
+  })
+
+  describe('windowing (long threads)', () => {
+    // BASE_WINDOW=300, LOAD_STEP=200 in message-list.tsx. Each message renders a
+    // bubble whose exact text is `m{i}`, so getByText/queryByText tells us precisely
+    // which messages are mounted in the DOM.
+    const manyMessages = (n: number): ApiMessageOrBoundary[] =>
+      Array.from({ length: n }, (_, i) => createUserMessage({ content: { text: `m${i}` } }))
+
+    // jsdom has no layout, so scroll metrics are 0. Mock them on the scroll
+    // container so handleScroll can decide "at bottom" vs "scrolled up".
+    const mockScrollGeometry = (
+      el: HTMLElement,
+      { scrollHeight, clientHeight, scrollTop }: { scrollHeight: number; clientHeight: number; scrollTop: number }
+    ) => {
+      let top = scrollTop
+      Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => scrollHeight })
+      Object.defineProperty(el, 'clientHeight', { configurable: true, get: () => clientHeight })
+      Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => top, set: (v: number) => { top = v } })
+    }
+
+    it('renders every message when at or below the window threshold', () => {
+      mockMessagesData.data = manyMessages(50)
+      renderWithProviders(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+      expect(screen.getByText('m0')).toBeInTheDocument()
+      expect(screen.getByText('m49')).toBeInTheDocument()
+      expect(screen.queryByText(/earlier messages? hidden/)).not.toBeInTheDocument()
+    })
+
+    it('renders only the trailing window plus a hidden-count indicator on long threads', () => {
+      mockMessagesData.data = manyMessages(305) // 5 over BASE_WINDOW
+      renderWithProviders(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+      // Oldest 5 are outside the window…
+      expect(screen.queryByText('m0')).not.toBeInTheDocument()
+      expect(screen.queryByText('m4')).not.toBeInTheDocument()
+      // …window runs from m5 through the latest message.
+      expect(screen.getByText('m5')).toBeInTheDocument()
+      expect(screen.getByText('m304')).toBeInTheDocument()
+      expect(screen.getByText(/5 earlier messages hidden/)).toBeInTheDocument()
+    })
+
+    it('uses singular wording when exactly one message is hidden', () => {
+      mockMessagesData.data = manyMessages(301)
+      renderWithProviders(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+      expect(screen.getByText(/1 earlier message hidden/)).toBeInTheDocument()
+    })
+
+    it('reveals older messages when scrolled to the top', () => {
+      mockMessagesData.data = manyMessages(305)
+      renderWithProviders(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+      const el = screen.getByTestId('message-list')
+      mockScrollGeometry(el, { scrollHeight: 10000, clientHeight: 500, scrollTop: 50 })
+      fireEvent.scroll(el)
+      // windowSize grew by LOAD_STEP (200) → 305 < 500, so the whole thread renders.
+      expect(screen.getByText('m0')).toBeInTheDocument()
+      expect(screen.queryByText(/earlier messages? hidden/)).not.toBeInTheDocument()
+    })
+
+    it('keeps the top of the window stable when a message arrives while scrolled up', () => {
+      const base = manyMessages(305) // window = m5..m304
+      mockMessagesData.data = base
+      const { rerender } = renderWithProviders(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+      const el = screen.getByTestId('message-list')
+      // Scrolled up, but not near the top (so we don't trigger a load-more expand).
+      mockScrollGeometry(el, { scrollHeight: 10000, clientHeight: 500, scrollTop: 5000 })
+      fireEvent.scroll(el)
+      expect(screen.getByText('m5')).toBeInTheDocument()
+
+      // A new message is persisted while the user reads history.
+      mockMessagesData.data = [...base, createUserMessage({ content: { text: 'm305' } })]
+      rerender(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+
+      // The window grew by one instead of sliding, so the top item the user was
+      // reading (m5) stays mounted — no upward jump.
+      expect(screen.getByText('m5')).toBeInTheDocument()
+      expect(screen.getByText('m305')).toBeInTheDocument()
+    })
+
+    it('slides the window (drops the oldest rendered) when a message arrives while pinned to the bottom', () => {
+      const base = manyMessages(305)
+      mockMessagesData.data = base
+      const { rerender } = renderWithProviders(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+      const el = screen.getByTestId('message-list')
+      mockScrollGeometry(el, { scrollHeight: 10000, clientHeight: 500, scrollTop: 9500 }) // at bottom
+      fireEvent.scroll(el)
+      expect(screen.getByText('m5')).toBeInTheDocument()
+
+      mockMessagesData.data = [...base, createUserMessage({ content: { text: 'm305' } })]
+      rerender(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+
+      // Pinned to bottom: the slice slides so the DOM stays bounded — m5 drops off.
+      expect(screen.queryByText('m5')).not.toBeInTheDocument()
+      expect(screen.getByText('m305')).toBeInTheDocument()
     })
   })
 })
