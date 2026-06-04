@@ -9,6 +9,7 @@ const mockStop = vi.fn()
 const mockStopSync = vi.fn()
 const mockGetInfoFromRuntime = vi.fn()
 const mockGetStats = vi.fn()
+const mockIsHealthy = vi.fn()
 
 const mockClearRunnerAvailabilityCache = vi.fn()
 
@@ -21,6 +22,7 @@ vi.mock('./client-factory', () => ({
     stopSync: mockStopSync,
     getInfoFromRuntime: mockGetInfoFromRuntime,
     getStats: mockGetStats,
+    isHealthy: (...args: unknown[]) => mockIsHealthy(...args),
     fetch: vi.fn(),
     buildVolumeFlag: (...args: unknown[]) => mockBuildVolumeFlag(...args as [string, string]),
   }),
@@ -448,6 +450,72 @@ describe('containerManager — status caching', () => {
     containerManager.removeClient('agent-1')
     expect(containerManager.getCachedInfo('agent-1')).toEqual({ status: 'stopped', port: null })
     expect(containerManager.getCachedInfo('agent-2')).toEqual({ status: 'running', port: 4002 })
+  })
+})
+
+// ============================================================================
+// ensureRunning — cached 'running' liveness TTL (ELECTRON-35 check-then-use)
+// ============================================================================
+
+describe('containerManager.ensureRunning — cached running liveness TTL', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    containerManager.removeClient('test-agent')
+
+    mockGetOrCreateProxyToken.mockResolvedValue('synth-token-123')
+    mockGetContainerHostUrl.mockReturnValue('192.168.1.100')
+    mockGetAppPort.mockReturnValue(3000)
+    mockGetMountsWithHealth.mockReturnValue([])
+    mockStart.mockResolvedValue(undefined)
+    mockGetInfoFromRuntime.mockResolvedValue({ status: 'running', port: 8080 })
+
+    // DB mocks so a (re)start can build env vars without throwing
+    mockDbInnerJoin.mockReturnValue({ where: mockDbWhere })
+    mockDbWhere.mockResolvedValue([])
+    mockMcpInnerJoin.mockReturnValue({ where: mockMcpWhere })
+    mockMcpWhere.mockResolvedValue([])
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('does not probe or restart when the cached running status is fresh', async () => {
+    containerManager.updateCachedStatus('test-agent', 'running', 4001)
+
+    await containerManager.ensureRunning('test-agent')
+
+    expect(mockIsHealthy).not.toHaveBeenCalled()
+    expect(mockStart).not.toHaveBeenCalled()
+  })
+
+  it('re-probes once the cached running status ages past the TTL and keeps it when healthy', async () => {
+    vi.useFakeTimers()
+    containerManager.updateCachedStatus('test-agent', 'running', 4001)
+    mockIsHealthy.mockResolvedValue(true)
+
+    // Age the cache past the 10s TTL
+    vi.advanceTimersByTime(11_000)
+
+    await containerManager.ensureRunning('test-agent')
+
+    expect(mockIsHealthy).toHaveBeenCalledWith(4001)
+    expect(mockStart).not.toHaveBeenCalled()
+    // Cache stays 'running'
+    expect(containerManager.getCachedInfo('test-agent')).toEqual({ status: 'running', port: 4001 })
+  })
+
+  it('restarts when the stale cached running status fails the liveness probe', async () => {
+    vi.useFakeTimers()
+    containerManager.updateCachedStatus('test-agent', 'running', 4001)
+    mockIsHealthy.mockResolvedValue(false)
+
+    vi.advanceTimersByTime(11_000)
+
+    await containerManager.ensureRunning('test-agent')
+
+    expect(mockIsHealthy).toHaveBeenCalledWith(4001)
+    expect(mockStart).toHaveBeenCalledOnce()
   })
 })
 

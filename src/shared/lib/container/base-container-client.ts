@@ -233,6 +233,23 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
   }
 
   /**
+   * Emit an 'error' event without crashing the process.
+   *
+   * Node's EventEmitter throws synchronously when 'error' is emitted and no
+   * 'error' listener is registered. Most consumers of this client never attach
+   * one, so a bare `this.emit('error', ...)` would throw — and when that emit
+   * happens inside a free-floating promise chain (e.g. the WebSocket
+   * `setupWebSocket().catch()` path), the throw escapes as an unhandled
+   * rejection. Guard every error emit through here so a missing listener is a
+   * no-op instead of a crash.
+   */
+  protected safeEmitError(error: unknown): void {
+    if (this.listenerCount('error') > 0) {
+      this.emit('error', error)
+    }
+  }
+
+  /**
    * Check if an error is a connection error (container not reachable).
    */
   private isConnectionError(err: Error): boolean {
@@ -542,7 +559,7 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
         })
       }
       console.error('Failed to start container:', error)
-      this.emit('error', error)
+      this.safeEmitError(error)
       throw error
     }
   }
@@ -651,7 +668,7 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
       console.log(`Stopped container ${containerName}`)
     } catch (error: any) {
       console.error('Failed to stop container:', error)
-      this.emit('error', error)
+      this.safeEmitError(error)
       throw error
     }
 
@@ -1050,7 +1067,7 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
         // Only log and emit if this connection is still tracked (not cleaned up by stop())
         if (this.wsConnections.has(sessionId)) {
           console.error(`WebSocket error for session ${sessionId}:`, error)
-          this.emit('error', error)
+          this.safeEmitError(error)
         }
         rejectReady(error instanceof Error ? error : new Error(String(error)))
       })
@@ -1074,7 +1091,18 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
 
     setupWebSocket().catch((error) => {
       console.error('Failed to set up WebSocket:', error)
-      this.emit('error', error)
+      this.safeEmitError(error)
+      // Notify the callback so the consumer (e.g. MessagePersister) can react to
+      // the failed (re)subscribe instead of relying on the `ready` promise —
+      // callers that discard `ready` (e.g. reconnect) would otherwise leave a
+      // free-floating rejected promise and never learn the session is gone.
+      const closeMessage: StreamMessage = {
+        type: 'connection_closed',
+        content: { type: 'connection_closed' },
+        timestamp: new Date(),
+        sessionId,
+      }
+      callback(closeMessage)
       rejectReady(error instanceof Error ? error : new Error(String(error)))
     })
 

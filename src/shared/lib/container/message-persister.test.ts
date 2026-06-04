@@ -3703,3 +3703,84 @@ describe('MessagePersister', () => {
     })
   })
 })
+
+// ============================================================================
+// connection_closed → re-subscribe (ELECTRON-Q unhandled rejection guard)
+// ============================================================================
+
+describe('MessagePersister.handleConnectionClosed re-subscribe', () => {
+  const SESSION_ID = 'reconnect-session'
+  const AGENT_SLUG = 'reconnect-agent'
+
+  afterEach(() => {
+    messagePersister.unsubscribeFromSession(SESSION_ID)
+    vi.clearAllMocks()
+  })
+
+  it('does not leak an unhandled rejection when the re-subscribe ready promise rejects', async () => {
+    let callback: ((message: StreamMessage) => void) | null = null
+    let subscribeCount = 0
+
+    const client = {
+      start: vi.fn(),
+      stop: vi.fn(),
+      stopSync: vi.fn(),
+      getInfoFromRuntime: vi.fn(),
+      getInfo: vi.fn(),
+      fetch: vi.fn(),
+      waitForHealthy: vi.fn(),
+      isHealthy: vi.fn(),
+      getStats: vi.fn(),
+      createSession: vi.fn(),
+      // Container still reports the session as running, so handleConnectionClosed
+      // takes the re-subscribe branch.
+      getSession: vi.fn(() => Promise.resolve({ isRunning: true } as any)),
+      deleteSession: vi.fn(),
+      sendMessage: vi.fn(),
+      getMessages: vi.fn(),
+      interruptSession: vi.fn(),
+      subscribeToStream: vi.fn((_sessionId: string, cb: (message: StreamMessage) => void) => {
+        callback = cb
+        subscribeCount += 1
+        // First subscribe (initial) resolves; the re-subscribe rejects to mirror
+        // a failed reconnect (getPortOrThrow → "Container is not running").
+        return {
+          unsubscribe: vi.fn(),
+          ready: subscribeCount === 1
+            ? Promise.resolve()
+            : Promise.reject(new Error('Container is not running')),
+        }
+      }),
+      on: vi.fn(),
+      off: vi.fn(),
+    } as unknown as ContainerClient
+
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+
+    try {
+      await messagePersister.subscribeToSession(SESSION_ID, client, SESSION_ID, AGENT_SLUG)
+      messagePersister.markSessionActive(SESSION_ID, AGENT_SLUG)
+
+      // Simulate the WebSocket dropping — the container synthesizes this message.
+      callback!({
+        type: 'connection_closed',
+        content: { type: 'connection_closed' },
+        timestamp: new Date(),
+        sessionId: SESSION_ID,
+      })
+
+      // Let getSession().then(...) and the rejected ready settle.
+      await new Promise((r) => setTimeout(r, 0))
+      await new Promise((r) => setTimeout(r, 0))
+
+      // Re-subscribe was attempted (initial + reconnect) and the rejected
+      // `ready` promise was caught, not leaked.
+      expect(subscribeCount).toBe(2)
+      expect(unhandled).toHaveLength(0)
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+})

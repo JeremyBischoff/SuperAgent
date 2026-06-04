@@ -36,6 +36,18 @@ const HEALTH_CHECK_INTERVAL_MS = parseInt(
 /** Minimum free disk space (in bytes) required before pulling an image: 5 GB */
 const MIN_DISK_SPACE_BYTES = 5 * 1024 * 1024 * 1024
 
+/**
+ * Max age (in ms) of a cached 'running' status before ensureRunning re-verifies
+ * liveness with a /health round-trip. The cache has no TTL of its own, so a
+ * container that died externally would otherwise report 'running' forever and
+ * the next sendMessage/createSession would throw "Container is not running".
+ * Default: 10 seconds — short enough to catch external death between requests,
+ * long enough to avoid a health probe on every back-to-back message. */
+const RUNNING_STATUS_TTL_MS = parseInt(
+  process.env.CONTAINER_RUNNING_STATUS_TTL_SECONDS || '10',
+  10
+) * 1000
+
 async function getAvailableDiskSpace(): Promise<number> {
   const stats = await statfs(os.homedir())
   return stats.bavail * stats.bsize
@@ -458,9 +470,34 @@ class ContainerManager {
     if (inflight) return inflight
 
     const client = this.getClient(agentId)
-    const cachedInfo = this.getCachedInfo(agentId)
+    const cached = this.containerStatuses.get(agentId)
 
-    if (cachedInfo.status !== 'running') {
+    // Treat the cached 'running' status as authoritative only while it's fresh.
+    // The cache has no liveness check, so a container that died externally would
+    // keep reporting 'running'. Once the cached status ages past the TTL,
+    // re-verify with a single /health round-trip before trusting it; if the
+    // probe fails, fall through to (re)start.
+    let needsStart = !cached || cached.status !== 'running'
+    if (!needsStart && cached && Date.now() - cached.lastSyncedAt > RUNNING_STATUS_TTL_MS) {
+      const healthy = await client.isHealthy(cached.port ?? undefined)
+      if (healthy) {
+        // Still alive — refresh the timestamp so we don't re-probe every request.
+        this.updateCachedStatus(agentId, 'running', cached.port)
+      } else {
+        console.warn(`[ContainerManager] Cached 'running' status for ${agentId} failed liveness check, (re)starting`)
+        this.markAsStopped(agentId)
+        needsStart = true
+      }
+    }
+
+    if (needsStart) {
+      // The liveness probe above is an await point, so another ensureRunning
+      // call may have kicked off a start while we were probing. Re-check the
+      // in-flight dedupe before starting so a liveness-triggered restart can't
+      // double-start the container.
+      const racedInflight = this.startingAgents.get(agentId)
+      if (racedInflight) return racedInflight
+
       const startPromise = this.doStartContainer(agentId, client)
       this.startingAgents.set(agentId, startPromise)
       try {
