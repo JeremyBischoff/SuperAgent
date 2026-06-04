@@ -245,6 +245,7 @@ export function ChatIntegrationView({ integrationId, agentSlug }: ChatIntegratio
             {/* Chat column — grid pins the footer at the bottom */}
             <div className="flex-1 min-w-0 min-h-0 grid grid-rows-[1fr_auto]">
               <MessageList
+                key={activeSessionId}
                 sessionId={activeSessionId}
                 agentSlug={agentSlug}
               />

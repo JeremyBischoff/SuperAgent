@@ -18,13 +18,23 @@ import { useIsOnline } from '@renderer/context/connectivity-context'
 import { useUser } from '@renderer/context/user-context'
 import { useDraft } from '@renderer/context/drafts-context'
 import { useRenderTracker } from '@renderer/lib/perf'
-import { useEffect, useRef, useState, useCallback, useMemo, Fragment } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, Fragment } from 'react'
 import { formatElapsed } from '@renderer/hooks/use-elapsed-timer'
 import type { ApiMessage, ApiCompactBoundary, ApiMemoryRecall } from '@shared/lib/types/api'
 
 // Prefix for system-injected user messages that should be hidden in the UI.
 // Keep in sync with SYSTEM_MESSAGE_PREFIX in agent-container/src/claude-code.ts
 const SYSTEM_MESSAGE_PREFIX = '[SYSTEM] '
+
+// On very long threads we render only a trailing window of messages to keep the
+// DOM small. Sessions with <= BASE_WINDOW visible items render in full, so small
+// and medium threads are completely unaffected. Scrolling near the top reveals
+// LOAD_STEP more at a time. The window is a fixed-size tail slice, so while new
+// messages stream in at the bottom the oldest rendered ones drop off the top and
+// the DOM node count stays flat. The window only grows on an explicit scroll-up
+// and is reset when the session changes.
+const BASE_WINDOW = 300
+const LOAD_STEP = 200
 
 interface PendingMessage {
   text: string
@@ -148,6 +158,52 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessage, pendingR
   const isScrolledToBottomRef = useRef(true)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 
+  // How many trailing (visible) messages to render. Grows on scroll-up and while
+  // the user is scrolled up during streaming. Starts at BASE_WINDOW; the component
+  // is keyed by sessionId at its mount site, so a switched session remounts fresh.
+  const [windowSize, setWindowSize] = useState(BASE_WINDOW)
+  // Scroll height captured just before a scroll-up expansion, used to re-anchor the
+  // viewport after the larger slice renders so the content under the user doesn't jump.
+  const prevScrollHeightRef = useRef<number | null>(null)
+
+  // Visible messages with system-injected entries filtered out (these must not
+  // consume window slots, and the windowing operates on what the user can see).
+  const visibleMessages = useMemo(() => {
+    if (!messages) return []
+    return messages.filter((item) => {
+      if (item.type === 'user') {
+        const msg = item as ApiMessage
+        if (msg.content?.text?.startsWith(SYSTEM_MESSAGE_PREFIX)) return false
+      }
+      return true
+    })
+  }, [messages])
+
+  // The trailing slice we actually render. The other derived values below still
+  // compute over the FULL message list, so turn boundaries / elapsed times / etc.
+  // stay correct even when their anchor message is outside the rendered window.
+  const windowedMessages = useMemo(
+    () => visibleMessages.slice(-windowSize),
+    [visibleMessages, windowSize]
+  )
+  const hiddenCount = visibleMessages.length - windowedMessages.length
+
+  // Keep the rendered range anchored at the top while the user is scrolled up.
+  // The window is a trailing slice, so when new messages are persisted it would
+  // normally drop the same number off the top — shifting the content the user is
+  // reading (overflow-anchor is disabled, so nothing compensates). Growing the
+  // window by exactly that delta keeps the same first rendered item; the new
+  // messages just append below, off-screen. When pinned to the bottom we leave the
+  // window alone so the slice slides and the DOM stays bounded.
+  const prevVisibleLenRef = useRef(visibleMessages.length)
+  useLayoutEffect(() => {
+    const grown = visibleMessages.length - prevVisibleLenRef.current
+    prevVisibleLenRef.current = visibleMessages.length
+    if (grown > 0 && !isScrolledToBottomRef.current) {
+      setWindowSize((n) => n + grown)
+    }
+  }, [visibleMessages])
+
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
@@ -157,7 +213,29 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessage, pendingR
     isScrolledToBottomRef.current = distanceFromBottom < threshold
     // Show "scroll to bottom" button when scrolled up more than 300px
     setShowScrollToBottom(distanceFromBottom > 300)
-  }, [])
+
+    // Near the top with older messages still hidden: reveal the next chunk.
+    // prevScrollHeightRef doubles as a re-entrancy guard so we expand at most once
+    // per scroll gesture; the layout effect clears it after re-anchoring.
+    if (el.scrollTop < 200 && prevScrollHeightRef.current == null && hiddenCount > 0) {
+      prevScrollHeightRef.current = el.scrollHeight
+      // The user is reading older content — make sure nothing auto-pins to the
+      // bottom during the expand (the distance heuristic can misfire when the
+      // rendered slice barely overflows the viewport).
+      isScrolledToBottomRef.current = false
+      setWindowSize((n) => n + LOAD_STEP)
+    }
+  }, [hiddenCount])
+
+  // After a scroll-up expansion adds older messages above the viewport, restore the
+  // scroll position so the content the user was reading stays put (no jump).
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (el && prevScrollHeightRef.current != null) {
+      el.scrollTop += el.scrollHeight - prevScrollHeightRef.current
+      prevScrollHeightRef.current = null
+    }
+  }, [windowSize])
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current
@@ -364,16 +442,14 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessage, pendingR
 
   return (
     <div className="relative flex-1 min-h-0 overflow-hidden">
-      <div className="overflow-y-auto h-full" ref={scrollRef} onScroll={handleScroll} data-testid="message-list">
+      <div className="overflow-y-auto h-full" style={{ overflowAnchor: 'none' }} ref={scrollRef} onScroll={handleScroll} data-testid="message-list">
         <div className="mx-auto w-full max-w-[720px] px-4 pb-4 pt-14 space-y-4">
-        {messages?.filter((item) => {
-          // Hide system-injected user messages (e.g., MCP registration continuation)
-          if (item.type === 'user') {
-            const msg = item as ApiMessage
-            if (msg.content?.text?.startsWith(SYSTEM_MESSAGE_PREFIX)) return false
-          }
-          return true
-        }).map((item) => (
+        {hiddenCount > 0 && (
+          <div className="flex items-center justify-center py-3 text-xs text-muted-foreground">
+            {hiddenCount} earlier {hiddenCount === 1 ? 'message' : 'messages'} hidden — scroll up to load
+          </div>
+        )}
+        {windowedMessages.map((item) => (
           <Fragment key={item.id}>
             {item.type === 'memory_recall' ? (
               <MemoryRecallItem recall={item as ApiMemoryRecall} />

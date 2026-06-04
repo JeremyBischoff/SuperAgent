@@ -52,6 +52,7 @@ export function SessionChatColumn({
   return (
     <div className="flex-1 min-w-0 grid grid-rows-[1fr_auto] min-h-0">
       <MessageList
+        key={sessionId}
         sessionId={sessionId}
         agentSlug={agentSlug}
         pendingUserMessage={pendingUserMessage}

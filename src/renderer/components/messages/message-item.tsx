@@ -1,5 +1,5 @@
 import { cn } from '@shared/lib/utils/cn'
-import { useState, useCallback, type ReactNode } from 'react'
+import { useState, useCallback, memo, type ReactNode } from 'react'
 import { Check, Copy, Link2 } from 'lucide-react'
 import { ProviderErrorCard } from '@renderer/components/ui/provider-error-card'
 import { ToolCallItem } from './tool-call-item'
@@ -69,7 +69,7 @@ interface MessageItemProps {
   onRemoveToolCall?: (toolCallId: string) => void
 }
 
-export function MessageItem({ message, isStreaming, agentSlug, sessionId, isSessionActive, activeSubagents, completedSubagents, onRemoveMessage, onRemoveToolCall }: MessageItemProps) {
+function MessageItemComponent({ message, isStreaming, agentSlug, sessionId, isSessionActive, activeSubagents, completedSubagents, onRemoveMessage, onRemoveToolCall }: MessageItemProps) {
   useRenderTracker('MessageItem')
   const isUser = message.type === 'user'
   const isAssistant = message.type === 'assistant'
@@ -282,6 +282,15 @@ export function MessageItem({ message, isStreaming, agentSlug, sessionId, isSess
     </div>
   )
 }
+
+// Memoized: on the 5s refetch React Query's structural sharing preserves the
+// object reference of any unchanged message, so the default shallow prop compare
+// skips re-rendering all but the items that actually changed. Handlers, agentSlug
+// and sessionId are referentially stable. Note: activeSubagents/completedSubagents
+// are passed to every item and change identity on each subagent SSE event, so the
+// memo gives no benefit while a subagent is actively streaming — it still pays off
+// for the common idle/refetch and plain-text-streaming cases.
+export const MessageItem = memo(MessageItemComponent)
 
 if (__RENDER_TRACKING__) {
   (MessageItem as any).whyDidYouRender = true
