@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ProviderApiKeyInput } from '@renderer/components/settings/provider-api-key-input'
 import { BedrockCredentialsInput } from '@renderer/components/settings/bedrock-credentials-input'
 import { useSettings, useUpdateSettings } from '@renderer/hooks/use-settings'
+import { usePlatformAuthStatus } from '@renderer/hooks/use-platform-auth'
 import { ChevronRight } from 'lucide-react'
 import type { LlmProviderId } from '@shared/lib/config/settings'
 
@@ -55,6 +56,11 @@ const LLM_PROVIDER_OPTIONS: Array<{
   description: string
 }> = [
   {
+    id: 'platform',
+    label: 'Platform',
+    description: 'Use the account-managed LLM credentials already connected to SuperAgent.',
+  },
+  {
     id: 'anthropic',
     label: 'Anthropic',
     description: 'Direct API access to Claude models.',
@@ -77,14 +83,21 @@ interface ConfigureLLMStepProps {
 
 export function ConfigureLLMStep({ onCanProceedChange }: ConfigureLLMStepProps) {
   const { data: settings } = useSettings()
+  const { data: platformAuth } = usePlatformAuthStatus()
   const updateSettings = useUpdateSettings()
 
   const activeProvider = (settings?.llmProvider ?? 'anthropic') as LlmProviderId
   const [showInstructions, setShowInstructions] = useState<string | null>(null)
+  const isPlatformConnected = platformAuth?.connected ?? false
+  const providerOptions = isPlatformConnected
+    ? LLM_PROVIDER_OPTIONS
+    : LLM_PROVIDER_OPTIONS.filter((option) => option.id !== 'platform')
 
   // Report to parent whether the selected provider has configured keys
   const apiKeyStatus = (settings?.apiKeyStatus as Record<string, { isConfigured: boolean }> | undefined)
-  const activeProviderConfigured = apiKeyStatus?.[activeProvider]?.isConfigured ?? false
+  const activeProviderConfigured = activeProvider === 'platform'
+    ? isPlatformConnected
+    : apiKeyStatus?.[activeProvider]?.isConfigured ?? false
   useEffect(() => {
     onCanProceedChange?.(activeProviderConfigured)
   }, [activeProviderConfigured, onCanProceedChange])
@@ -99,7 +112,7 @@ export function ConfigureLLMStep({ onCanProceedChange }: ConfigureLLMStepProps) 
       </div>
 
       <div className="space-y-3">
-        {LLM_PROVIDER_OPTIONS.map((option) => {
+        {providerOptions.map((option) => {
           const isSelected = activeProvider === option.id
           const instructions = PROVIDER_INSTRUCTIONS[option.id]
 
@@ -131,7 +144,11 @@ export function ConfigureLLMStep({ onCanProceedChange }: ConfigureLLMStepProps) 
               <div className={`grid transition-all duration-200 ease-in-out ${isSelected ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
                 <div className="overflow-hidden">
                   <div className="px-3 pb-3 pt-2">
-                    {option.id === 'bedrock' ? (
+                    {option.id === 'platform' ? (
+                      <p className="text-xs text-muted-foreground">
+                        Your account is already connected. SuperAgent will use the platform-managed credentials for LLM requests.
+                      </p>
+                    ) : option.id === 'bedrock' ? (
                       <BedrockCredentialsInput
                         key="bedrock"
                         showNotConfiguredAlert={false}

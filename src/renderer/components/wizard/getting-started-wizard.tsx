@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Button } from '@renderer/components/ui/button'
 import { useUserSettings, useUpdateUserSettings } from '@renderer/hooks/use-user-settings'
 import { useUpdateSettings } from '@renderer/hooks/use-settings'
+import { usePlatformAuthStatus } from '@renderer/hooks/use-platform-auth'
 import {
   ChevronRight,
   ChevronLeft,
@@ -40,8 +41,12 @@ interface GettingStartedWizardProps {
 }
 
 export function GettingStartedWizard({ agentOnly, onClose }: GettingStartedWizardProps) {
+  const { data: platformAuth, isLoading: isLoadingPlatformAuth } = usePlatformAuthStatus()
+  const shouldUsePlatformPath = !agentOnly && !!platformAuth?.connected
   const [currentStep, setCurrentStep] = useState(0)
-  const [welcomePath, setWelcomePath] = useState<'platform' | 'manual' | null>(null)
+  const [welcomePath, setWelcomePath] = useState<'platform' | 'manual' | null>(
+    shouldUsePlatformPath ? 'platform' : null
+  )
   const [composioCanProceed, setComposioCanProceed] = useState(false)
   const [runtimeCanProceed, setRuntimeCanProceed] = useState(false)
   const [browserCanProceed, setBrowserCanProceed] = useState(true)
@@ -70,6 +75,17 @@ export function GettingStartedWizard({ agentOnly, onClose }: GettingStartedWizar
     if (hasRestoredRef.current) return
     hasRestoredRef.current = true
 
+    if (shouldUsePlatformPath) {
+      const progress = userSettings.onboardingProgress
+      const idx = progress?.path === 'platform'
+        ? PLATFORM_STEPS.findIndex(s => s.id === progress.stepId)
+        : -1
+      isRestoringRef.current = idx >= 0
+      setWelcomePath('platform')
+      setCurrentStep(idx >= 0 ? idx : 0)
+      return
+    }
+
     const progress = userSettings.onboardingProgress
     if (progress) {
       const targetSteps = progress.path === 'platform' ? PLATFORM_STEPS : MANUAL_STEPS
@@ -86,7 +102,14 @@ export function GettingStartedWizard({ agentOnly, onClose }: GettingStartedWizar
       setCurrentStep(0)
       setWelcomePath(null)
     }
-  }, [userSettings])
+  }, [shouldUsePlatformPath, userSettings])
+
+  useEffect(() => {
+    if (!shouldUsePlatformPath) return
+    if (welcomePath !== null && welcomePath !== 'manual') return
+    setWelcomePath('platform')
+    setCurrentStep(0)
+  }, [shouldUsePlatformPath, welcomePath])
 
   // Persist progress on every step change
   useEffect(() => {
@@ -142,6 +165,7 @@ export function GettingStartedWizard({ agentOnly, onClose }: GettingStartedWizar
   }
 
   const isAgentStep = agentOnly || activeStep?.id === 'agent'
+  const isCheckingPlatformPath = !agentOnly && !welcomePath && isLoadingPlatformAuth
 
   if (agentOnly) {
     return (
@@ -184,7 +208,10 @@ export function GettingStartedWizard({ agentOnly, onClose }: GettingStartedWizar
 
           {/* Step content */}
           <div className="min-h-[320px]" data-testid="wizard-step-content" data-step={currentStep}>
-            {!welcomePath && (
+            {isCheckingPlatformPath && (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            )}
+            {!welcomePath && !isCheckingPlatformPath && (
               <WelcomeStep
                 onChoosePlatform={handleWelcomePlatformPath}
                 onContinueToManualSetup={handleWelcomeManualSetup}
@@ -213,6 +240,7 @@ export function GettingStartedWizard({ agentOnly, onClose }: GettingStartedWizar
               variant="outline"
               onClick={() => {
                 if (currentStep === 0) {
+                  if (shouldUsePlatformPath) return
                   setWelcomePath(null)
                   return
                 }
