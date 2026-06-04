@@ -1,36 +1,35 @@
 {
+  "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
-    "linear-gradient" : [
-      "display-p3:0.58066,0.50589,0.95784,1.00000",
-      "display-p3:0.19657,0.10116,0.68343,1.00000"
-    ],
-    "orientation" : {
-      "start" : {
-        "x" : 0.5,
-        "y" : 0
-      },
-      "stop" : {
-        "x" : 0.5,
-        "y" : 0.7
-      }
-    }
+    "automatic-gradient" : "srgb:1.00000,1.00000,1.00000,1.00000"
   },
   "groups" : [
     {
       "layers" : [
         {
-          "fill" : {
-            "solid" : "extended-gray:1.00000,1.00000"
-          },
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ],
           "glass" : true,
           "hidden" : false,
-          "image-name" : "Vector.svg",
-          "name" : "Vector",
+          "image-name" : "Gamut-Logo2.svg",
+          "name" : "Gamut-Logo2",
           "position" : {
-            "scale" : 0.78,
+            "scale" : 0.7,
             "translation-in-points" : [
-              0,
-              0
+              28.060660471893925,
+              -8.937519956320216
             ]
           }
         }
@@ -46,9 +45,8 @@
     }
   ],
   "supported-platforms" : {
-    "circles" : [
-      "watchOS"
-    ],
-    "squares" : "shared"
+    "squares" : [
+      "macOS"
+    ]
   }
 }
