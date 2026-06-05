@@ -1,0 +1,25 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Agent successfully opened a browser, navigated to https://example.com, retrieved the page title \"Example Domain\", and reported it back in the chat response.",
+  "steps": [
+    "Navigated to http://localhost:47891 - Application loaded successfully showing the SuperAgent interface with agents list in the sidebar.",
+    "Found and clicked the \"QA-20260605-013149-ghvn\" agent in the sidebar - Agent opened successfully and displayed the chat interface with empty state.",
+    "Typed the message \"Open a browser and go to https://example.com. Tell me the page title.\" in the chat textbox - Message was entered correctly in the input field.",
+    "Clicked the Send button to submit the message - Message was sent and agent began processing (status changed to \"working\").",
+    "Waited for agent response using a polling mechanism - Agent processed the request and completed within ~13 seconds, well under the 3-minute timeout.",
+    "Verified response contains \"Example Domain\" - Response clearly displayed: \"The page title is \\\"Example Domain\\\".\" along with all the browser tool call cards showing successful execution (ToolSearch, Open Browser, Browser MCP: Browser Get State, Close Browser).",
+    "Took a screenshot documenting the complete response - Screenshot shows the full chat history with the agent's response explicitly mentioning \"Example Domain\" and all completed tool calls marked with green checkmarks."
+  ],
+  "bugs": [],
+  "durationMs": 61173,
+  "sessionId": "46dc9e9f-85c4-4536-9329-fb25e3a2bb38",
+  "cost": {
+    "inputTokens": 327,
+    "outputTokens": 9456,
+    "cacheCreationTokens": 61309,
+    "cacheReadTokens": 1019893,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.226233
+  }
+}
