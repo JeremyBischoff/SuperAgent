@@ -592,8 +592,9 @@ describe('SUP-199: remote MCP assignment ownership (AUTH_MODE)', () => {
 
   it('does not gate on ownership when auth mode is disabled', async () => {
     mockIsAuthMode.mockReturnValue(false)
-    // 1) ownership lookup (no userId filter) → exists; 2) existing-mappings → none.
-    selectQueue = [[{ id: 'shared-mcp-id' }], []]
+    // Ownership lookup is skipped entirely in non-auth mode, so the only select
+    // is the existing-mappings lookup → none assigned yet.
+    selectQueue = [[]]
 
     const res = await appWithAgents().request('http://localhost/api/agents/my-agent/remote-mcps', {
       method: 'POST',
