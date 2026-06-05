@@ -246,6 +246,15 @@ function getOrCreateEventSource(
           backgroundTasks: Array.isArray(data.backgroundTasks) ? data.backgroundTasks : (current?.backgroundTasks ?? []),
           isWaitingBackground: Array.isArray(data.backgroundTasks) && data.backgroundTasks.length > 0,
         })
+        // Reconcile against the persisted transcript on every (re)connect. A client
+        // that opens the stream AFTER the agent already broadcast events (common for a
+        // freshly-created session, or any reconnect) misses those one-shot broadcasts —
+        // they are not buffered server-side. The persisted messages are the source of
+        // truth (MessageList renders streamed text, tool calls, and derives pending
+        // input requests from them), so force a refetch now instead of waiting for the
+        // safety-net poll. Without this, a late join only recovers on the next poll
+        // tick, which races the assertion timeout in tests and shows a stale UI in prod.
+        queryClient.invalidateQueries({ queryKey: ['messages', sessionId] })
         // Fetch current browser status to sync state (handles missed events)
         fetch(`${baseUrl}/api/agents/${agentSlug}/browser/status`)
           .then((res) => res.json())
