@@ -1,0 +1,23 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Agent successfully opened a browser, navigated to https://example.com, retrieved the page title, and reported it as \"Example Domain\"",
+  "steps": [
+    "Step 1: Navigated to http://localhost:47891 — Successfully loaded the SuperAgent interface showing the agent list",
+    "Step 2: Clicked on QA-20260605-014512-w3xa agent — Successfully opened the agent chat interface with message input field",
+    "Step 3: Typed and sent message \"Open a browser and go to https://example.com. Tell me the page title.\" — Message was successfully sent and the agent began processing",
+    "Step 4: Waited up to 3 minutes for agent response — Agent completed within 7 seconds and returned full response with browser tool execution results",
+    "Step 5: Verified response mentions \"Example Domain\" — Confirmed the agent's response explicitly states: \"The page title is \"Example Domain\".\" The browser preview panel also displays the Example Domain page, and tool execution logs show successful execution of Open Browser and Browser MCP: Browser Get State tools"
+  ],
+  "bugs": [],
+  "durationMs": 74110,
+  "sessionId": "a62f404b-7a34-4870-b8ad-472485fc65e7",
+  "cost": {
+    "inputTokens": 369,
+    "outputTokens": 12352,
+    "cacheCreationTokens": 75833,
+    "cacheReadTokens": 1198003,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.276721
+  }
+}
