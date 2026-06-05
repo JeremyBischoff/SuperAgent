@@ -484,17 +484,26 @@ export class UserInputRequestScenario implements MockScenario {
     const capturedTools = [...this.tools]
     const finalDelay = delay
     setTimeout(() => {
+      const assistantContent = capturedTools.map((tool, i) => ({
+        type: 'tool_use',
+        id: capturedToolIds[i],
+        name: tool.name,
+        input: tool.input,
+      }))
       client.writeJsonlEntry(sessionId, {
         type: 'assistant',
-        message: {
-          content: capturedTools.map((tool, i) => ({
-            type: 'tool_use',
-            id: capturedToolIds[i],
-            name: tool.name,
-            input: tool.input,
-          })),
-        },
+        message: { content: assistantContent },
         timestamp: new Date().toISOString(),
+      })
+      // Emit the completed assistant message through the stream so MessagePersister
+      // broadcasts `messages_updated` (the real Claude Agent SDK emits this; a direct
+      // JSONL write alone does not). Without it, a client that joined after the
+      // one-shot `*_request` broadcasts has NO signal to refetch the transcript and
+      // recover the pending input cards — it would hang until the safety-net poll,
+      // which is the e2e flake on slow CI (user-input-requests parallel cases).
+      client.emitStreamMessage(sessionId, {
+        type: 'assistant',
+        content: { type: 'assistant', message: { content: assistantContent } },
       })
     }, finalDelay)
   }
