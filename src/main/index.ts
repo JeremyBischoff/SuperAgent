@@ -70,6 +70,7 @@ import { serve } from '@hono/node-server'
 import api from '../api'
 import { initializeServices, shutdownServices } from '@shared/lib/startup'
 import { setupServerHandlers } from '@shared/lib/startup'
+import { bindServerWithRetry } from '@shared/lib/server-bind'
 import { chatIntegrationManager } from '@shared/lib/chat-integrations/chat-integration-manager'
 import { getUserSettings } from '@shared/lib/services/user-settings-service'
 
@@ -85,10 +86,6 @@ if (process.platform === 'darwin') {
 
 // Use a more exotic default port to avoid conflicts
 const DEFAULT_API_PORT = 47891
-// How many sequential ports to try when the preferred one is taken. The bind is
-// done atomically (no probe-then-bind TOCTOU gap), advancing one port per
-// EADDRINUSE until a port is claimed or this many attempts are exhausted.
-const MAX_PORT_BIND_ATTEMPTS = 10
 let actualApiPort: number = DEFAULT_API_PORT
 let mainWindow: BrowserWindow | null = null
 const dashboardWindows: Map<string, BrowserWindow> = new Map()
@@ -1240,70 +1237,27 @@ function stopNotificationListener(): void {
   }
 }
 
-// Bind the API server, advancing to the next port on a port-in-use race and
-// retrying atomically. Unlike a probe-then-bind approach there's no TOCTOU gap:
-// the real server claims the port, and an EADDRINUSE surfaces on the server's
-// 'error' event rather than escaping to the uncaughtException handler (which
-// would otherwise quit the app on a transient port collision). Resolves with the
-// actually-bound port; setupServerHandlers runs against the surviving instance.
-function bindApiServer(startPort: number): Promise<number> {
-  return new Promise<number>((resolve, reject) => {
-    const attempt = (port: number, attemptsLeft: number) => {
-      let settled = false
-
-      // serve() creates the server and calls listen() synchronously, returning
-      // the underlying http.Server. The EADDRINUSE 'error' fires asynchronously,
-      // so attaching the listener right after serve() returns is in time.
-      const server = serve({ fetch: api.fetch, port, hostname: '0.0.0.0' }, (info) => {
-        if (settled) return
-        settled = true
-        server.off('error', onError)
-
-        // Record the port everyone else reads (createAppMenu, createTray, the
-        // renderer base URL, etc.). A stale value here points the UI at a dead
-        // server, so update both the module state and process.env.PORT.
-        actualApiPort = info.port
-        process.env.PORT = String(info.port)
-        apiServer = server
-        console.log(`API server running on http://localhost:${info.port}`)
-
-        resolve(info.port)
-      })
-
-      const onError = (error: NodeJS.ErrnoException) => {
-        if (settled) return
-        settled = true
-
-        // Discard the failed instance before retrying so we never leak a
-        // half-bound server (and re-run setupServerHandlers on the new one).
-        server.close()
-
-        if (error.code === 'EADDRINUSE' && attemptsLeft > 1) {
-          console.warn(`Port ${port} in use, trying ${port + 1}`)
-          attempt(port + 1, attemptsLeft - 1)
-          return
-        }
-
-        reject(error)
-      }
-
-      server.once('error', onError)
-
-      // Set up server-level handlers (WebSocket proxies, etc.) on this instance.
-      // A retry creates a fresh server, so these are wired per attempt.
-      setupServerHandlers(server)
-    }
-
-    attempt(startPort, MAX_PORT_BIND_ATTEMPTS)
-  })
-}
-
 // Start the API server and app
 async function startApp() {
-  // Bind the API server, retrying on a port race until a port is claimed.
+  // Bind the API server atomically, retrying on a port race until a port is
+  // claimed (no probe-then-bind TOCTOU gap; an EADDRINUSE retries instead of
+  // crashing the app via uncaughtException). See bindServerWithRetry.
   let boundPort: number
   try {
-    boundPort = await bindApiServer(DEFAULT_API_PORT)
+    const bound = await bindServerWithRetry(api.fetch, {
+      startPort: DEFAULT_API_PORT,
+      hostname: '0.0.0.0',
+    })
+    apiServer = bound.server
+    // Record the port everyone else reads (createAppMenu, createTray, the
+    // renderer base URL, etc.). A stale value here points the UI at a dead
+    // server, so update both the module state and process.env.PORT.
+    actualApiPort = bound.port
+    process.env.PORT = String(bound.port)
+    boundPort = bound.port
+    // Wire server-level handlers (WebSocket proxies, etc.) on the bound server.
+    setupServerHandlers(bound.server)
+    console.log(`API server running on http://localhost:${bound.port}`)
   } catch (error) {
     console.error('Failed to bind API server:', error)
     app.quit()
