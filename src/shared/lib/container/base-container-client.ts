@@ -323,6 +323,33 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
     return false
   }
 
+  /**
+   * Whether a run failure is a host-port allocation race. The chosen port passed
+   * findAvailablePort()'s pre-flight bind but was grabbed (or published on a
+   * different interface) before `run -p` claimed it. Recoverable by re-picking a
+   * port. Matches Docker, nerdctl/containerd, and Podman phrasings.
+   */
+  protected isPortConflictError(error: any): boolean {
+    const msg = String(error?.message || error?.stderr || error || '')
+    return (
+      /port is already allocated/i.test(msg) ||
+      /address already in use/i.test(msg) ||
+      /Bind for .* failed/i.test(msg) ||
+      /failed to bind host port/i.test(msg)
+    )
+  }
+
+  /**
+   * If a run failure is caused by a bind mount the runtime can't access, return
+   * the offending host path so start() can drop that one mount and retry without
+   * it. Default: never (most runtimes share the host filesystem directly).
+   * VM-based runtimes (Lima) override to parse EPERM-on-stat for cloud-synced
+   * mounts that the VM helper is denied access to.
+   */
+  protected extractInaccessibleMountPath(_error: any): string | null {
+    return null
+  }
+
   protected getContainerName(): string {
     return `superagent-${this.config.agentId}`
   }
@@ -405,11 +432,16 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
     }
   }
 
-  private async findAvailablePort(): Promise<number> {
+  /**
+   * Find a free host port to publish the container on.
+   * `exclude` lets a retry skip ports that just lost a publish race even if
+   * they momentarily look free again to the pre-flight bind.
+   */
+  private async findAvailablePort(exclude?: Set<number>): Promise<number> {
     const usedPorts = await this.getUsedPorts()
 
     let port = BASE_PORT
-    while (usedPorts.has(port) || !(await this.isPortAvailable(port))) {
+    while (usedPorts.has(port) || exclude?.has(port) || !(await this.isPortAvailable(port))) {
       port++
     }
     return port
@@ -442,7 +474,9 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
         server.close()
         resolve(true)
       })
-      server.listen(port, '127.0.0.1')
+      // Bind 0.0.0.0 to match docker/nerdctl's publish address — a 127.0.0.1
+      // bind would miss a conflict from a process already on 0.0.0.0:<port>.
+      server.listen(port, '0.0.0.0')
     })
   }
 
@@ -469,44 +503,87 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
       fs.mkdirSync(workspaceDir, { recursive: true })
 
       // Find an available port
-      const port = await this.findAvailablePort()
+      let port = await this.findAvailablePort()
 
       // Write env vars to a temp file (avoids command length limits on Windows)
       const { flag: envFileFlag, cleanup: cleanupEnvFile } = this.buildEnvFile(options?.envVars)
       const containerName = this.getContainerName()
 
-      // Remove existing container if exists (stop first for runtimes like Apple Container that don't support rm -f)
-      await execWithPathSilent(`${runner} stop ${containerName}`)
-      await execWithPathSilent(`${runner} rm ${containerName}`)
-
       // Build resource limit flags
       const resourceFlags = this.getResourceFlags(cpu, memory)
       const additionalFlags = this.getAdditionalRunFlags()
 
-      // Start container with volume mount for persistent workspace
-      const runCmd = [
-        runner, 'run', '-d',
-        '--name', containerName,
-        '-p', `${port}:${CONTAINER_INTERNAL_PORT}`,
-        '-v', `"${this.hostPathForRuntime(workspaceDir)}:/workspace${this.getVolumeMountSuffix()}"`,
-        ...(options?.additionalVolumes || []).flatMap(v => ['-v', v]),
-        resourceFlags,
-        additionalFlags,
-        envFileFlag,
-        image,
-      ].filter(Boolean).join(' ')
+      // Mutable copy of bind-mount flags — an inaccessible mount (e.g. a
+      // cloud-synced folder the VM helper is denied) is dropped from this list
+      // on retry so the container can still start without it.
+      let volumes = [...(options?.additionalVolumes || [])]
 
+      const buildRunCmd = () =>
+        [
+          runner, 'run', '-d',
+          '--name', containerName,
+          '-p', `${port}:${CONTAINER_INTERNAL_PORT}`,
+          '-v', `"${this.hostPathForRuntime(workspaceDir)}:/workspace${this.getVolumeMountSuffix()}"`,
+          ...volumes.flatMap(v => ['-v', v]),
+          resourceFlags,
+          additionalFlags,
+          envFileFlag,
+          image,
+        ].filter(Boolean).join(' ')
+
+      // Bounded retry loop. Each recovery path makes exactly one attempt of
+      // progress so the loop can't spin: dropping a mount shrinks `volumes`,
+      // re-picking a port is capped by portRetries, and VM provisioning runs
+      // once. A fresh stop+rm precedes every attempt so we never double-start.
+      const MAX_PORT_RETRIES = 3
+      let portRetries = 0
+      const triedPorts = new Set<number>([port])
+      let vmRecoveryTried = false
       let stdout: string
       try {
-        ({ stdout } = await execWithPath(runCmd))
-      } catch (runError: any) {
-        // Allow subclasses to handle and recover from run errors (e.g., kernel setup)
-        const recovered = await this.handleRunError(runError)
-        if (!recovered) throw runError
-        // Retry after recovery
-        await execWithPathSilent(`${runner} stop ${containerName}`)
-        await execWithPathSilent(`${runner} rm ${containerName}`);
-        ({ stdout } = await execWithPath(runCmd))
+        for (;;) {
+          await execWithPathSilent(`${runner} stop ${containerName}`)
+          await execWithPathSilent(`${runner} rm ${containerName}`)
+
+          try {
+            ({ stdout } = await execWithPath(buildRunCmd()))
+            break
+          } catch (runError: any) {
+            // 1. Inaccessible bind mount (e.g. iCloud/File Provider path the VM
+            //    can't stat). Drop that one mount and retry without it.
+            const badMountPath = this.extractInaccessibleMountPath(runError)
+            if (badMountPath) {
+              const before = volumes.length
+              volumes = volumes.filter((v) => !v.includes(badMountPath))
+              if (volumes.length < before) {
+                console.warn(`[Container] Dropping inaccessible mount and retrying: ${badMountPath}`)
+                addErrorBreadcrumb({ category: 'container', message: 'Dropped inaccessible mount, retrying', data: { hostPath: badMountPath, agentId: this.config.agentId } })
+                options?.onMountDropped?.(badMountPath)
+                continue
+              }
+            }
+
+            // 2. Host-port allocation race — re-pick a port (bounded).
+            if (this.isPortConflictError(runError) && portRetries < MAX_PORT_RETRIES) {
+              portRetries++
+              const newPort = await this.findAvailablePort(triedPorts)
+              triedPorts.add(newPort)
+              console.warn(`[Container] Port ${port} unavailable (attempt ${portRetries}/${MAX_PORT_RETRIES}), retrying on ${newPort}`)
+              addErrorBreadcrumb({ category: 'container', message: 'Port conflict, retrying with new port', data: { oldPort: port, newPort, attempt: portRetries, agentId: this.config.agentId } })
+              port = newPort
+              continue
+            }
+
+            // 3. Subclass recovery (e.g. provisioning a missing VM) — once.
+            if (!vmRecoveryTried) {
+              vmRecoveryTried = true
+              const recovered = await this.handleRunError(runError)
+              if (recovered) continue
+            }
+
+            throw runError
+          }
+        }
       } finally {
         cleanupEnvFile()
       }
@@ -541,8 +618,13 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
     } catch (error: any) {
       // Only capture if not already captured (health check errors are captured above)
       if (!error.message?.includes('Container failed to become healthy')) {
+        // Port races are a handled, user-environment failure — we retried with
+        // fresh ports and only land here after exhausting them. Downgrade to a
+        // warning so it doesn't page as a hard error.
+        const isHandledEnvFailure = this.isPortConflictError(error)
         captureException(error, {
           tags: { component: 'container', operation: 'start' },
+          ...(isHandledEnvFailure ? { level: 'warning' as const } : {}),
           extra: {
             agentId: this.config.agentId,
             containerName: this.getContainerName(),

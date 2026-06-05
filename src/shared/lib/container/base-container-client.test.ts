@@ -2,7 +2,21 @@ import { describe, it, expect, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
-import { writeEnvFile, parseMemoryValue, shellQuote, isConnectionError, getEnhancedPath } from './base-container-client'
+import { writeEnvFile, parseMemoryValue, shellQuote, isConnectionError, getEnhancedPath, BaseContainerClient } from './base-container-client'
+
+/** Minimal concrete subclass to exercise protected run-error classification. */
+class TestContainerClient extends BaseContainerClient {
+  protected getRunnerCommand(): string {
+    return 'docker'
+  }
+  // Expose protected predicates for testing.
+  public testIsPortConflictError(error: unknown): boolean {
+    return this.isPortConflictError(error)
+  }
+  public testExtractInaccessibleMountPath(error: unknown): string | null {
+    return this.extractInaccessibleMountPath(error)
+  }
+}
 
 describe('writeEnvFile', () => {
   const cleanups: (() => void)[] = []
@@ -568,5 +582,37 @@ describe('getEnhancedPath', () => {
     // Every separator should be the platform delimiter
     const parts = enhanced.split(path.delimiter)
     expect(parts.length).toBeGreaterThan(1)
+  })
+})
+
+// ============================================================================
+// run-error classification (port races, inaccessible mounts)
+// ============================================================================
+
+describe('BaseContainerClient.isPortConflictError', () => {
+  const client = new TestContainerClient({ agentId: 'test-agent' })
+
+  it('matches docker "port is already allocated"', () => {
+    expect(client.testIsPortConflictError(new Error('Error: port is already allocated'))).toBe(true)
+  })
+
+  it('matches "address already in use"', () => {
+    expect(client.testIsPortConflictError(new Error('listen tcp 0.0.0.0:4000: bind: address already in use'))).toBe(true)
+  })
+
+  it('matches docker "Bind for ... failed"', () => {
+    expect(client.testIsPortConflictError(new Error('Bind for 0.0.0.0:4000 failed: port is already allocated'))).toBe(true)
+  })
+
+  it('reads from a .stderr property', () => {
+    expect(client.testIsPortConflictError({ stderr: 'failed to bind host port for 0.0.0.0:4000' })).toBe(true)
+  })
+
+  it('does not match unrelated errors', () => {
+    expect(client.testIsPortConflictError(new Error('no such image'))).toBe(false)
+  })
+
+  it('base extractInaccessibleMountPath returns null (no VM filesystem)', () => {
+    expect(client.testExtractInaccessibleMountPath(new Error('operation not permitted'))).toBe(null)
   })
 })
