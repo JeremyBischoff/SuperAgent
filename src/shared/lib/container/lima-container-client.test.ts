@@ -460,6 +460,25 @@ describe('LimaContainerClient.extractInaccessibleMountPath', () => {
     )
   })
 
+  // The REAL on-the-wire format: nerdctl logs via logrus, which wraps the
+  // message in msg="..." and escapes the inner quotes around the path as \".
+  // (Captured from a live `nerdctl run -v <denied-path>` against the Lima VM.)
+  // Without unescaping, the parser would return `\"<path>\"` and the mount-drop
+  // filter would never match — so the inaccessible mount would never be dropped.
+  it('parses the host path from logrus-escaped (\\") nerdctl stderr', () => {
+    const stderr =
+      'time="2026-06-04T18:17:11-07:00" level=fatal msg="failed to stat \\"/Users/x/Library/Mail\\": stat /Users/x/Library/Mail: operation not permitted"'
+    expect(client.extractInaccessibleMountPath({ stderr })).toBe('/Users/x/Library/Mail')
+  })
+
+  it('parses a logrus-escaped path that contains spaces (iCloud Mobile Documents)', () => {
+    const stderr =
+      'level=fatal msg="failed to stat \\"/Users/x/Library/Mobile Documents/com~apple~CloudDocs\\": operation not permitted"'
+    expect(client.extractInaccessibleMountPath({ stderr })).toBe(
+      '/Users/x/Library/Mobile Documents/com~apple~CloudDocs'
+    )
+  })
+
   it('returns null when the error is not an EPERM-on-mount', () => {
     expect(client.extractInaccessibleMountPath(new Error('no such image: foo'))).toBe(null)
   })

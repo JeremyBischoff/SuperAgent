@@ -282,17 +282,23 @@ export class LimaContainerClient extends BaseContainerClient {
    * Electron app itself can read the path. start() uses this to drop that one
    * mount and retry without it instead of aborting the whole container.
    *
-   * Example stderr:
-   *   failed to mount /Users/x/Library/CloudStorage/Dropbox/foo: failed to stat
-   *   "/Users/x/Library/CloudStorage/Dropbox/foo": operation not permitted
+   * Example stderr (nerdctl logs via logrus, which wraps the message in
+   * msg="..." and escapes the inner quotes as \"):
+   *   level=fatal msg="failed to stat \"/Users/x/Library/Mail\": stat
+   *   /Users/x/Library/Mail: operation not permitted"
    */
   protected extractInaccessibleMountPath(error: any): string | null {
-    const msg = error?.message || error?.stderr || String(error)
-    if (!/operation not permitted/i.test(msg)) return null
-    // Pull the host path out of `stat "<path>"` / `stat <path>:` phrasings.
+    const raw = error?.message || error?.stderr || String(error)
+    if (!/operation not permitted/i.test(raw)) return null
+    // nerdctl/containerd log via logrus, which escapes the inner quotes around
+    // the path as \". Unescape first — otherwise the captured path keeps its \"
+    // artifacts and the mount-drop filter (volumes.filter(v => v.includes(path)))
+    // never matches, so the inaccessible mount is never dropped.
+    const msg = raw.replace(/\\"/g, '"')
+    // Pull the host path out of `stat "<path>"` (handles spaces) / `stat <path>:`.
     const m =
       msg.match(/(?:failed to )?stat(?:\s+host\s+path)?\s+"([^"]+)"/i) ||
-      msg.match(/(?:failed to )?stat(?:\s+host\s+path)?\s+([^\s:]+)/i)
+      msg.match(/(?:failed to )?stat(?:\s+host\s+path)?\s+([^\s:"]+)/i)
     return m ? m[1] : null
   }
 
