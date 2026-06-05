@@ -1012,11 +1012,18 @@ class MessagePersister {
         if (isRunning) {
           // Session still running, try to re-subscribe
           console.log(`[MessagePersister] Session ${sessionId} still running, re-subscribing`)
-          const { unsubscribe } = client.subscribeToStream(
+          const { unsubscribe, ready } = client.subscribeToStream(
             sessionId,
             (message) => this.handleMessage(sessionId, message)
           )
           this.subscriptions.set(sessionId, unsubscribe)
+          // Defense-in-depth: we don't await the re-subscribe here, so attach a
+          // handler to the `ready` promise. A failed reconnect routes a
+          // synthesized connection_closed message through the callback above;
+          // this only stops the discarded rejection from becoming unhandled.
+          ready.catch((err) => {
+            console.error(`[MessagePersister] Re-subscribe failed for session ${sessionId}:`, err)
+          })
         } else {
           // Session finished
           console.log(`[MessagePersister] Session ${sessionId} not running in container, marking inactive`)

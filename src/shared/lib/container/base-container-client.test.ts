@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import { writeEnvFile, parseMemoryValue, shellQuote, isConnectionError, getEnhancedPath, BaseContainerClient } from './base-container-client'
+import type { ContainerInfo, ContainerConfig, StreamMessage } from './types'
 
 /** Minimal concrete subclass to exercise protected run-error classification. */
 class TestContainerClient extends BaseContainerClient {
@@ -582,6 +583,64 @@ describe('getEnhancedPath', () => {
     // Every separator should be the platform delimiter
     const parts = enhanced.split(path.delimiter)
     expect(parts.length).toBeGreaterThan(1)
+  })
+})
+
+// ============================================================================
+// subscribeToStream error handling (ELECTRON-Q unhandled rejection)
+// ============================================================================
+
+/**
+ * Minimal concrete client whose getInfoFromRuntime reports the container as
+ * stopped, so subscribeToStream's getPortOrThrow throws "Container is not
+ * running" — the exact path that used to leak an unhandled rejection.
+ */
+class StoppedTestClient extends BaseContainerClient {
+  protected getRunnerCommand(): string {
+    return 'docker'
+  }
+  async getInfoFromRuntime(): Promise<ContainerInfo> {
+    return { status: 'stopped', port: null }
+  }
+}
+
+function makeStoppedClient(): StoppedTestClient {
+  return new StoppedTestClient({ agentId: 'test-agent' } as ContainerConfig)
+}
+
+describe('subscribeToStream failure handling', () => {
+  it('does not throw or emit an unhandled error when no error listener is attached', async () => {
+    const client = makeStoppedClient()
+    // No 'error' listener registered — a bare emit('error') would throw here.
+    const { ready } = client.subscribeToStream('sess-1', () => {})
+
+    // The discarded-promise scenario from MessagePersister: only catch `ready`.
+    await expect(ready).rejects.toThrow('Container is not running')
+  })
+
+  it('routes a connection_closed message through the callback on setup failure', async () => {
+    const client = makeStoppedClient()
+    const messages: StreamMessage[] = []
+
+    const { ready } = client.subscribeToStream('sess-2', (m) => messages.push(m))
+
+    await ready.catch(() => {}) // swallow the expected rejection
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0].type).toBe('connection_closed')
+    expect(messages[0].sessionId).toBe('sess-2')
+  })
+
+  it('still emits error when a listener IS attached', async () => {
+    const client = makeStoppedClient()
+    const errors: unknown[] = []
+    client.on('error', (err) => errors.push(err))
+
+    const { ready } = client.subscribeToStream('sess-3', () => {})
+    await ready.catch(() => {})
+
+    expect(errors).toHaveLength(1)
+    expect((errors[0] as Error).message).toContain('Container is not running')
   })
 })
 

@@ -59,6 +59,16 @@ function breadcrumb(message: string, data?: Record<string, unknown>): void {
   addErrorBreadcrumb({ category: COMPONENT, message, data })
 }
 
+/**
+ * True if the error is the recoverable "Container is not running" case thrown by
+ * BaseContainerClient.getPortOrThrow when the container died between requests.
+ * On the chat-integration send/create paths the user is told to retry and the
+ * container restarts on the next message, so this is reported as a warning.
+ */
+function isContainerNotRunning(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('Container is not running')
+}
+
 // ── Constants ───────────────────────────────────────────────────────────
 
 const IMESSAGE_SYSTEM_PROMPT = `This is an iMessage-based conversation. Follow these rules:
@@ -684,7 +694,10 @@ class ChatIntegrationManager {
         return // initialMessage already sent via createSession
       } catch (err) {
         console.error(`[ChatIntegrationManager] Failed to create new session for ${integrationId}:`, err)
-        reportError(err, 'create-session', { integrationId, agentSlug: integration.agentSlug, provider: integration.provider, chatId })
+        // This path recovers and prompts the user to retry. A dead container
+        // ("Container is not running") is expected and self-healing here, so
+        // report it as a warning rather than an error to cut Sentry noise.
+        reportError(err, 'create-session', { integrationId, agentSlug: integration.agentSlug, provider: integration.provider, chatId }, isContainerNotRunning(err) ? 'warning' : 'error')
         await conn.connector.sendMessage(chatId, { text: 'Error: Failed to start a new session. Please try again.' }).catch(() => {})
         return
       }
@@ -733,7 +746,9 @@ class ChatIntegrationManager {
       }
     } catch (err) {
       console.error(`[ChatIntegrationManager] Failed to send message for ${integrationId}/${sessionId}:`, err)
-      reportError(err, 'send-message', { integrationId, sessionId, provider: integration.provider, chatId })
+      // Recovered path (user is told to retry); a dead container is expected and
+      // self-healing, so downgrade it to a warning to cut Sentry noise.
+      reportError(err, 'send-message', { integrationId, sessionId, provider: integration.provider, chatId }, isContainerNotRunning(err) ? 'warning' : 'error')
       await conn.connector.sendMessage(chatId, { text: 'Error: Failed to send your message to the agent. Please try again.' }).catch(() => {})
       return
     }
