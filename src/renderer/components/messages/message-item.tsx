@@ -5,6 +5,7 @@ import { ProviderErrorCard } from '@renderer/components/ui/provider-error-card'
 import { ToolCallItem } from './tool-call-item'
 import { SubAgentBlock } from './subagent-block'
 import { MessageContextMenu } from './message-context-menu'
+import { MessageErrorBoundary } from './message-error-boundary'
 import { FileDownloadPill } from '@renderer/components/ui/file-download-pill'
 import { parseAttachedFiles, parseMountedFolders } from '@shared/lib/utils/attached-files'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -289,18 +290,20 @@ function MessageItemComponent({ message, isStreaming, agentSlug, sessionId, isSe
             {toolCalls.map((toolCall) => (
               <MessageContextMenu key={toolCall.id} text={toolCall.name} onRemove={onRemoveToolCall ? () => onRemoveToolCall(toolCall.id) : undefined}>
                 <div>
-                  {(toolCall.name === 'Task' || toolCall.name === 'Agent') && sessionId ? (
-                    <SubAgentBlock
-                      toolCall={toolCall}
-                      sessionId={sessionId}
-                      agentSlug={agentSlug!}
-                      isSessionActive={isSessionActive}
-                      activeSubagent={activeSubagents?.find(s => s.parentToolId === toolCall.id) ?? null}
-                      isCompleted={completedSubagents?.has(toolCall.id) ?? false}
-                    />
-                  ) : (
-                    <ToolCallItem toolCall={toolCall} messageCreatedAt={message.createdAt} agentSlug={agentSlug} isSessionActive={isSessionActive} />
-                  )}
+                  <MessageErrorBoundary kind="tool call" raw={toolCall} itemId={toolCall.id}>
+                    {(toolCall.name === 'Task' || toolCall.name === 'Agent') && sessionId ? (
+                      <SubAgentBlock
+                        toolCall={toolCall}
+                        sessionId={sessionId}
+                        agentSlug={agentSlug!}
+                        isSessionActive={isSessionActive}
+                        activeSubagent={activeSubagents?.find(s => s.parentToolId === toolCall.id) ?? null}
+                        isCompleted={completedSubagents?.has(toolCall.id) ?? false}
+                      />
+                    ) : (
+                      <ToolCallItem toolCall={toolCall} messageCreatedAt={message.createdAt} agentSlug={agentSlug} isSessionActive={isSessionActive} />
+                    )}
+                  </MessageErrorBoundary>
                 </div>
               </MessageContextMenu>
             ))}

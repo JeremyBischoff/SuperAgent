@@ -12,13 +12,14 @@ import { ToolCallItem, StreamingToolCallItem } from './tool-call-item'
 import { SubAgentBlock } from './subagent-block'
 import { CompactBoundaryItem } from './compact-boundary-item'
 import { MemoryRecallItem } from './memory-recall-item'
+import { MessageErrorBoundary } from './message-error-boundary'
 import { ArrowDown, FileX2, Loader2, MessageSquarePlus, WifiOff } from 'lucide-react'
 import { FileDownloadPill } from '@renderer/components/ui/file-download-pill'
 import { useIsOnline } from '@renderer/context/connectivity-context'
 import { useUser } from '@renderer/context/user-context'
 import { useDraft } from '@renderer/context/drafts-context'
 import { useRenderTracker } from '@renderer/lib/perf'
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, Fragment } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, Fragment, type ReactNode } from 'react'
 import { formatElapsed } from '@renderer/hooks/use-elapsed-timer'
 import type { ApiMessage, ApiCompactBoundary, ApiMemoryRecall } from '@shared/lib/types/api'
 
@@ -464,7 +465,9 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessage, pendingR
               <CompactBoundaryItem boundary={item as ApiCompactBoundary} />
             ) : (
               <>
-                <MessageItem message={item as ApiMessage} agentSlug={agentSlug} sessionId={sessionId} isSessionActive={canHaveRunningToolCalls.has(item.id)} activeSubagents={activeSubagents} completedSubagents={completedSubagents} onRemoveMessage={handleRemoveMessage} onRemoveToolCall={handleRemoveToolCall} />
+                <MessageErrorBoundary kind="message" raw={item} itemId={item.id}>
+                  <MessageItem message={item as ApiMessage} agentSlug={agentSlug} sessionId={sessionId} isSessionActive={canHaveRunningToolCalls.has(item.id)} activeSubagents={activeSubagents} completedSubagents={completedSubagents} onRemoveMessage={handleRemoveMessage} onRemoveToolCall={handleRemoveToolCall} />
+                </MessageErrorBoundary>
                 {turnDeliveredFiles.has(item.id) && item.id !== deferredElapsedMessageId && (
                   <DeliveredFiles files={turnDeliveredFiles.get(item.id)!} agentSlug={agentSlug} />
                 )}
@@ -495,32 +498,36 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessage, pendingR
         {peerUserMessage &&
           peerUserMessage.sender.id !== user?.id &&
           !messages?.some((m) => m.type === 'user' && (m.content as { text?: string }).text?.trim() === peerUserMessage.content.trim()) && (
-          <MessageItem
-            message={{
-              id: 'peer-user-message',
-              type: 'user',
-              content: { text: peerUserMessage.content },
-              toolCalls: [],
-              createdAt: new Date(),
-              ...(peerUserMessage.sender.name ? { sender: { id: peerUserMessage.sender.id, name: peerUserMessage.sender.name, email: peerUserMessage.sender.email || '' } } : {}),
-            }}
-            agentSlug={agentSlug}
-          />
+          <MessageErrorBoundary kind="message" raw={peerUserMessage} itemId="peer-user-message">
+            <MessageItem
+              message={{
+                id: 'peer-user-message',
+                type: 'user',
+                content: { text: peerUserMessage.content },
+                toolCalls: [],
+                createdAt: new Date(),
+                ...(peerUserMessage.sender.name ? { sender: { id: peerUserMessage.sender.id, name: peerUserMessage.sender.name, email: peerUserMessage.sender.email || '' } } : {}),
+              }}
+              agentSlug={agentSlug}
+            />
+          </MessageErrorBoundary>
         )}
 
         {/* Pending user message - shown immediately after sending */}
         {pendingUserMessage && (
-          <MessageItem
-            message={{
-              id: 'pending-user-message',
-              type: 'user',
-              content: { text: pendingUserMessage.text },
-              toolCalls: [],
-              createdAt: new Date(),
-              sender: pendingUserMessage.sender,
-            }}
-            agentSlug={agentSlug}
-          />
+          <MessageErrorBoundary kind="message" raw={pendingUserMessage} itemId="pending-user-message">
+            <MessageItem
+              message={{
+                id: 'pending-user-message',
+                type: 'user',
+                content: { text: pendingUserMessage.text },
+                toolCalls: [],
+                createdAt: new Date(),
+                sender: pendingUserMessage.sender,
+              }}
+              agentSlug={agentSlug}
+            />
+          </MessageErrorBoundary>
         )}
 
         {/* Typing indicator - shown when another user is typing */}
@@ -539,29 +546,31 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessage, pendingR
 
         {/* Streaming text message - keep visible until persisted data arrives */}
         {streamingMessage && !isStreamingMessagePersisted && (
-          <MessageItem
-            message={{
-              id: 'streaming',
-              type: 'assistant',
-              content: { text: streamingMessage },
-              toolCalls: [],
-              createdAt: new Date(),
-              ...(apiErrorCode && { apiError: apiErrorCode }),
-            }}
-            isStreaming={isStreaming}
-          />
+          <MessageErrorBoundary kind="message" raw={streamingMessage} itemId="streaming">
+            <MessageItem
+              message={{
+                id: 'streaming',
+                type: 'assistant',
+                content: { text: streamingMessage },
+                toolCalls: [],
+                createdAt: new Date(),
+                ...(apiErrorCode && { apiError: apiErrorCode }),
+              }}
+              isStreaming={isStreaming}
+            />
+          </MessageErrorBoundary>
         )}
 
         {/* Tool use streaming - keep visible until persisted data arrives */}
         {unpersistedStreamingToolUses.map(tool => {
+          let inner: ReactNode
           if (tool.ready) {
             let input: Record<string, unknown> = {}
             try { input = JSON.parse(tool.partialInput) } catch { /* use empty */ }
             const syntheticToolCall = { id: tool.id, name: tool.name, input }
             if ((tool.name === 'Task' || tool.name === 'Agent') && sessionId) {
-              return (
+              inner = (
                 <SubAgentBlock
-                  key={tool.id}
                   toolCall={syntheticToolCall}
                   sessionId={sessionId}
                   agentSlug={agentSlug}
@@ -570,20 +579,27 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessage, pendingR
                   isCompleted={completedSubagents?.has(tool.id) ?? false}
                 />
               )
+            } else {
+              inner = (
+                <div className="max-w-[80%]">
+                  <ToolCallItem toolCall={syntheticToolCall} agentSlug={agentSlug} isSessionActive={isActive} />
+                </div>
+              )
             }
-            return (
-              <div key={tool.id} className="max-w-[80%]">
-                <ToolCallItem toolCall={syntheticToolCall} agentSlug={agentSlug} isSessionActive={isActive} />
+          } else {
+            inner = (
+              <div className="max-w-[80%]">
+                <StreamingToolCallItem
+                  name={tool.name}
+                  partialInput={tool.partialInput}
+                />
               </div>
             )
           }
           return (
-            <div key={tool.id} className="max-w-[80%]">
-              <StreamingToolCallItem
-                name={tool.name}
-                partialInput={tool.partialInput}
-              />
-            </div>
+            <MessageErrorBoundary key={tool.id} kind="tool call" raw={tool} itemId={tool.id}>
+              {inner}
+            </MessageErrorBoundary>
           )
         })}
 
