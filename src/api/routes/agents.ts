@@ -1677,6 +1677,20 @@ agents.get('/:id/sessions/:sessionId/stream', AgentRead(), async (c) => {
         })
       }
 
+      // Replay any pending user-input requests (secret/connected_account/question/file/
+      // remote_mcp/script_run/browser_input). These are one-shot broadcasts, so a client
+      // that opened the stream after they fired — a freshly-created session, a reconnect,
+      // or a page refresh while the agent is awaiting input — would otherwise never see
+      // them and would hang until the safety-net messages poll. The stored payloads are
+      // re-sent verbatim; the renderer dedupes by toolUseId.
+      const pendingInputs = messagePersister.getPendingInputRequests(sessionId)
+      for (const req of pendingInputs) {
+        await stream.writeSSE({
+          data: JSON.stringify(req),
+          event: 'message',
+        })
+      }
+
       // Replay current computer use grab state (with icon if cached)
       const agentSlugForStream = c.req.param('id')
       const grabbedApp = computerUsePermissionManager.getGrabbedApp(agentSlugForStream)

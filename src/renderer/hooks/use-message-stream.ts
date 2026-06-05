@@ -648,7 +648,7 @@ function getOrCreateEventSource(
           secretName: data.secretName,
           reason: data.reason,
         }
-        if (current) {
+        if (current && !current.pendingSecretRequests.some(r => r.toolUseId === data.toolUseId)) {
           streamStates.set(sessionId, {
             ...current,
             pendingSecretRequests: [...current.pendingSecretRequests, newRequest],
@@ -665,7 +665,7 @@ function getOrCreateEventSource(
           toolkit: data.toolkit,
           reason: data.reason,
         }
-        if (current) {
+        if (current && !current.pendingConnectedAccountRequests.some(r => r.toolUseId === data.toolUseId)) {
           streamStates.set(sessionId, {
             ...current,
             pendingConnectedAccountRequests: [...current.pendingConnectedAccountRequests, newRequest],
@@ -679,7 +679,7 @@ function getOrCreateEventSource(
           toolUseId: data.toolUseId,
           questions: data.questions,
         }
-        if (current) {
+        if (current && !current.pendingQuestionRequests.some(r => r.toolUseId === data.toolUseId)) {
           streamStates.set(sessionId, {
             ...current,
             pendingQuestionRequests: [...current.pendingQuestionRequests, newRequest],
@@ -694,7 +694,7 @@ function getOrCreateEventSource(
           description: data.description,
           fileTypes: data.fileTypes,
         }
-        if (current) {
+        if (current && !current.pendingFileRequests.some(r => r.toolUseId === data.toolUseId)) {
           streamStates.set(sessionId, {
             ...current,
             pendingFileRequests: [...current.pendingFileRequests, newRequest],
@@ -711,7 +711,7 @@ function getOrCreateEventSource(
           reason: data.reason,
           authHint: data.authHint,
         }
-        if (current) {
+        if (current && !current.pendingRemoteMcpRequests.some(r => r.toolUseId === data.toolUseId)) {
           streamStates.set(sessionId, {
             ...current,
             pendingRemoteMcpRequests: [...current.pendingRemoteMcpRequests, newRequest],

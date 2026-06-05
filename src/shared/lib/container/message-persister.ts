@@ -70,6 +70,11 @@ interface StreamingState {
   slashCommands: SlashCommandInfo[] // Available slash commands from SDK
   isAwaitingInput: boolean // True when session is waiting for user input (e.g., secret, file, question)
   pendingComputerUseRequests: Map<string, { toolUseId: string; method: string; params: Record<string, unknown>; permissionLevel: string; appName?: string; agentSlug?: string }> // Pending computer use requests awaiting user approval (keyed by toolUseId)
+  // Pending user-input request broadcasts (secret/connected_account/question/file/remote_mcp/
+  // script_run/browser_input), keyed by toolUseId. These are one-shot SSE events, so a client
+  // that connects AFTER they fire would never see them; we store the exact payloads here and the
+  // /stream route replays them on (re)connect. Cleared at turn boundaries (session_active/idle).
+  pendingInputRequests: Map<string, { type: string; toolUseId: string; [k: string]: unknown }>
   lastApiErrorCode: string | null // SDK error code from last assistant message (e.g., 'authentication_failed', 'rate_limit')
   activeBackgroundTasks: Map<string, { startedAt: number }> // Background Bash commands still running (keyed by task ID)
   pendingDeliverFiles: Map<string, { filePath: string; description?: string }> // deliver_file tool calls awaiting their tool_result, keyed by tool_use ID
@@ -161,6 +166,7 @@ class MessagePersister {
       slashCommands: [],
       isAwaitingInput: priorIsAwaitingInput,
       pendingComputerUseRequests: new Map(),
+      pendingInputRequests: new Map(),
       lastApiErrorCode: null,
       activeBackgroundTasks: priorBackgroundTasks,
       pendingDeliverFiles: new Map(),
@@ -290,6 +296,14 @@ class MessagePersister {
     const state = this.streamingStates.get(sessionId)
     if (!state) return []
     return Array.from(state.pendingComputerUseRequests.values())
+  }
+
+  // Get pending user-input request broadcasts for a session (for SSE replay on (re)connect).
+  // Returns the exact event payloads that were broadcast, so the route can re-send them verbatim.
+  getPendingInputRequests(sessionId: string): Array<{ type: string; toolUseId: string; [k: string]: unknown }> {
+    const state = this.streamingStates.get(sessionId)
+    if (!state) return []
+    return Array.from(state.pendingInputRequests.values())
   }
 
   // Clear a pending computer use request (after approval/rejection)
@@ -496,6 +510,7 @@ class MessagePersister {
         slashCommands: [],
         isAwaitingInput: false,
         pendingComputerUseRequests: new Map(),
+        pendingInputRequests: new Map(),
         lastApiErrorCode: null,
         activeBackgroundTasks: new Map(),
         pendingDeliverFiles: new Map(),
@@ -572,9 +587,35 @@ class MessagePersister {
     this.broadcastToSSE(sessionId, data)
   }
 
+  // One-shot user-input request events that a late-joining client must be able to
+  // recover on (re)connect. Keep in sync with the /stream route's replay loop.
+  private static readonly INPUT_REQUEST_TYPES = new Set([
+    'secret_request',
+    'connected_account_request',
+    'user_question_request',
+    'file_request',
+    'remote_mcp_request',
+    'script_run_request',
+    'browser_input_request',
+  ])
+
   // Broadcast to SSE clients
   private broadcastToSSE(sessionId: string, data: unknown): void {
     this.capture?.recordOutput(sessionId, data)
+    // Track/clear pending user-input requests so the /stream route can replay them to
+    // clients that connect after the one-shot broadcast (the e2e late-join flake, and a
+    // real reconnect/refresh while the agent is awaiting input). Turn boundaries clear them.
+    const evt = data as { type?: string; toolUseId?: string } | null
+    if (evt && typeof evt.type === 'string') {
+      const state = this.streamingStates.get(sessionId)
+      if (state) {
+        if (evt.type === 'session_active' || evt.type === 'session_idle') {
+          state.pendingInputRequests.clear()
+        } else if (MessagePersister.INPUT_REQUEST_TYPES.has(evt.type) && typeof evt.toolUseId === 'string') {
+          state.pendingInputRequests.set(evt.toolUseId, evt as { type: string; toolUseId: string })
+        }
+      }
+    }
     const clients = this.sseClients.get(sessionId)
     if (clients) {
       clients.forEach((callback) => {
@@ -2791,6 +2832,11 @@ class MessagePersister {
       const state = this.streamingStates.get(sessionId)
       for (const block of messageContent) {
         if (block.type === 'tool_result' && block.tool_use_id) {
+          // A resolved user-input request must not be replayed to a client that
+          // reconnects later (e.g. answer one of several parallel requests, then
+          // refresh) — its tool_result is in, so drop it from the replay store.
+          state?.pendingInputRequests.delete(block.tool_use_id)
+
           // Broadcast update to SSE clients
           this.broadcastToSSE(sessionId, {
             type: 'tool_result',
