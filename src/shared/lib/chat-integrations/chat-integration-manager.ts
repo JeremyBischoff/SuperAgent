@@ -28,10 +28,11 @@ import {
   updateChatIntegrationSessionName,
   archiveChatIntegrationSession,
   touchChatIntegrationSession,
-  listChatIntegrationSessions,
+  listActiveChatIntegrationSessions,
   resolveActiveSession,
   getLastDisplayName,
 } from '@shared/lib/services/chat-integration-session-service'
+import { assertPathWithinDir } from '@shared/lib/utils/path-safety'
 import type { EffortLevel } from '@shared/lib/container/types'
 import type { ChatIntegration } from '@shared/lib/db/schema'
 import { messagePersister } from '@shared/lib/container/message-persister'
@@ -67,6 +68,39 @@ function breadcrumb(message: string, data?: Record<string, unknown>): void {
  */
 function isContainerNotRunning(err: unknown): boolean {
   return err instanceof Error && err.message.includes('Container is not running')
+}
+
+/**
+ * True iff `u` is an HTTPS request to Slack (slack.com or a *.slack.com
+ * subdomain). Only these hosts may receive the Slack bot token on a redirect
+ * hop (SUP-232). Exported for unit testing.
+ */
+export function isTrustedSlackDownloadHost(u: URL): boolean {
+  if (u.protocol !== 'https:') return false
+  const host = u.hostname.toLowerCase()
+  return host === 'slack.com' || host.endsWith('.slack.com')
+}
+
+/**
+ * Sanitize an externally-supplied attachment filename into a safe basename.
+ *
+ * External chat attachment names are attacker-controlled, so we strip any
+ * directory components (POSIX and Windows separators), `..` traversal, leading
+ * dots and NUL bytes, then replace any remaining unsafe characters. Falls back
+ * to `file` when nothing usable remains. Exported for unit testing (SUP-231).
+ */
+export function sanitizeUploadFilename(filename: string): string {
+  // Drop NUL bytes, then take the last segment so directory components
+  // (including `..`) cannot survive — split on both `/` and `\`.
+  const raw = String(filename ?? '').replace(/\0/g, '')
+  const segments = raw.split(/[/\\]/)
+  let base = segments[segments.length - 1] ?? ''
+  // Strip leading dots (hidden files, bare `.`/`..`).
+  base = base.replace(/^\.+/, '')
+  // Replace any remaining path-unsafe characters.
+  base = base.replace(/[^A-Za-z0-9._-]/g, '_')
+  if (base === '' || base === '.' || base === '..') return 'file'
+  return base
 }
 
 // ── Constants ───────────────────────────────────────────────────────────
@@ -379,8 +413,10 @@ class ChatIntegrationManager {
     breadcrumb('Integration connected', { integrationId: integration.id, provider: integration.provider })
     this.emitNotification(integration, 'connected')
 
-    // Restore SSE subscriptions for existing chat sessions
-    const existingSessions = listChatIntegrationSessions(integration.id)
+    // Restore SSE subscriptions for ACTIVE chat sessions only. Archived/cleared/
+    // timed-out sessions must not be re-subscribed, or stale agent output could
+    // be forwarded back to the external chat (SUP-233).
+    const existingSessions = listActiveChatIntegrationSessions(integration.id)
     for (const session of existingSessions) {
       this.subscribeChatSession(integration.id, session.externalChatId, session.sessionId)
     }
@@ -921,17 +957,42 @@ class ChatIntegrationManager {
     return this.downloadWithAuth(info.file.url_private_download, botToken)
   }
 
-  /** Download a URL with Bearer auth, following redirects manually to preserve the header. */
+  /**
+   * Download a URL with Bearer auth, following redirects manually.
+   *
+   * The Slack bot token is attached ONLY when the next hop is an HTTPS request
+   * to a trusted Slack host (SUP-232). Slack download URLs redirect to signed S3
+   * URLs whose auth lives in the query string, so dropping the header on
+   * cross-origin hops does not break legitimate downloads — but it prevents the
+   * xoxb token from leaking to an attacker-controlled redirect target.
+   */
   private async downloadWithAuth(url: string, token: string): Promise<Buffer | null> {
-    const headers = { 'Authorization': `Bearer ${token}` }
+    let target: URL
+    try {
+      target = new URL(url)
+    } catch {
+      console.error('[ChatIntegrationManager] Invalid Slack download URL')
+      return null
+    }
 
-    let response = await fetch(url, { headers, redirect: 'manual' })
-    // Follow redirects with auth preserved
+    const headersFor = (u: URL): Record<string, string> =>
+      isTrustedSlackDownloadHost(u) ? { 'Authorization': `Bearer ${token}` } : {}
+
+    let response = await fetch(target.toString(), { headers: headersFor(target), redirect: 'manual' })
+    // Follow redirects, re-evaluating auth for every hop.
     let redirects = 0
     while (response.status >= 300 && response.status < 400 && redirects < 5) {
       const location = response.headers.get('location')
       if (!location) break
-      response = await fetch(location, { headers })
+      let next: URL
+      try {
+        next = new URL(location, target) // resolve relative redirects against the current URL
+      } catch {
+        console.error('[ChatIntegrationManager] Invalid redirect location in Slack download')
+        return null
+      }
+      target = next
+      response = await fetch(target.toString(), { headers: headersFor(target), redirect: 'manual' })
       redirects++
     }
 
@@ -974,10 +1035,17 @@ class ChatIntegrationManager {
     const path = await import('path')
     const fs = await import('fs')
 
-    const uploadName = `${Date.now()}-${filename}`
+    // External attachment names are attacker-controlled — sanitize to a safe
+    // basename so `../` segments cannot escape the uploads directory (SUP-231).
+    const safeName = sanitizeUploadFilename(filename)
+    const uploadName = `${Date.now()}-${safeName}`
     const workspaceDir = getAgentWorkspaceDir(agentSlug)
     const uploadsDir = path.resolve(workspaceDir, 'uploads')
     const fullPath = path.resolve(uploadsDir, uploadName)
+
+    // Defense in depth: never write outside uploads even if sanitization is
+    // weakened in the future. Throws on escape.
+    assertPathWithinDir(uploadsDir, fullPath, 'Resolved upload path escapes the uploads directory')
 
     await fs.promises.mkdir(uploadsDir, { recursive: true })
     await fs.promises.writeFile(fullPath, data)
