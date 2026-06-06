@@ -7,7 +7,7 @@ vi.mock('electron', () => ({
   shell: { openExternal },
 }))
 
-import { safeOpenExternal, isSafeExternalUrl } from './safe-open-external'
+import { safeOpenExternal, safeOpenExternalFromApp, isSafeExternalUrl } from './safe-open-external'
 
 describe('SUP-214: safeOpenExternal scheme allowlist', () => {
   beforeEach(() => {
@@ -45,6 +45,11 @@ describe('SUP-214: safeOpenExternal scheme allowlist', () => {
       'myapp://do-something-privileged',
       'vbscript:msgbox(1)',
       'ftp://example.com/payload',
+      // The OS deep-links are intentionally NOT allowed from the strict (popup)
+      // path — only first-party app UI may open them (see safeOpenExternalFromApp).
+      'sms:+15551234&body=hi',
+      'tel:+15551234',
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
     ]
     for (const url of unsafe) {
       it(`rejects ${url}`, async () => {
@@ -65,6 +70,38 @@ describe('SUP-214: safeOpenExternal scheme allowlist', () => {
             ok = await safeOpenExternal(value as string)
           })(),
         ).resolves.not.toThrow()
+        expect(ok).toBe(false)
+        expect(openExternal).not.toHaveBeenCalled()
+      })
+    }
+  })
+
+  describe('safeOpenExternalFromApp (first-party app UI) allows OS user-action deep-links', () => {
+    const allowed = [
+      'https://example.com',
+      'mailto:hi@example.com',
+      'sms:+15551234&body=%2Fsetup', // iMessage setup link
+      'tel:+15551234',
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility', // computer-use helper
+    ]
+    for (const url of allowed) {
+      it(`forwards ${url}`, async () => {
+        const ok = await safeOpenExternalFromApp(url)
+        expect(ok).toBe(true)
+        expect(openExternal).toHaveBeenCalledWith(url)
+      })
+    }
+
+    const stillBlocked = [
+      'file:///Applications/Calculator.app',
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'myapp://do-something-privileged',
+      'vbscript:msgbox(1)',
+    ]
+    for (const url of stillBlocked) {
+      it(`still rejects ${url}`, async () => {
+        const ok = await safeOpenExternalFromApp(url)
         expect(ok).toBe(false)
         expect(openExternal).not.toHaveBeenCalled()
       })
