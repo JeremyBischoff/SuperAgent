@@ -147,12 +147,14 @@ function toSkillsetRef(config: Pick<SkillsetConfig, 'id' | 'url' | 'name' | 'pro
  * active/awaiting sessions, last activity, scheduled tasks, dashboards.
  * Batch DB queries upfront, then parallelize per-agent FS operations.
  */
-async function enrichAgentsWithSummary(agents: ApiAgent[]): Promise<ApiAgent[]> {
+async function enrichAgentsWithSummary(agents: ApiAgent[], userId?: string): Promise<ApiAgent[]> {
   const slugs = agents.map(a => a.slug)
 
-  // Batch DB queries: 2 queries instead of 2*N individual queries
+  // Batch DB queries: 2 queries instead of 2*N individual queries.
+  // `userId` scopes unread indicators to the caller in auth mode (SUP-227);
+  // undefined in non-auth mode preserves the aggregate-across-owners behavior.
   const [unreadByAgent, tasksByAgent, chatIntegrationsByAgent] = await Promise.all([
-    getUnreadNotificationsByAgents(slugs),
+    getUnreadNotificationsByAgents(slugs, userId),
     listPendingScheduledTasksByAgents(slugs),
     Promise.resolve(listChatIntegrationsByAgents(slugs)),
   ])
@@ -648,7 +650,7 @@ agents.get('/', async (c) => {
       agentList = await listAgentsWithStatus()
     }
 
-    return c.json(await enrichAgentsWithSummary(agentList))
+    return c.json(await enrichAgentsWithSummary(agentList, isAuthMode() ? getCurrentUserId(c) : undefined))
   } catch (error) {
     console.error('Failed to fetch agents:', error)
     return c.json({ error: 'Failed to fetch agents' }, 500)
@@ -690,7 +692,7 @@ agents.get('/:id', AgentRead(), async (c) => {
       return c.json({ error: 'Agent not found' }, 404)
     }
 
-    const [enriched] = await enrichAgentsWithSummary([agent])
+    const [enriched] = await enrichAgentsWithSummary([agent], isAuthMode() ? getCurrentUserId(c) : undefined)
     return c.json(enriched)
   } catch (error) {
     console.error('Failed to fetch agent:', error)
@@ -1167,7 +1169,7 @@ agents.get('/:id/sessions', AgentRead(), async (c) => {
 
 
     const sessionList = await listSessions(slug, { excludeAutomated: true })
-    const unreadSessionIds = await getSessionIdsWithUnreadNotifications(slug)
+    const unreadSessionIds = await getSessionIdsWithUnreadNotifications(slug, isAuthMode() ? getCurrentUserId(c) : undefined)
     const hasAgentLevelReviews = reviewManager.getPendingReviewsForAgent(slug).length > 0
     const sessionsWithStatus = sessionList.map((session) => {
       const isActive = messagePersister.isSessionActive(session.id)

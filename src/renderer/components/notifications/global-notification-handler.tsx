@@ -246,15 +246,26 @@ export function GlobalNotificationHandler() {
                 notificationId: data.notificationId ?? baseContext.notificationId,
               }
               showOSNotification(title, body, undefined, { actions, context })
-            } else if (suppressedByActiveView && typeof data.notificationId === 'string') {
+            } else if (suppressedByActiveView) {
               // Popup suppressed because the user is actively viewing this
               // focused session — but the backend still created the DB record.
               // Mark it read here, otherwise the unread badge inflates for a
               // session the user is watching live. main-content's auto-mark-read
               // only fires on session open / tab refocus, not for notifications
               // that arrive mid-view. (PR #175 follow-up.)
-              apiFetch(`/api/notifications/${data.notificationId}/read`, { method: 'POST' })
-                .then((res) => {
+              //
+              // In auth mode the backend fans a notification out to one per-user
+              // row, so the global broadcast carries no single notificationId
+              // (SUP-227). Fall back to the user-scoped read-by-session endpoint,
+              // which marks only the caller's own rows for this session.
+              const markReadRequest =
+                typeof data.notificationId === 'string'
+                  ? apiFetch(`/api/notifications/${data.notificationId}/read`, { method: 'POST' })
+                  : typeof notificationSessionId === 'string'
+                    ? apiFetch(`/api/notifications/read-by-session/${notificationSessionId}`, { method: 'POST' })
+                    : null
+              markReadRequest
+                ?.then((res) => {
                   if (res.ok) {
                     queryClient.invalidateQueries({ queryKey: ['notifications'] })
                   }

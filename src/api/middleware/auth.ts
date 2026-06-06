@@ -5,6 +5,7 @@ import { runWithRequestUser } from '@shared/lib/platform-attribution'
 import { db } from '@shared/lib/db'
 import { agentAcl, connectedAccounts, remoteMcpServers, notifications } from '@shared/lib/db/schema'
 import { validateProxyToken } from '@shared/lib/proxy/token-store'
+import { isOwnedByCaller } from '@shared/lib/auth/ownership'
 
 // Lazy import to avoid pulling in better-auth ESM at import time
 let _getAuth: (() => ReturnType<typeof import('@shared/lib/auth/index').getAuth>) | null = null
@@ -286,9 +287,13 @@ export function OwnsMcpByParam(param: string): MiddlewareHandler {
 }
 
 /**
- * HasNotificationAccess — user has access to the notification's agent.
- * Admins can access any notification. Regular users need an agentAcl entry
- * for the notification's agentSlug. Expects `:id` route param.
+ * HasNotificationAccess — caller owns the notification referenced by `:id`.
+ *
+ * Notifications are per-user rows (auth mode fans each event out to one row per
+ * ACL member). Gating only by agent role let a teammate flip/delete another
+ * user's row and read its body (SUP-227); a non-admin must therefore own the
+ * row (`notifications.user_id === user.id`). Admins retain bypass access. A
+ * non-owned (or missing) row is reported as 404 so existence does not leak.
  */
 export function HasNotificationAccess(): MiddlewareHandler {
   return async (c: Context, next: Next) => {
@@ -299,15 +304,16 @@ export function HasNotificationAccess(): MiddlewareHandler {
 
     const notificationId = c.req.param('id')!
     const row = await db
-      .select({ agentSlug: notifications.agentSlug })
+      .select({ userId: notifications.userId })
       .from(notifications)
       .where(eq(notifications.id, notificationId))
       .limit(1)
 
     if (!row[0]) return c.json({ error: 'Not found' }, 404)
 
-    const role = await getUserAgentRole(user.id, row[0].agentSlug)
-    if (!role) return c.json({ error: 'Forbidden' }, 403)
+    // Non-admins must own the row. isOwnedByCaller compares against the acting
+    // user id and is a no-op outside auth mode (already short-circuited above).
+    if (!isOwnedByCaller(c, row[0])) return c.json({ error: 'Not found' }, 404)
 
     return next()
   }

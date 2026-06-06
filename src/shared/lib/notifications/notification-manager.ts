@@ -11,6 +11,7 @@
 import { messagePersister } from '@shared/lib/container/message-persister'
 import {
   createNotification,
+  getAgentAclUserIds,
   type NotificationType,
 } from '@shared/lib/services/notification-service'
 import { getUserSettings } from '@shared/lib/services/user-settings-service'
@@ -86,28 +87,43 @@ class NotificationManager {
       return
     }
 
-    // Always create DB notification (for badge/dropdown history)
-    const notificationId = await createNotification({
-      type,
-      sessionId,
-      agentSlug,
-      title,
-      body,
-    })
+    // Create the DB notification record(s) used for badge/dropdown history.
+    //
+    // Session lifecycle events have no single requesting user, so in auth mode
+    // we fan out to one per-user row per ACL member of the agent. Each recipient
+    // then owns their own read state (SUP-227) — the service queries filter by
+    // notifications.user_id. A single shared row would be invisible to every
+    // user (the auth-mode queries require user_id) and would also reintroduce
+    // the shared isRead bit. In non-auth (single-user) mode we keep one row with
+    // a null owner, and stamp its id into the broadcast so the renderer can mark
+    // it read on interaction.
+    let broadcastNotificationId: string | undefined
+    if (isAuthMode()) {
+      const recipientIds = await getAgentAclUserIds(agentSlug)
+      for (const recipientId of recipientIds) {
+        await createNotification({ type, sessionId, agentSlug, title, body }, recipientId)
+      }
+      // No single owning row to reference — each recipient has a distinct id.
+      // The renderer refreshes its (user-scoped) list on the broadcast and falls
+      // back to marking the session read when no notificationId is present.
+      broadcastNotificationId = undefined
+    } else {
+      broadcastNotificationId = await createNotification({ type, sessionId, agentSlug, title, body })
+    }
 
-    // Stamp the actionContext with notificationId so the renderer dispatcher
-    // can mark the DB record as read when the user clicks the OS notification
-    // or one of its action buttons (otherwise the badge stays incremented
-    // even after the user has clearly seen and acted on the notification).
+    // Stamp the actionContext with notificationId (non-auth only) so the renderer
+    // dispatcher can mark the DB record as read when the user clicks the OS
+    // notification or one of its action buttons (otherwise the badge stays
+    // incremented even after the user has clearly seen and acted on it).
     const stampedActionContext = actionContext
-      ? { ...actionContext, notificationId }
+      ? { ...actionContext, ...(broadcastNotificationId ? { notificationId: broadcastNotificationId } : {}) }
       : undefined
 
     // Broadcast OS notification event to all connected clients
     // Frontend will decide whether to show based on tab visibility and selected session
     messagePersister.broadcastGlobal({
       type: 'os_notification',
-      notificationId,
+      ...(broadcastNotificationId ? { notificationId: broadcastNotificationId } : {}),
       notificationType: type,
       sessionId,
       agentSlug,

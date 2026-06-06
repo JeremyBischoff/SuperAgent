@@ -777,11 +777,9 @@ describe('Auth Middleware', () => {
       expect(mockSelect).not.toHaveBeenCalled()
     })
 
-    it('allows when user has access to notification agent', async () => {
-      // First query returns notification with agentSlug
-      mockLimit.mockResolvedValueOnce([{ agentSlug: 'test-agent' }])
-      // Second query returns user's role on that agent
-      mockLimit.mockResolvedValueOnce([{ role: 'user' }])
+    it('allows when user owns the notification (SUP-227)', async () => {
+      // Notifications are per-user rows; the caller must own this one.
+      mockLimit.mockResolvedValueOnce([{ userId: 'user-1' }])
 
       const app = new Hono()
       setUser(app, { id: 'user-1', role: 'user' })
@@ -791,18 +789,16 @@ describe('Auth Middleware', () => {
       expect(res.status).toBe(200)
     })
 
-    it('returns 403 when user has no access to notification agent', async () => {
-      // First query returns notification with agentSlug
-      mockLimit.mockResolvedValueOnce([{ agentSlug: 'test-agent' }])
-      // Second query returns no role (no access)
-      mockLimit.mockResolvedValueOnce([])
+    it('returns 404 when the notification is owned by another user (SUP-227)', async () => {
+      // Row exists but belongs to a teammate — agent ACL access is not enough.
+      mockLimit.mockResolvedValueOnce([{ userId: 'user-2' }])
 
       const app = new Hono()
       setUser(app, { id: 'user-1', role: 'user' })
       app.get('/:id', HasNotificationAccess(), (c) => c.json({ ok: true }))
 
       const res = await request(app, '/notif-1')
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
 
     it('returns 404 when notification does not exist', async () => {

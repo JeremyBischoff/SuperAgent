@@ -45,15 +45,35 @@ export async function getAccessibleAgentSlugs(userId: string): Promise<string[]>
   return rows.map((r) => r.agentSlug)
 }
 
+/**
+ * Get all user IDs that hold an ACL entry for an agent (inverse of
+ * getAccessibleAgentSlugs). Used to fan a notification out to one per-user row
+ * per ACL member in auth mode so each recipient owns their own read state.
+ */
+export async function getAgentAclUserIds(agentSlug: string): Promise<string[]> {
+  const rows = await db
+    .select({ userId: agentAcl.userId })
+    .from(agentAcl)
+    .where(eq(agentAcl.agentSlug, agentSlug))
+  return rows.map((r) => r.userId)
+}
+
 // ============================================================================
 // Create Operations
 // ============================================================================
 
 /**
- * Create a new notification
+ * Create a new notification.
+ *
+ * `userId` is the per-user owner of the row. In auth mode the caller fans a
+ * single event out to one row per ACL member (see notification-manager); in
+ * non-auth (single-user) mode it is left undefined/null and queries fall back to
+ * agent scoping. Auth-mode queries below filter by this column, so an
+ * auth-mode notification created without a userId is invisible to every user.
  */
 export async function createNotification(
-  params: CreateNotificationParams
+  params: CreateNotificationParams,
+  userId?: string
 ): Promise<string> {
   const id = crypto.randomUUID()
 
@@ -65,6 +85,7 @@ export async function createNotification(
     title: params.title,
     body: params.body,
     isRead: false,
+    userId: userId ?? null,
     createdAt: new Date(),
   }
 
@@ -88,7 +109,7 @@ export async function listNotifications(limit: number = 50, userId?: string, off
     return db
       .select()
       .from(notifications)
-      .where(inArray(notifications.agentSlug, slugs))
+      .where(and(eq(notifications.userId, userId), inArray(notifications.agentSlug, slugs)))
       .orderBy(desc(notifications.createdAt))
       .limit(limit)
       .offset(offset)
@@ -108,7 +129,7 @@ export async function countNotifications(userId?: string): Promise<number> {
     const result = await db
       .select({ count: count() })
       .from(notifications)
-      .where(inArray(notifications.agentSlug, slugs))
+      .where(and(eq(notifications.userId, userId), inArray(notifications.agentSlug, slugs)))
     return result[0]?.count ?? 0
   }
   const result = await db
@@ -139,6 +160,8 @@ export async function getSessionIdsWithUnreadNotifications(agentSlug: string, us
   if (userId) {
     const slugs = await getAccessibleAgentSlugs(userId)
     if (!slugs.includes(agentSlug)) return new Set()
+    // Scope to the caller's own rows — the unread dot is per-user (SUP-227).
+    conditions.push(eq(notifications.userId, userId))
   }
 
   const rows = await db
@@ -153,17 +176,21 @@ export async function getSessionIdsWithUnreadNotifications(agentSlug: string, us
  * Batch version: get unread notification session IDs for multiple agents in a single query.
  * Returns a Map from agentSlug to Set of sessionIds with unread notifications.
  */
-export async function getUnreadNotificationsByAgents(agentSlugs: string[]): Promise<Map<string, Set<string>>> {
+export async function getUnreadNotificationsByAgents(agentSlugs: string[], userId?: string): Promise<Map<string, Set<string>>> {
   if (agentSlugs.length === 0) return new Map()
+
+  const conditions = [
+    inArray(notifications.agentSlug, agentSlugs),
+    eq(notifications.isRead, false),
+    inArray(notifications.type, [...USER_ACTIONABLE_NOTIFICATION_TYPES]),
+  ]
+  // Per-user unread indicators in auth mode (SUP-227). Undefined in non-auth.
+  if (userId) conditions.push(eq(notifications.userId, userId))
 
   const rows = await db
     .select({ agentSlug: notifications.agentSlug, sessionId: notifications.sessionId })
     .from(notifications)
-    .where(and(
-      inArray(notifications.agentSlug, agentSlugs),
-      eq(notifications.isRead, false),
-      inArray(notifications.type, [...USER_ACTIONABLE_NOTIFICATION_TYPES]),
-    ))
+    .where(and(...conditions))
 
   const result = new Map<string, Set<string>>()
   for (const row of rows) {
@@ -185,7 +212,7 @@ export async function listUnreadNotifications(limit: number = 50, userId?: strin
     return db
       .select()
       .from(notifications)
-      .where(and(eq(notifications.isRead, false), inArray(notifications.agentSlug, slugs)))
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false), inArray(notifications.agentSlug, slugs)))
       .orderBy(desc(notifications.createdAt))
       .limit(limit)
   }
@@ -209,7 +236,7 @@ export async function getUnreadCount(userId?: string): Promise<number> {
     const result = await db
       .select({ count: count() })
       .from(notifications)
-      .where(and(eq(notifications.isRead, false), inArray(notifications.agentSlug, slugs), actionable))
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false), inArray(notifications.agentSlug, slugs), actionable))
     return result[0]?.count ?? 0
   }
   const result = await db
@@ -265,6 +292,8 @@ export async function markSessionNotificationsRead(sessionId: string, userId?: s
     const slugs = await getAccessibleAgentSlugs(userId)
     if (slugs.length === 0) return 0
     conditions.push(inArray(notifications.agentSlug, slugs))
+    // Only clear the caller's own rows — no shared isRead bit (SUP-227).
+    conditions.push(eq(notifications.userId, userId))
   }
 
   const result = await db
@@ -292,7 +321,7 @@ export async function markAllAsRead(userId?: string): Promise<number> {
         isRead: true,
         readAt: new Date(),
       })
-      .where(and(eq(notifications.isRead, false), inArray(notifications.agentSlug, slugs)))
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false), inArray(notifications.agentSlug, slugs)))
     return result.changes ?? 0
   }
 
