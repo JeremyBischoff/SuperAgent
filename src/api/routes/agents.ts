@@ -121,6 +121,7 @@ import { isPathWithinDir } from '@shared/lib/utils/path-safety'
 import { readAgentPreferences, updateAgentPreferences } from '@shared/lib/services/agent-preferences-service'
 import { cleanupAgentData } from '@shared/lib/services/agent-cleanup-service'
 import { logAuditEvent } from '@shared/lib/services/audit-log-service'
+import { captureException } from '@shared/lib/error-reporting'
 import * as fs from 'fs'
 import { Readable } from 'stream'
 import pLimit from 'p-limit'
@@ -587,11 +588,29 @@ async function createOwnerAclOrRollback(c: Context, agentSlug: string) {
   try {
     await createOwnerAcl(c, agentSlug)
   } catch (error) {
+    const userId = getCurrentUserId(c)
+    let rolledBack = true
     try {
       await deleteAgent(agentSlug)
     } catch (cleanupError) {
+      // Rollback failed: the agent workspace is now orphaned (exists on disk with
+      // no owner ACL). This is the worst case and needs operator attention, so
+      // report it as a distinct error (the original ACL failure is reported below).
+      rolledBack = false
       console.error(`Failed to roll back orphaned agent workspace "${agentSlug}" after owner ACL insert failed:`, cleanupError)
+      captureException(cleanupError, {
+        tags: { component: 'agents', operation: 'owner-acl-rollback' },
+        extra: { agentSlug, userId, originalError: error instanceof Error ? error.message : String(error) },
+        level: 'error',
+      })
     }
+    // Report the ACL insert failure itself. A clean rollback is a recovered
+    // failure (warning); a failed rollback left an orphan behind (error).
+    captureException(error, {
+      tags: { component: 'agents', operation: 'owner-acl-insert' },
+      extra: { agentSlug, userId, rolledBack },
+      level: rolledBack ? 'warning' : 'error',
+    })
     throw error
   }
 }

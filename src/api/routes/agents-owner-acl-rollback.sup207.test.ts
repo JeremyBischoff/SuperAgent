@@ -134,6 +134,13 @@ vi.mock('../middleware/auth', () => ({
 vi.mock('@shared/lib/analytics/server-analytics', () => ({ trackServerEvent: vi.fn() }))
 vi.mock('@shared/lib/services/audit-log-service', () => ({ logAuditEvent: vi.fn() }))
 
+// Sentry reporting on the ACL-insert / rollback failure paths (mock-prefixed so
+// it can be referenced inside the hoisted vi.mock factory).
+const mockCaptureException = vi.fn()
+vi.mock('@shared/lib/error-reporting', () => ({
+  captureException: (...a: unknown[]) => mockCaptureException(...a),
+}))
+
 vi.mock('@shared/lib/services/webhook-trigger-service', () => ({
   countActiveTriggersPerAccount: vi.fn().mockResolvedValue({}),
   listWebhookTriggers: vi.fn(), listActiveWebhookTriggers: vi.fn(), listCancelledWebhookTriggers: vi.fn(),
@@ -271,6 +278,15 @@ describe('SUP-207: owner ACL insert failure rolls back the created workspace (AU
     expect(res.status).toBe(500)
     // The workspace must be rolled back so no orphaned agent dir is left behind.
     expect(mockDeleteAgent).toHaveBeenCalledWith('orphan-agent')
+    // The ACL-insert failure is reported to Sentry; a clean rollback => warning.
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ operation: 'owner-acl-insert' }),
+        extra: expect.objectContaining({ agentSlug: 'orphan-agent', rolledBack: true }),
+        level: 'warning',
+      }),
+    )
   })
 
   it('POST /api/agents/import-template — rolls back the imported workspace when the owner ACL insert fails', async () => {
@@ -314,6 +330,23 @@ describe('SUP-207: owner ACL insert failure rolls back the created workspace (AU
     // Route still surfaces the original failure as a 500 even though cleanup threw.
     expect(res.status).toBe(500)
     expect(mockDeleteAgent).toHaveBeenCalledWith('orphan-agent')
+    // The rollback failure (orphaned workspace) is reported as a distinct error…
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ operation: 'owner-acl-rollback' }),
+        level: 'error',
+      }),
+    )
+    // …and the original ACL-insert failure is escalated to error (orphan left behind).
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ operation: 'owner-acl-insert' }),
+        extra: expect.objectContaining({ rolledBack: false }),
+        level: 'error',
+      }),
+    )
   })
 })
 
@@ -330,6 +363,8 @@ describe('SUP-207: regression — successful creation does not roll back', () =>
     expect(res.status).toBe(201)
     expect(mockDbInsertValues).toHaveBeenCalledTimes(1)
     expect(mockDeleteAgent).not.toHaveBeenCalled()
+    // No failure => nothing reported to Sentry.
+    expect(mockCaptureException).not.toHaveBeenCalled()
   })
 
   it('POST /api/agents — non-auth mode inserts no ACL and never rolls back', async () => {
