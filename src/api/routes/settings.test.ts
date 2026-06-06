@@ -111,6 +111,19 @@ vi.mock('@shared/lib/db/schema', () => ({
   scheduledTasks: {},
   notifications: {},
   connectedAccounts: {},
+  userSettings: {},
+  auditLog: {},
+  webhookTriggers: {},
+  chatIntegrations: {},
+  chatIntegrationSessions: {},
+  remoteMcpServers: {},
+  agentRemoteMcps: {},
+  mcpAuditLog: {},
+  mcpToolPolicies: {},
+  agentAcl: {},
+  messageAuthor: {},
+  xAgentPolicies: {},
+  apiScopePolicies: {},
 }))
 
 vi.mock('fs', () => ({
