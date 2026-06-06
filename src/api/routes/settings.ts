@@ -34,10 +34,72 @@ import { customEnvVarsSchema } from '@shared/lib/container/reserved-env-vars'
 import { detectAllProviders } from '../../main/host-browser'
 import { revokePlatformToken } from '@shared/lib/services/platform-auth-service'
 import { db } from '@shared/lib/db'
-import { proxyAuditLog, proxyTokens, agentConnectedAccounts, scheduledTasks, notifications, connectedAccounts, userSettings, auditLog } from '@shared/lib/db/schema'
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
+import {
+  proxyAuditLog,
+  proxyTokens,
+  agentConnectedAccounts,
+  scheduledTasks,
+  notifications,
+  connectedAccounts,
+  userSettings,
+  auditLog,
+  webhookTriggers,
+  chatIntegrations,
+  chatIntegrationSessions,
+  remoteMcpServers,
+  agentRemoteMcps,
+  mcpAuditLog,
+  mcpToolPolicies,
+  agentAcl,
+  messageAuthor,
+  xAgentPolicies,
+  apiScopePolicies,
+} from '@shared/lib/db/schema'
 import fs from 'fs'
 
 const settings = new Hono()
+
+/**
+ * Canonical set of agent/app-owned relational tables wiped by factory reset.
+ *
+ * Ordered children-before-parents so deletes succeed regardless of FK-cascade
+ * state. Better Auth tables (user, session, account, verification) are
+ * intentionally excluded — a factory reset clears app/agent data but does NOT
+ * delete user accounts.
+ *
+ * Keep this reconciled with the per-agent set in agent-cleanup-service.ts. The
+ * test in factory-reset.sup206.test.ts enumerates the schema dynamically and
+ * fails if a new agent/app-owned table is added without being listed here, so
+ * the set cannot silently drift again.
+ */
+const FACTORY_RESET_TABLES: SQLiteTable[] = [
+  // Leaf / no-FK-to-reset-table audit + attribution rows
+  proxyAuditLog,
+  proxyTokens,
+  mcpAuditLog,
+  messageAuthor,
+  agentAcl,
+  xAgentPolicies,
+  webhookTriggers,
+  notifications,
+  scheduledTasks,
+  // chat integrations (sessions cascade-cascade from integrations)
+  chatIntegrationSessions,
+  chatIntegrations,
+  // connected accounts + dependents (api scope policies + agent mappings cascade)
+  agentConnectedAccounts,
+  apiScopePolicies,
+  connectedAccounts,
+  // remote MCP servers + dependents (tool policies + agent mappings cascade)
+  agentRemoteMcps,
+  mcpToolPolicies,
+  remoteMcpServers,
+  // per-user settings (user row itself is preserved)
+  userSettings,
+  // global app audit log
+  auditLog,
+]
 
 settings.use('*', Authenticated(), IsAdmin())
 
@@ -565,15 +627,11 @@ settings.post('/factory-reset', async (c) => {
     const agentsDir = getAgentsDataDir()
     await fs.promises.rm(agentsDir, { recursive: true, force: true })
 
-    // Clear all DB tables (order matters for FK constraints)
-    db.delete(proxyAuditLog).run()
-    db.delete(proxyTokens).run()
-    db.delete(agentConnectedAccounts).run()
-    db.delete(scheduledTasks).run()
-    db.delete(notifications).run()
-    db.delete(connectedAccounts).run()
-    db.delete(userSettings).run()
-    db.delete(auditLog).run()
+    // Clear every agent/app-owned relational table (children before parents).
+    // Better Auth tables (user/session/account/verification) are preserved.
+    for (const table of FACTORY_RESET_TABLES) {
+      db.delete(table).run()
+    }
 
     // Delete settings file (includes platform auth token)
     const settingsPath = path.join(getDataDir(), 'settings.json')
