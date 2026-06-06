@@ -5,8 +5,17 @@ import net from 'net'
 import os from 'os'
 import { getDataDir, getAgentDownloadsDir } from '@shared/lib/config/data-dir'
 import { listChromeProfiles, copyChromeProfileData } from '@shared/lib/browser/chrome-profile'
+import { WSL2_DISTRO_NAME } from '@shared/lib/container/wsl2-container-client'
 import type { HostBrowserProvider, HostBrowserProviderStatus, BrowserConnectionInfo } from './types'
 import { captureException, addErrorBreadcrumb } from '@shared/lib/error-reporting'
+
+// Chrome's DevTools Protocol has no auth token: any host/process that can reach
+// the CDP port gets full remote control of the dedicated browser profile (read
+// pages, cookies/session, drive navigation). So CDP must never bind to all
+// interfaces (0.0.0.0). We bind it to loopback and, where a container can't
+// reach loopback directly (Windows/WSL2 nerdctl), forward to it via a proxy
+// bound to the single host-internal bridge interface — never the LAN.
+const CDP_LOOPBACK_ADDRESS = '127.0.0.1'
 
 interface BrowserCandidate {
   browser: string
@@ -298,7 +307,7 @@ export class ChromeProvider implements HostBrowserProvider {
 
     const chromeArgs = [
       `--remote-debugging-port=${port}`,
-      '--remote-debugging-address=0.0.0.0',
+      `--remote-debugging-address=${CDP_LOOPBACK_ADDRESS}`,
       '--no-first-run',
       '--no-default-browser-check',
       `--user-data-dir=${userDataDir}`,
@@ -448,25 +457,32 @@ export class ChromeProvider implements HostBrowserProvider {
       })
     }
 
-    // Chrome on Windows ignores --remote-debugging-address=0.0.0.0 and always
-    // binds its CDP port to 127.0.0.1. This means containers running inside WSL2
-    // (via nerdctl) cannot reach Chrome directly — only Docker Desktop's special
-    // networking layer makes host 127.0.0.1 ports accessible from containers.
-    // To work around this, we run a lightweight TCP proxy on 0.0.0.0 that forwards
-    // to Chrome's 127.0.0.1 CDP port, making it reachable from any network interface.
+    // Chrome on Windows always binds its CDP port to 127.0.0.1 (it ignores
+    // --remote-debugging-address). Containers running inside WSL2 (via nerdctl)
+    // reach the host through host.docker.internal, which we map to the WSL2 host
+    // bridge gateway IP — they cannot reach the host's 127.0.0.1 directly. So we
+    // run a lightweight TCP proxy that forwards to Chrome's loopback CDP port.
+    //
+    // SECURITY: the proxy must bind to the single host-internal bridge interface
+    // the container actually uses, NOT 0.0.0.0 — CDP is unauthenticated, so a
+    // 0.0.0.0 bind would hand full browser control to anything on the LAN. We
+    // reuse the WSL2 gateway-IP detection; if we can't determine it (e.g. Docker
+    // Desktop, which forwards loopback into containers) we fall back to loopback.
     let proxyPort: number | null = null
     let proxyServer: net.Server | null = null
+    let proxyHost: string | null = null
     if (process.platform === 'win32') {
       proxyPort = await this.findFreePort()
+      proxyHost = this.detectHostBridgeIp() ?? CDP_LOOPBACK_ADDRESS
       proxyServer = net.createServer((client) => {
-        const target = net.connect(port, '127.0.0.1')
+        const target = net.connect(port, CDP_LOOPBACK_ADDRESS)
         client.pipe(target)
         target.pipe(client)
         client.on('error', () => target.destroy())
         target.on('error', () => client.destroy())
       })
       await new Promise<void>((resolve, reject) => {
-        proxyServer!.listen(proxyPort!, '0.0.0.0', () => resolve())
+        proxyServer!.listen(proxyPort!, proxyHost!, () => resolve())
         proxyServer!.on('error', reject)
       })
     }
@@ -539,7 +555,7 @@ export class ChromeProvider implements HostBrowserProvider {
           profileId,
           spawnArgs: [
             `--remote-debugging-port=${port}`,
-            '--remote-debugging-address=0.0.0.0',
+            `--remote-debugging-address=${CDP_LOOPBACK_ADDRESS}`,
             `--user-data-dir=${userDataDir}`,
           ],
           ...diagnostics,
@@ -565,7 +581,7 @@ export class ChromeProvider implements HostBrowserProvider {
 
     const exposedPort = proxyPort ?? port
 
-    console.log(`[ChromeProvider] Chrome CDP on port ${port}${proxyPort ? `, proxy on 0.0.0.0:${proxyPort}` : ''} for instance ${instanceId} (pid ${chromePid})`)
+    console.log(`[ChromeProvider] Chrome CDP on ${CDP_LOOPBACK_ADDRESS}:${port}${proxyPort ? `, proxy on ${proxyHost}:${proxyPort}` : ''} for instance ${instanceId} (pid ${chromePid})`)
     return { port: exposedPort, downloadDir }
   }
 
@@ -682,6 +698,29 @@ export class ChromeProvider implements HostBrowserProvider {
       if (!(await this.pidAlive(pid))) return
       await new Promise((r) => setTimeout(r, 100))
     }
+  }
+
+  /**
+   * Detect the host-internal bridge IP that the agent container reaches the host
+   * through (the address host.docker.internal resolves to). On Windows/WSL2 this
+   * is the WSL2 distro's default-route gateway, which is the host side of the
+   * vEthernet (WSL) adapter — a single host-internal interface, never LAN-facing.
+   * Mirrors the gateway-IP detection in WSL2ContainerClient.getAdditionalRunFlags.
+   * Returns null if it can't be determined, so the caller falls back to loopback
+   * rather than ever binding 0.0.0.0.
+   */
+  private detectHostBridgeIp(): string | null {
+    if (process.platform !== 'win32') return null
+    try {
+      const output = execSync(
+        `wsl -d ${WSL2_DISTRO_NAME} -- ip route show default`,
+        { timeout: 10000 }
+      ).toString().trim()
+      // Output: "default via 172.22.192.1 dev eth0 ..."
+      const match = output.match(/via\s+([\d.]+)/)
+      if (match) return match[1]
+    } catch { /* best-effort; fall back to loopback */ }
+    return null
   }
 
   private async findFreePort(): Promise<number> {
