@@ -171,6 +171,7 @@ export function EntityAgentRole<T extends { agentSlug: string }>(opts: {
       if (!isAuthMode()) return next()
 
       const user = getUser(c)
+      if (isAdmin(user)) return next()
       const role = await getUserAgentRole(user.id, entity.agentSlug)
       if (!hasMinRole(role, minRole)) {
         return c.json({ error: 'Forbidden' }, 403)
