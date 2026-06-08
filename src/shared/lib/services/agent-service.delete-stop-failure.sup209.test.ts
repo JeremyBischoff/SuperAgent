@@ -48,7 +48,7 @@ vi.mock('@shared/lib/proxy/review-manager', () => ({
 }))
 
 // Import after mocking
-import { deleteAgent, agentExists } from './agent-service'
+import { deleteAgent, agentExists, AgentContainerStopError } from './agent-service'
 
 describe('agent-service deleteAgent — container stop failure (SUP-209)', () => {
   let testDir: string
@@ -85,8 +85,12 @@ describe('agent-service deleteAgent — container stop failure (SUP-209)', () =>
     )
 
     // A genuine stop failure must abort the deletion (reject), not silently
-    // swallow and proceed.
-    await expect(deleteAgent('test-agent')).rejects.toThrow(/runtime/)
+    // swallow and proceed. It rejects with the typed AgentContainerStopError so
+    // the route can map it to an actionable 409; the underlying cause message is
+    // preserved for the server log.
+    const error = await deleteAgent('test-agent').catch((e) => e)
+    expect(error).toBeInstanceOf(AgentContainerStopError)
+    expect((error as Error).message).toMatch(/runtime/)
 
     // The host workspace must survive — removeDirectory must NOT have run.
     expect(await agentExists('test-agent')).toBe(true)

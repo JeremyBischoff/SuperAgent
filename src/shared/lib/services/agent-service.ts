@@ -286,6 +286,25 @@ export async function updateAgent(
 }
 
 /**
+ * Thrown by {@link deleteAgent} when the agent's container cannot be stopped.
+ *
+ * stopContainer is idempotent for already-stopped/missing containers, so a
+ * rejection signals a GENUINE runtime failure (wedged VM, unexpected stop
+ * error). Deletion aborts before the irreversible workspace removal, so the
+ * agent is preserved and the operation is retryable. The DELETE route catches
+ * this to surface an actionable message instead of a generic 500.
+ */
+export class AgentContainerStopError extends Error {
+  readonly slug: string
+  constructor(slug: string, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause)
+    super(`Failed to stop the container for agent "${slug}": ${detail}`)
+    this.name = 'AgentContainerStopError'
+    this.slug = slug
+  }
+}
+
+/**
  * Delete an agent and all its data
  */
 export async function deleteAgent(slug: string): Promise<boolean> {
@@ -303,10 +322,14 @@ export async function deleteAgent(slug: string): Promise<boolean> {
   // runtime failure (e.g. a wedged VM or an unexpected stop error), in which
   // case the container may still be running or be in an unknown stop state.
   //
-  // We must NOT delete the host workspace in that situation. Let the error
-  // propagate so the API/UI surfaces the failure and the workspace is
-  // preserved; removeDirectory runs strictly after a successful stop.
-  await containerManager.stopContainer(slug)
+  // We must NOT delete the host workspace in that situation. Re-throw as a
+  // typed error so the API/UI can surface an actionable failure; removeDirectory
+  // below never runs, so the workspace is preserved and the delete is retryable.
+  try {
+    await containerManager.stopContainer(slug)
+  } catch (error) {
+    throw new AgentContainerStopError(slug, error)
+  }
 
   // Remove directory only after the container has been confirmed stopped.
   await removeDirectory(agentDir)

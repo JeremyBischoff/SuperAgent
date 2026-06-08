@@ -28,6 +28,20 @@ import { Hono } from 'hono'
 // irreversible workspace removal we are gating.
 const mockGetAgent = vi.fn()
 const mockDeleteAgent = vi.fn()
+// SUP-209: a genuine container stop-failure surfaces from deleteAgent as this
+// typed error, which the route maps to 409. Hoisted so the mock factory and the
+// test share one class — the route's `instanceof` resolves to this same
+// stand-in via the mocked module.
+const { AgentContainerStopError } = vi.hoisted(() => ({
+  AgentContainerStopError: class AgentContainerStopError extends Error {
+    readonly slug: string
+    constructor(slug: string, cause: unknown) {
+      super(`Failed to stop the container for agent "${slug}": ${cause instanceof Error ? cause.message : String(cause)}`)
+      this.name = 'AgentContainerStopError'
+      this.slug = slug
+    }
+  },
+}))
 vi.mock('@shared/lib/services/agent-service', () => ({
   listAgentsWithStatus: vi.fn(),
   createAgent: vi.fn(),
@@ -36,6 +50,7 @@ vi.mock('@shared/lib/services/agent-service', () => ({
   updateAgent: vi.fn(),
   deleteAgent: (...args: unknown[]) => mockDeleteAgent(...args),
   agentExists: vi.fn().mockResolvedValue(true),
+  AgentContainerStopError,
 }))
 
 // --- peripheral cleanup services --------------------------------------------
@@ -295,5 +310,22 @@ describe('SUP-208: DELETE /api/agents/:id — peripheral cleanup precedes worksp
     expect(res.status).toBe(404)
     expect(mockDeleteAgent).not.toHaveBeenCalled()
     expect(mockCleanupAgentData).not.toHaveBeenCalled()
+  })
+
+  it('returns 409 (not 500) with an actionable message when the container cannot be stopped (SUP-209)', async () => {
+    // deleteAgent aborts with the typed stop-failure error AFTER peripheral
+    // cleanup has run but BEFORE the workspace is removed. The route must map it
+    // to an actionable 409 so the UI can tell the user to retry, not a generic 500.
+    mockDeleteAgent.mockRejectedValue(
+      new AgentContainerStopError('test-agent', new Error('runtime wedged: cannot stop container'))
+    )
+
+    const res = await deleteAgentReq()
+
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.error).toMatch(/container/i)
+    // Peripheral cleanup still ran (it precedes the stop); only the workspace survived.
+    expect(mockCleanupAgentData).toHaveBeenCalledTimes(1)
   })
 })
