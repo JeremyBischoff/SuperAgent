@@ -25,6 +25,7 @@ import {
 } from '@shared/lib/services/session-service'
 import { getSecretEnvVars } from '@shared/lib/services/secrets-service'
 import { agentExists } from '@shared/lib/services/agent-service'
+import { captureException } from '@shared/lib/error-reporting'
 
 
 class TaskScheduler {
@@ -46,31 +47,33 @@ class TaskScheduler {
     this.isRunning = true
     console.log('[TaskScheduler] Starting scheduler...')
 
-    try {
-      // Execute overdue tasks immediately on startup
-      await this.executeOverdueTasks()
-
-      // Start periodic polling
-      this.intervalId = setInterval(() => {
-        this.executeOverdueTasks().catch((error) => {
-          console.error('[TaskScheduler] Error in polling cycle:', error)
-        })
-      }, this.pollIntervalMs)
-    } catch (error) {
-      // A transient failure in the initial scan (e.g. a SQLite hiccup in
-      // getDueTasks) must not wedge the scheduler. Roll back so isActive()
-      // reports false and a later start() can install the polling loop.
-      if (this.intervalId) {
-        clearInterval(this.intervalId)
-        this.intervalId = null
-      }
-      this.isRunning = false
-      throw error
-    }
+    // Install the periodic poll loop FIRST, unconditionally. The poll loop is
+    // the scheduler's natural retry: it re-scans every interval and is the same
+    // code path that runs in steady state. Installing it before the immediate
+    // catch-up scan means a transient failure in that scan (e.g. a SQLite hiccup
+    // in getDueTasks — SUP-224) can no longer prevent polling from running, so
+    // the scheduler self-heals on the next tick instead of wedging.
+    this.intervalId = setInterval(() => {
+      this.executeOverdueTasks().catch((error) => {
+        console.error('[TaskScheduler] Error in polling cycle:', error)
+        captureException(error, { tags: { component: 'task-scheduler', phase: 'poll' } })
+      })
+    }, this.pollIntervalMs)
 
     console.log(
       `[TaskScheduler] Scheduler started, polling every ${this.pollIntervalMs / 1000}s`
     )
+
+    // Best-effort immediate catch-up scan so overdue tasks run now rather than
+    // waiting up to one poll interval. A failure here is non-fatal: report it and
+    // let the poll loop above retry — startup is NOT wedged and isActive() stays
+    // true.
+    try {
+      await this.executeOverdueTasks()
+    } catch (error) {
+      console.error('[TaskScheduler] Initial overdue scan failed; poll loop will retry:', error)
+      captureException(error, { tags: { component: 'task-scheduler', phase: 'initial-scan' } })
+    }
   }
 
   /**
@@ -122,6 +125,10 @@ class TaskScheduler {
             `[TaskScheduler] Failed to execute task ${task.id}:`,
             error
           )
+          captureException(error, {
+            tags: { component: 'task-scheduler', phase: 'execute-task' },
+            extra: { taskId: task.id, agentSlug: task.agentSlug, isRecurring: task.isRecurring },
+          })
           // For recurring tasks, schedule next execution even on failure
           // For one-time tasks, mark as failed
           if (task.isRecurring) {
