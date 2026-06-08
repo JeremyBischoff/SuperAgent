@@ -15,6 +15,7 @@ import {
   updateAgent,
   deleteAgent,
   agentExists,
+  AgentContainerStopError,
 } from '@shared/lib/services/agent-service'
 import { containerManager } from '@shared/lib/container/container-manager'
 import { parseRuntimeOptions } from '@shared/lib/container/runtime-options'
@@ -807,6 +808,18 @@ agents.delete('/:id', AgentAdmin(), async (c) => {
     logAuditEvent({ userId: getCurrentUserId(c), object: 'agent', objectId: slug, action: 'deleted', details: { name: agentBeforeDelete.frontmatter.name } })
     return c.body(null, 204)
   } catch (error) {
+    if (error instanceof AgentContainerStopError) {
+      // SUP-209: the container couldn't be stopped, so deleteAgent aborted
+      // before removing the workspace. The agent is preserved and the delete is
+      // retryable — surface an actionable 409 instead of a generic 500. (The
+      // peripheral cleanup above has already run; a retry once the container
+      // un-wedges completes the deletion.)
+      console.error('Agent deletion aborted — container stop failed:', error)
+      return c.json(
+        { error: "Couldn't stop the agent's container, so it wasn't deleted. It may be busy — please try again in a moment." },
+        409
+      )
+    }
     console.error('Failed to delete agent:', error)
     return c.json({ error: 'Failed to delete agent' }, 500)
   }
