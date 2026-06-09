@@ -5,7 +5,10 @@ import { ConnectionAgentsList } from '@renderer/components/connections/connectio
 import { IntegrationRowActions } from '@renderer/components/connections/integration-row-actions'
 import { ScopePolicyEditorBody } from '@renderer/components/settings/scope-policy-editor'
 import { ToolPolicyEditorBody } from '@renderer/components/settings/tool-policy-editor'
-import { useHideSettingsHeader } from '@renderer/components/settings/settings-page'
+import {
+  useHideSettingsHeader,
+  useFullWidthSettingsContent,
+} from '@renderer/components/settings/settings-page'
 import { formatCompactDistance, safeDate } from '@renderer/components/connections/utils'
 import type { UnifiedRow } from '@renderer/components/connections/unified-rows'
 
@@ -19,10 +22,12 @@ interface ConnectionDetailPageProps {
  * access and the per-scope / per-tool permissions for the connection.
  */
 export function ConnectionDetailPage({ row, onBack }: ConnectionDetailPageProps) {
-  // Hide the default SettingsPage header — the detail page owns its own.
+  // Hide the default SettingsPage header — the detail page owns its own — and
+  // use the full inset width so the two columns can lay out like the agent home.
   useHideSettingsHeader(true)
+  useFullWidthSettingsContent(true)
   return (
-    <div className="space-y-4 lg:-mx-[152px]">
+    <div className="space-y-4 w-full max-w-6xl mx-auto">
       {/* Back / breadcrumb */}
       <div className="flex items-center gap-2">
         <Button
@@ -68,8 +73,9 @@ export function ConnectionDetailPage({ row, onBack }: ConnectionDetailPageProps)
         </div>
       </div>
 
-      {/* Two columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-[5fr_6fr] gap-4 pt-4">
+      {/* Two columns (like the agent home): the agents column is flexible and
+          grows/shrinks with the window; the permissions column is a fixed width. */}
+      <div className="grid gap-4 items-start grid-cols-1 xl:grid-cols-[1fr_32rem] pt-4">
         {/* Agents column */}
         <section className="min-w-0">
           <ConnectionAgentsList type={row.type} id={row.id} name={row.name} sectioned />
