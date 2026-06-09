@@ -359,7 +359,7 @@ export function ScopePolicyEditorBody({
       )}
 
       {/* Per-scope policies, grouped by risk label */}
-      <div className="flex-1 overflow-y-auto space-y-3">
+      <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
         {allScopes.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
             No scopes defined for this API.
@@ -491,14 +491,12 @@ export function ScopePolicyEditor({
           {header ?? <DialogTitle className="capitalize">{toolkit} Scope Policies</DialogTitle>}
           <DialogDescription className="sr-only">Configure per-scope access policies for {toolkit}</DialogDescription>
         </DialogHeader>
-        {open && (
-          <ScopePolicyEditorBody
-            accountId={accountId}
-            toolkit={toolkit}
-            onSaved={() => onOpenChange(false)}
-            onCancel={() => onOpenChange(false)}
-          />
-        )}
+        <ScopePolicyEditorBody
+          accountId={accountId}
+          toolkit={toolkit}
+          onSaved={() => onOpenChange(false)}
+          onCancel={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   )

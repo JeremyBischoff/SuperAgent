@@ -27,9 +27,9 @@ interface ConnectionAgentsListProps {
   id: string
   name: string
   /**
-   * Split agents into two sectioned lists ("Access granted" / "Access not
-   * granted") instead of one flat list — matches the per-agent connections
-   * page pattern. Defaults to false for the dialog.
+   * Split agents into two sectioned lists ("Agents With Access" / "Agents
+   * Without Access") instead of one flat list — matches the per-agent
+   * connections page pattern. Defaults to false for the dialog.
    */
   sectioned?: boolean
 }
@@ -159,12 +159,11 @@ export function ConnectionAgentsList({ type, id, name, sectioned = false }: Conn
   }
 
   if (sectioned) {
-    const grantedAgents = visibleAgents.filter(
-      (a) => overrides[a.slug] ?? grantedSet.has(a.slug),
-    )
-    const notGrantedAgents = visibleAgents.filter(
-      (a) => !(overrides[a.slug] ?? grantedSet.has(a.slug)),
-    )
+    // Partition on confirmed server state, not the optimistic override, so a
+    // row doesn't jump sections out from under the user's cursor mid-toggle —
+    // it moves once the mutation persists and the agents query refetches.
+    const grantedAgents = visibleAgents.filter((a) => grantedSet.has(a.slug))
+    const notGrantedAgents = visibleAgents.filter((a) => !grantedSet.has(a.slug))
 
     return (
       <div className="space-y-6">
@@ -230,7 +229,7 @@ export function ConnectionAgentsDialog({ type, id, name, open, onOpenChange }: C
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[50vh] overflow-y-auto -mx-2">
-          {open && <ConnectionAgentsList type={type} id={id} name={name} />}
+          <ConnectionAgentsList type={type} id={id} name={name} />
         </div>
       </DialogContent>
     </Dialog>

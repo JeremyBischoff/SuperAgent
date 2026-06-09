@@ -30,7 +30,6 @@ interface ToolPolicy {
 
 interface ToolPolicyEditorBodyProps {
   mcpId: string
-  mcpName: string
   tools: Array<{ name: string; description?: string }>
   onSaved?: () => void
   onCancel?: () => void
@@ -43,7 +42,6 @@ interface ToolPolicyEditorBodyProps {
  */
 export function ToolPolicyEditorBody({
   mcpId,
-  mcpName: _mcpName,
   tools,
   onSaved,
   onCancel,
@@ -276,15 +274,12 @@ export function ToolPolicyEditor({
           <DialogTitle>{mcpName} Tool Policies</DialogTitle>
           <DialogDescription className="sr-only">Configure per-tool access policies for {mcpName}</DialogDescription>
         </DialogHeader>
-        {open && (
-          <ToolPolicyEditorBody
-            mcpId={mcpId}
-            mcpName={mcpName}
-            tools={tools}
-            onSaved={() => onOpenChange(false)}
-            onCancel={() => onOpenChange(false)}
-          />
-        )}
+        <ToolPolicyEditorBody
+          mcpId={mcpId}
+          tools={tools}
+          onSaved={() => onOpenChange(false)}
+          onCancel={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   )
