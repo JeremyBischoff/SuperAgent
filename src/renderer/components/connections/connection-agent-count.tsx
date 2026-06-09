@@ -15,7 +15,9 @@ export function ConnectionAgentCount({ type, id }: ConnectionAgentCountProps) {
   const accountAgents = useAccountAgents(type === 'oauth' ? id : '')
   const mcpAgents = useMcpAgents(type === 'mcp' ? id : '')
   const data = type === 'oauth' ? accountAgents.data : mcpAgents.data
-  const count = data?.agentSlugs.length ?? 0
+  // Render nothing until the query resolves so rows don't flash "Not in use".
+  if (!data) return null
+  const count = data.agentSlugs.length
   if (count === 0) {
     return <span className="whitespace-nowrap shrink-0">Not in use</span>
   }

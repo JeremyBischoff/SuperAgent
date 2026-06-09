@@ -306,7 +306,7 @@ export function IntegrationRowActions({ type, id, name, toolkit, mcpTools, agent
               size="sm"
               variant="outline"
               className="h-8 text-amber-700 dark:text-amber-400"
-              onClick={runOAuthReconnect}
+              onClick={(e) => { e.stopPropagation(); void runOAuthReconnect() }}
               disabled={oauthReconnectPending}
               data-testid={`integration-row-actions-reconnect-${type}-${id}`}
             >
@@ -321,21 +321,21 @@ export function IntegrationRowActions({ type, id, name, toolkit, mcpTools, agent
           <Button
             ref={triggerRef}
             type="button"
-            size="icon"
+            size="sm"
             variant="outline"
-            className="h-8 w-8"
-            aria-label={`Rename ${name}`}
-            onClick={openRename}
+            className="h-8"
+            onClick={(e) => { e.stopPropagation(); openRename() }}
             data-testid={`integration-row-actions-rename-${type}-${id}`}
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil className="h-3.5 w-3.5 mr-1.5" />
+            Rename
           </Button>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-8"
-            onClick={openDelete}
+            className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={(e) => { e.stopPropagation(); openDelete() }}
             data-testid={`integration-row-actions-delete-${type}-${id}`}
           >
             <Trash2 className="h-3.5 w-3.5 mr-1.5" />
@@ -343,136 +343,136 @@ export function IntegrationRowActions({ type, id, name, toolkit, mcpTools, agent
           </Button>
         </div>
       ) : (
-      <Popover
-        open={menuOpen}
-        onOpenChange={(open) => {
-          setMenuOpen(open)
-          if (!open) setMcpStatus(null)
-        }}
-      >
-        <PopoverTrigger asChild>
-          <Button
-            ref={triggerRef}
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-7 overflow-hidden w-0 -ml-2 opacity-0 group-hover:w-7 group-hover:ml-0 group-hover:opacity-100 focus-visible:w-7 focus-visible:ml-0 focus-visible:opacity-100 data-[state=open]:w-7 data-[state=open]:ml-0 data-[state=open]:opacity-100 transition-[width,margin,opacity] duration-200"
-            aria-label={`Actions for ${name}`}
-            onClick={(e) => e.stopPropagation()}
-            data-testid={`integration-row-actions-${type}-${id}`}
-          >
-            <Settings className="h-4 w-4 text-muted-foreground" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          className="w-48 p-1"
-          onClick={(e) => e.stopPropagation()}
+        <Popover
+          open={menuOpen}
+          onOpenChange={(open) => {
+            setMenuOpen(open)
+            if (!open) setMcpStatus(null)
+          }}
         >
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
-            onClick={openRename}
+          <PopoverTrigger asChild>
+            <Button
+              ref={triggerRef}
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-7 overflow-hidden w-0 -ml-2 opacity-0 group-hover:w-7 group-hover:ml-0 group-hover:opacity-100 focus-visible:w-7 focus-visible:ml-0 focus-visible:opacity-100 data-[state=open]:w-7 data-[state=open]:ml-0 data-[state=open]:opacity-100 transition-[width,margin,opacity] duration-200"
+              aria-label={`Actions for ${name}`}
+              onClick={(e) => e.stopPropagation()}
+              data-testid={`integration-row-actions-${type}-${id}`}
+            >
+              <Settings className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            className="w-48 p-1"
+            onClick={(e) => e.stopPropagation()}
           >
-            <Pencil className="h-3.5 w-3.5" />
-            Rename
-          </button>
-          {type === 'oauth' && accountStatus && accountStatus !== 'active' && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 transition-colors"
-              onClick={runOAuthReconnect}
-              disabled={oauthReconnectPending}
-            >
-              {oauthReconnectPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Reconnect
-            </button>
-          )}
-          {canEditScopes && (
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
-              onClick={openScopes}
+              onClick={openRename}
             >
-              <Shield className="h-3.5 w-3.5" />
-              Edit permissions
+              <Pencil className="h-3.5 w-3.5" />
+              Rename
             </button>
-          )}
-          {type === 'mcp' && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
-              onClick={openTools}
-            >
-              <Wrench className="h-3.5 w-3.5" />
-              Discover tools
-            </button>
-          )}
-          {agentSlug && !hideRemoveFromAgent && (
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
-              onClick={openRemoveFromAgent}
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Remove from agent
-            </button>
-          )}
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"
-            onClick={openDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {agentSlug ? 'Delete for all agents' : 'Delete'}
-          </button>
-          {type === 'mcp' && (
-            <>
-              <div className="my-1 h-px bg-border" role="separator" />
+            {type === 'oauth' && accountStatus && accountStatus !== 'active' && (
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors disabled:opacity-50"
-                onClick={() => {
-                  if (mcpStatus?.kind === 'error') void runReconnect()
-                  else void runTestConnection()
-                }}
-                disabled={
-                  testMcpConnection.isPending ||
-                  discoverMcpTools.isPending ||
-                  initiateMcpOAuth.isPending ||
-                  oauthPending
-                }
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                onClick={runOAuthReconnect}
+                disabled={oauthReconnectPending}
               >
-                {testMcpConnection.isPending || initiateMcpOAuth.isPending || oauthPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : mcpStatus?.kind === 'success' ? (
-                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-emerald-500/15">
-                    <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                  </span>
-                ) : mcpStatus?.kind === 'error' ? (
-                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-destructive/15">
-                    <X className="h-3 w-3 text-destructive" />
-                  </span>
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                {oauthPending ? (
-                  'Waiting for OAuth...'
-                ) : mcpStatus?.kind === 'success' ? (
-                  'Connected'
-                ) : mcpStatus?.kind === 'error' ? (
-                  <>
-                    Reconnect
-                    <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
-                  </>
-                ) : (
-                  'Test connection'
-                )}
+                {oauthReconnectPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Reconnect
               </button>
-            </>
-          )}
-        </PopoverContent>
-      </Popover>
+            )}
+            {canEditScopes && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
+                onClick={openScopes}
+              >
+                <Shield className="h-3.5 w-3.5" />
+                Edit permissions
+              </button>
+            )}
+            {type === 'mcp' && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
+                onClick={openTools}
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                Discover tools
+              </button>
+            )}
+            {agentSlug && !hideRemoveFromAgent && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors"
+                onClick={openRemoveFromAgent}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Remove from agent
+              </button>
+            )}
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+              onClick={openDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {agentSlug ? 'Delete for all agents' : 'Delete'}
+            </button>
+            {type === 'mcp' && (
+              <>
+                <div className="my-1 h-px bg-border" role="separator" />
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted transition-colors disabled:opacity-50"
+                  onClick={() => {
+                    if (mcpStatus?.kind === 'error') void runReconnect()
+                    else void runTestConnection()
+                  }}
+                  disabled={
+                    testMcpConnection.isPending ||
+                    discoverMcpTools.isPending ||
+                    initiateMcpOAuth.isPending ||
+                    oauthPending
+                  }
+                >
+                  {testMcpConnection.isPending || initiateMcpOAuth.isPending || oauthPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : mcpStatus?.kind === 'success' ? (
+                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-emerald-500/15">
+                      <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    </span>
+                  ) : mcpStatus?.kind === 'error' ? (
+                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-destructive/15">
+                      <X className="h-3 w-3 text-destructive" />
+                    </span>
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  {oauthPending ? (
+                    'Waiting for OAuth...'
+                  ) : mcpStatus?.kind === 'success' ? (
+                    'Connected'
+                  ) : mcpStatus?.kind === 'error' ? (
+                    <>
+                      Reconnect
+                      <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                    </>
+                  ) : (
+                    'Test connection'
+                  )}
+                </button>
+              </>
+            )}
+          </PopoverContent>
+        </Popover>
       )}
 
       {/* Rename dialog */}
