@@ -252,7 +252,7 @@ class MessageQueue {
   }
 }
 
-type SDKModelAlias = 'sonnet' | 'opus' | 'haiku';
+type SDKModelAlias = 'sonnet' | 'opus' | 'haiku' | 'fable';
 
 /**
  * Maps a full model ID (e.g. 'claude-sonnet-4-5') to the SDK's short alias.
@@ -261,6 +261,7 @@ type SDKModelAlias = 'sonnet' | 'opus' | 'haiku';
 function toModelAlias(model?: string): SDKModelAlias | string | undefined {
   if (!model) return undefined;
   if (model.includes('/')) return model;
+  if (model.includes('fable')) return 'fable';
   if (model.includes('opus')) return 'opus';
   if (model.includes('sonnet')) return 'sonnet';
   if (model.includes('haiku')) return 'haiku';
@@ -448,7 +449,7 @@ export class ClaudeCodeProcess extends EventEmitter {
         agents: {
           'web-browser': {
             description: 'Web browsing specialist. Delegate any task that requires interacting with websites — navigating pages, filling forms, clicking buttons, extracting information, searching for products, changing settings on web services, or any multi-step web interaction. The browser should already be open (use browser_open first). This agent runs on a cheaper model and handles all browser interactions autonomously.',
-            model: (this.browserModel || 'sonnet') as 'sonnet' | 'opus' | 'haiku',
+            model: (this.browserModel || 'sonnet') as SDKModelAlias,
             tools: [
               ...mcpToolNames('browser', browserTools),
               'WebSearch',
