@@ -84,7 +84,6 @@ export function ConnectionDetailPage({ row, onBack }: ConnectionDetailPageProps)
             ) : row.type === 'mcp' ? (
               <ToolPolicyEditorBody
                 mcpId={row.id}
-                mcpName={row.name}
                 tools={row.mcpTools ?? []}
               />
             ) : (

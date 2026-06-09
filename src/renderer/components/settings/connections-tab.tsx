@@ -100,43 +100,43 @@ export function ConnectionsTab() {
       <div className="space-y-2">
         <h3 className="text-xs font-normal text-muted-foreground">Default Policies</h3>
         <div className="rounded-xl border bg-background divide-y divide-border/50 overflow-hidden">
-        <div className="py-3 px-4 flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium">Default API Request Policy</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">
-              Used for connections that don&apos;t have an explicit API request policy set.
+          <div data-testid="default-policy-api" className="py-3 px-4 flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium">Default API Request Policy</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Used for connections that don&apos;t have an explicit API request policy set.
+              </div>
+            </div>
+            <div className="shrink-0">
+              <PolicyDecisionToggle
+                value={apiPolicy}
+                onChange={(value) => {
+                  if (value === 'default') return
+                  updateSettings.mutate({ defaultApiPolicy: value })
+                }}
+                size="sm"
+              />
             </div>
           </div>
-          <div className="shrink-0">
-            <PolicyDecisionToggle
-              value={apiPolicy}
-              onChange={(value) => {
-                if (value === 'default') return
-                updateSettings.mutate({ defaultApiPolicy: value })
-              }}
-              size="sm"
-            />
-          </div>
-        </div>
 
-        <div className="py-3 px-4 flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium">Default MCP Tool Policy</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">
-              Used for connections that don&apos;t have an explicit MCP tool policy set.
+          <div data-testid="default-policy-mcp" className="py-3 px-4 flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium">Default MCP Tool Policy</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Used for connections that don&apos;t have an explicit MCP tool policy set.
+              </div>
+            </div>
+            <div className="shrink-0">
+              <PolicyDecisionToggle
+                value={mcpPolicy}
+                onChange={(value) => {
+                  if (value === 'default') return
+                  updateSettings.mutate({ defaultMcpPolicy: value })
+                }}
+                size="sm"
+              />
             </div>
           </div>
-          <div className="shrink-0">
-            <PolicyDecisionToggle
-              value={mcpPolicy}
-              onChange={(value) => {
-                if (value === 'default') return
-                updateSettings.mutate({ defaultMcpPolicy: value })
-              }}
-              size="sm"
-            />
-          </div>
-        </div>
         </div>
       </div>
 
