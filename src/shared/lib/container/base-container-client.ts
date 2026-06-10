@@ -1150,6 +1150,18 @@ export abstract class BaseContainerClient extends EventEmitter implements Contai
     }
   }
 
+  async cancelQueuedMessage(sessionId: string, uuid: string): Promise<boolean> {
+    const port = await this.getPortOrThrow()
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/sessions/${sessionId}/queued-messages/${encodeURIComponent(uuid)}`,
+      { method: 'DELETE' }
+    )
+    if (!response.ok) return false
+    const body = (await response.json()) as { cancelled?: boolean }
+    return body.cancelled === true
+  }
+
   async interruptSession(sessionId: string): Promise<boolean> {
     const port = await this.getPortOrThrow()
 

@@ -58,12 +58,14 @@ vi.mock('../middleware/auth', () => ({
 // Container manager
 const mockContainerFetch = vi.fn()
 const mockSendMessage = vi.fn()
+const mockCancelQueuedMessage = vi.fn()
 const mockKeepAlive = vi.fn()
 vi.mock('@shared/lib/container/container-manager', () => ({
   containerManager: {
     getClient: () => ({
       fetch: (...args: unknown[]) => mockContainerFetch(...args),
       sendMessage: (...args: unknown[]) => mockSendMessage(...args),
+      cancelQueuedMessage: (...args: unknown[]) => mockCancelQueuedMessage(...args),
       start: vi.fn(),
       stop: vi.fn(),
     }),
@@ -2319,6 +2321,40 @@ describe('user message SSE broadcast — POST /:id/sessions/:sessionId/messages'
     expect(res.status).toBe(201)
 
     expect(messagePersister.broadcastSessionEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe('cancel queued message — DELETE /:id/sessions/:sessionId/queued-messages/:uuid', () => {
+  let app: ReturnType<typeof createApp>
+  const UUID = '123e4567-e89b-12d3-a456-426614174000'
+  const URL = `/api/agents/test-agent/sessions/sess-1/queued-messages/${UUID}`
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    app = createApp()
+  })
+
+  it('forwards to the container and returns cancelled: true', async () => {
+    mockCancelQueuedMessage.mockResolvedValue(true)
+
+    const res = await deleteReq(app, URL)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ cancelled: true })
+    expect(mockCancelQueuedMessage).toHaveBeenCalledWith('sess-1', UUID)
+  })
+
+  it('returns cancelled: false when the message was already picked up', async () => {
+    mockCancelQueuedMessage.mockResolvedValue(false)
+
+    const res = await deleteReq(app, URL)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ cancelled: false })
+  })
+
+  it('rejects a malformed uuid with 400 without calling the container', async () => {
+    const res = await deleteReq(app, '/api/agents/test-agent/sessions/sess-1/queued-messages/not-a-uuid')
+    expect(res.status).toBe(400)
+    expect(mockCancelQueuedMessage).not.toHaveBeenCalled()
   })
 })
 

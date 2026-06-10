@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { SessionManager } from './session-manager';
 import { CreateSessionRequest, SendMessageRequest } from './types';
+import type { UUID } from 'crypto';
 import * as http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import * as fs from 'fs';
@@ -152,6 +153,22 @@ app.post('/sessions/:id/messages', async (c) => {
   } catch (error: any) {
     console.error('Error sending message:', error);
     return c.json({ error: error.message || 'Failed to send message' }, 500);
+  }
+});
+
+// Cancel a queued (not yet picked up) message by the uuid it was sent with.
+// `cancelled: false` means it was already dequeued for execution (or the
+// session isn't live) — never an error; the caller treats it as "too late".
+app.delete('/sessions/:id/queued-messages/:uuid', async (c) => {
+  const sessionId = c.req.param('id');
+  const uuid = c.req.param('uuid');
+
+  try {
+    const cancelled = await sessionManager.cancelQueuedMessage(sessionId, uuid as UUID);
+    return c.json({ cancelled });
+  } catch (error: any) {
+    console.error('Error cancelling queued message:', error);
+    return c.json({ error: error.message || 'Failed to cancel queued message' }, 500);
   }
 });
 

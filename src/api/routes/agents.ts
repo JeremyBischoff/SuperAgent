@@ -1595,6 +1595,27 @@ agents.post('/:id/sessions/:sessionId/messages', AgentUser(), async (c) => {
   }
 })
 
+// DELETE /api/agents/:id/sessions/:sessionId/queued-messages/:uuid - Cancel a
+// queued (not yet picked up) message. `cancelled: false` means it was already
+// picked up (or the session isn't live) — the message will materialize normally.
+agents.delete('/:id/sessions/:sessionId/queued-messages/:uuid', AgentUser(), async (c) => {
+  try {
+    const agentSlug = c.req.param('id')
+    const sessionId = c.req.param('sessionId')
+    const uuidParam = z.string().uuid().safeParse(c.req.param('uuid'))
+    if (!uuidParam.success) {
+      return c.json({ error: 'Invalid message uuid' }, 400)
+    }
+
+    const client = containerManager.getClient(agentSlug)
+    const cancelled = await client.cancelQueuedMessage(sessionId, uuidParam.data)
+    return c.json({ cancelled })
+  } catch (error) {
+    console.error('Failed to cancel queued message:', error)
+    return c.json({ error: 'Failed to cancel queued message' }, 500)
+  }
+})
+
 // POST /api/agents/:id/sessions/:sessionId/typing - Broadcast typing indicator (auth mode only)
 agents.post('/:id/sessions/:sessionId/typing', AgentUser(), async (c) => {
   if (!isAuthMode()) return c.json({ ok: true })

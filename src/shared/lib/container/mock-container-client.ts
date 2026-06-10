@@ -1308,6 +1308,10 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
   // mirroring the real CLI.
   private busySessions = new Set<string>()
 
+  // Pending steering injections by message uuid, so queued messages can be
+  // cancelled before pickup (mirrors the CLI's cancel_async_message).
+  private queuedSteeringTimers = new Map<string, Map<string, ReturnType<typeof setTimeout>>>()
+
   getAgentId(): string {
     return this.config.agentId
   }
@@ -1654,6 +1658,11 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     this.streamCallbacks.delete(sessionId)
     this.pendingUserMessageUuids.delete(sessionId)
     this.busySessions.delete(sessionId)
+    const timers = this.queuedSteeringTimers.get(sessionId)
+    if (timers) {
+      for (const timer of timers.values()) clearTimeout(timer)
+      this.queuedSteeringTimers.delete(sessionId)
+    }
     console.log(`[MockContainerClient] Deleted session ${sessionId}`)
     return existed
   }
@@ -1703,12 +1712,15 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     }
 
     // Mid-turn send — mirror the real CLI's steering behavior: no user entry
-    // is written; after a short pickup delay the message lands in the JSONL
-    // as a queued_command attachment with a CLI-generated source_uuid (the
-    // client uuid is NOT preserved), followed by assistant output whose
-    // stream message triggers the refetch that materializes the ghost.
+    // is written; after a pickup delay the message lands in the JSONL as a
+    // queued_command attachment with a CLI-generated source_uuid (the sender
+    // uuid is NOT preserved there), followed by assistant output whose stream
+    // message triggers the refetch that materializes the ghost. Until pickup
+    // the injection is cancellable by uuid (cancel_async_message semantics).
     if (this.busySessions.has(sessionId)) {
-      setTimeout(() => {
+      const steeringUuid = uuid ?? randomUUID()
+      const timer = setTimeout(() => {
+        this.queuedSteeringTimers.get(sessionId)?.delete(steeringUuid)
         this.writeJsonlEntry(sessionId, {
           type: 'attachment',
           timestamp: new Date().toISOString(),
@@ -1729,7 +1741,10 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
           type: 'assistant',
           content: { type: 'assistant', message: { content: ackContent } },
         })
-      }, 400)
+      }, 1200)
+      const timers = this.queuedSteeringTimers.get(sessionId) ?? new Map()
+      timers.set(steeringUuid, timer)
+      this.queuedSteeringTimers.set(sessionId, timers)
       return
     }
 
@@ -1770,6 +1785,16 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
 
   async getMessages(sessionId: string): Promise<unknown[]> {
     return this.sessionMessages.get(sessionId) || []
+  }
+
+  async cancelQueuedMessage(sessionId: string, uuid: string): Promise<boolean> {
+    const timers = this.queuedSteeringTimers.get(sessionId)
+    const timer = timers?.get(uuid)
+    if (!timer) return false
+    clearTimeout(timer)
+    timers!.delete(uuid)
+    console.log(`[MockContainerClient] Cancelled queued message ${uuid} in session ${sessionId}`)
+    return true
   }
 
   async interruptSession(sessionId: string): Promise<boolean> {

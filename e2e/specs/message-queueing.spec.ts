@@ -69,6 +69,37 @@ test.describe('Message queueing while agent is working', () => {
     ).toBeVisible({ timeout: 15000 })
   })
 
+  test('a queued message can be cancelled before pickup', async ({ page }) => {
+    await sessionPage.sendMessage('please work slowly for the cancel test')
+    await expect(sessionPage.getStopButton()).toBeVisible({ timeout: 10000 })
+
+    // Queue a message mid-turn, then cancel it inside the mock's pickup window
+    await sessionPage.typeMessage('cancel me before pickup')
+    await sessionPage.getSendButton().click()
+
+    const ghost = page.locator('[data-testid="queued-user-message"]')
+    await expect(ghost).toBeVisible({ timeout: 5000 })
+
+    // Cancel becomes available once the POST response delivers the server uuid
+    const cancelBtn = page.locator('[data-testid="cancel-queued-message"]')
+    await expect(cancelBtn).toBeVisible({ timeout: 3000 })
+    await cancelBtn.click()
+
+    // Ghost disappears immediately; the cancelled message never materializes
+    await expect(ghost).not.toBeAttached({ timeout: 5000 })
+
+    // Turn completes normally with only the original user message persisted
+    await expect(
+      sessionPage.getAssistantMessages().filter({ hasText: 'Finished the slow work.' })
+    ).toBeVisible({ timeout: 15000 })
+    await sessionPage.waitForUserMessageCount(1, 15000)
+    await expect(page.getByText('cancel me before pickup')).not.toBeVisible()
+    // No steering acknowledgement for the cancelled message
+    await expect(
+      sessionPage.getAssistantMessages().filter({ hasText: 'Adjusting based on: cancel me before pickup' })
+    ).toHaveCount(0)
+  })
+
   test('multiple queued messages drain in send order', async ({ page }) => {
     await sessionPage.sendMessage('please work slowly again')
     await expect(sessionPage.getStopButton()).toBeVisible({ timeout: 10000 })

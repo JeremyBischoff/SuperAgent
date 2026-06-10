@@ -1,5 +1,5 @@
 
-import { useMessages, useDeleteMessage, useDeleteToolCall, TranscriptNotFoundError } from '@renderer/hooks/use-messages'
+import { useMessages, useDeleteMessage, useDeleteToolCall, useCancelQueuedMessage, TranscriptNotFoundError } from '@renderer/hooks/use-messages'
 import { useAgent } from '@renderer/hooks/use-agents'
 import { useIsVoiceAgentConfigured } from '@renderer/hooks/use-voice-input'
 import { VoiceAgentFeedbackDialog } from './voice-agent-feedback-dialog'
@@ -66,6 +66,9 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
   const { data: messages, isLoading, error } = useMessages(sessionId, agentSlug)
   const deleteMessage = useDeleteMessage()
   const deleteToolCall = useDeleteToolCall()
+  const cancelQueuedMessage = useCancelQueuedMessage()
+  // Ghosts with a cancel request in flight (disables their Cancel button)
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set())
   const { user } = useUser()
   const [, setSessionDraft] = useDraft<string>(`session:${sessionId}`)
 
@@ -509,6 +512,30 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     [peerUserMessages, messages, user?.id]
   )
 
+  // Cancel a queued message before the agent picks it up. cancelled: false
+  // means we lost the race to pickup — leave the ghost to materialize.
+  const handleCancelQueued = useCallback(
+    (localId: string, uuid: string) => {
+      setCancellingIds((prev) => new Set(prev).add(localId))
+      cancelQueuedMessage.mutate(
+        { sessionId, agentSlug, uuid },
+        {
+          onSuccess: ({ cancelled }) => {
+            if (cancelled) onPendingMessageAppeared?.(localId)
+          },
+          onSettled: () => {
+            setCancellingIds((prev) => {
+              const next = new Set(prev)
+              next.delete(localId)
+              return next
+            })
+          },
+        }
+      )
+    },
+    [cancelQueuedMessage, sessionId, agentSlug, onPendingMessageAppeared]
+  )
+
   // Single render path for both local pending ghosts and peer ghosts.
   const renderGhost = (ghost: {
     key: string
@@ -518,6 +545,9 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     failed?: boolean
     sender?: { id: string; name: string; email: string }
     testId?: string
+    /** Set for own queued ghosts once the server uuid is known — enables Cancel. */
+    onCancel?: () => void
+    cancelling?: boolean
   }) => (
     <MessageErrorBoundary key={ghost.key} kind="message" raw={ghost} itemId={`ghost-${ghost.key}`}>
       <div className={ghost.queued && !ghost.failed ? 'opacity-60' : undefined} data-testid={ghost.testId}>
@@ -545,7 +575,23 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
             </button>
           </div>
         ) : ghost.queued ? (
-          <div className="flex justify-end mt-1 text-xs text-muted-foreground italic">Queued</div>
+          <div className="flex items-center justify-end gap-2 mt-1 text-xs text-muted-foreground italic">
+            <span>Queued</span>
+            {ghost.onCancel && (
+              <>
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  className="not-italic underline hover:no-underline disabled:opacity-50"
+                  onClick={ghost.onCancel}
+                  disabled={ghost.cancelling}
+                  data-testid="cancel-queued-message"
+                >
+                  {ghost.cancelling ? 'Cancelling…' : 'Cancel'}
+                </button>
+              </>
+            )}
+          </div>
         ) : null}
       </div>
     </MessageErrorBoundary>
@@ -560,6 +606,14 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
       failed: pending.failed,
       sender: pending.sender,
       testId: pending.failed ? 'failed-user-message' : pending.queued ? 'queued-user-message' : 'pending-user-message',
+      // Cancellation keys off the server-assigned uuid, so it's available
+      // only once the POST response has landed (a sub-second window).
+      ...(pending.queued && !pending.failed && pending.uuid
+        ? {
+            onCancel: () => handleCancelQueued(pending.localId, pending.uuid!),
+            cancelling: cancellingIds.has(pending.localId),
+          }
+        : {}),
     })
 
   const renderPeerGhost = (peer: (typeof peerUserMessages)[number]) =>

@@ -62,6 +62,21 @@ export function useSendMessage() {
   })
 }
 
+export function useCancelQueuedMessage() {
+  return useMutation({
+    mutationFn: async (data: { sessionId: string; agentSlug: string; uuid: string }) => {
+      const res = await apiFetch(
+        `/api/agents/${data.agentSlug}/sessions/${data.sessionId}/queued-messages/${encodeURIComponent(data.uuid)}`,
+        { method: 'DELETE' }
+      )
+      if (!res.ok) throw new Error('Failed to cancel queued message')
+      // cancelled: false = the agent already picked the message up; the
+      // caller leaves the ghost alone and lets it materialize normally.
+      return res.json() as Promise<{ cancelled: boolean }>
+    },
+  })
+}
+
 export function useUploadFile() {
   return useMutation({
     mutationFn: async (data: { sessionId: string; agentSlug: string; file: File; relativePath?: string }) => {

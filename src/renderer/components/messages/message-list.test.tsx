@@ -15,11 +15,21 @@ const mockMessagesData: { data: ApiMessageOrBoundary[] | undefined; isLoading: b
 
 const mockDeleteMessage = vi.fn()
 const mockDeleteToolCall = vi.fn()
+// Cancel mutation mock: invokes the mutate() callbacks synchronously with a
+// configurable result so tests can exercise both race outcomes.
+let mockCancelResult: { cancelled: boolean } = { cancelled: true }
+const mockCancelQueued = vi.fn(
+  (_vars: unknown, opts?: { onSuccess?: (r: { cancelled: boolean }) => void; onSettled?: () => void }) => {
+    opts?.onSuccess?.(mockCancelResult)
+    opts?.onSettled?.()
+  }
+)
 
 vi.mock('@renderer/hooks/use-messages', () => ({
   useMessages: () => mockMessagesData,
   useDeleteMessage: () => ({ mutate: mockDeleteMessage }),
   useDeleteToolCall: () => ({ mutate: mockDeleteToolCall }),
+  useCancelQueuedMessage: () => ({ mutate: mockCancelQueued }),
   // Real class so `error instanceof TranscriptNotFoundError` works in the component.
   TranscriptNotFoundError: class TranscriptNotFoundError extends Error {
     constructor() {
@@ -124,6 +134,7 @@ describe('MessageList', () => {
     mockMessagesData.isLoading = false
     mockIsOnline = true
     mockCurrentUser = null
+    mockCancelResult = { cancelled: true }
     Object.assign(mockStreamState, {
       isActive: false,
       isStreaming: false,
@@ -697,6 +708,78 @@ describe('MessageList', () => {
 
     fireEvent.click(screen.getByTestId('dismiss-failed-message'))
     expect(onAppeared).toHaveBeenCalledWith('l1')
+  })
+
+  // ---- Cancelling queued messages ----
+
+  it('shows Cancel on queued ghosts only once the server uuid is known', () => {
+    mockMessagesData.data = []
+    mockStreamState.isActive = true
+
+    const { rerender } = renderWithProviders(
+      <MessageList
+        sessionId="s-1"
+        agentSlug="agent-1"
+        pendingUserMessages={[{ localId: 'l1', text: 'queued msg', sentAt: Date.now(), queued: true }]}
+      />
+    )
+    // No uuid yet (POST response pending) — cancel not possible
+    expect(screen.queryByTestId('cancel-queued-message')).not.toBeInTheDocument()
+
+    rerender(
+      <MessageList
+        sessionId="s-1"
+        agentSlug="agent-1"
+        pendingUserMessages={[{ localId: 'l1', uuid: 'srv-1', text: 'queued msg', sentAt: Date.now(), queued: true }]}
+      />
+    )
+    expect(screen.getByTestId('cancel-queued-message')).toBeInTheDocument()
+  })
+
+  it('cancelling a queued ghost removes it on success', () => {
+    mockCancelResult = { cancelled: true }
+    const onAppeared = vi.fn()
+    mockMessagesData.data = []
+    mockStreamState.isActive = true
+
+    renderWithProviders(
+      <MessageList
+        sessionId="s-1"
+        agentSlug="agent-1"
+        pendingUserMessages={[{ localId: 'l1', uuid: 'srv-1', text: 'queued msg', sentAt: Date.now(), queued: true }]}
+        onPendingMessageAppeared={onAppeared}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('cancel-queued-message'))
+
+    expect(mockCancelQueued).toHaveBeenCalledWith(
+      { sessionId: 's-1', agentSlug: 'agent-1', uuid: 'srv-1' },
+      expect.anything()
+    )
+    expect(onAppeared).toHaveBeenCalledWith('l1')
+  })
+
+  it('leaves the ghost in place when cancellation lost the race to pickup', () => {
+    mockCancelResult = { cancelled: false }
+    const onAppeared = vi.fn()
+    mockMessagesData.data = []
+    mockStreamState.isActive = true
+
+    renderWithProviders(
+      <MessageList
+        sessionId="s-1"
+        agentSlug="agent-1"
+        pendingUserMessages={[{ localId: 'l1', uuid: 'srv-1', text: 'queued msg', sentAt: Date.now(), queued: true }]}
+        onPendingMessageAppeared={onAppeared}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('cancel-queued-message'))
+
+    // Too late — the ghost stays and will materialize normally
+    expect(onAppeared).not.toHaveBeenCalled()
+    expect(screen.getByTestId('queued-user-message')).toBeInTheDocument()
   })
 
   it('drops the sender own user_message echo from peer state immediately', () => {

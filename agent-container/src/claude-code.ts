@@ -233,6 +233,15 @@ class MessageQueue {
     }
   }
 
+  // Remove a buffered message by uuid. Rarely hits — the SDK drains this
+  // queue eagerly — but covers the window before the SDK pulls it.
+  remove(uuid: string): boolean {
+    const index = this.queue.findIndex((m) => m.uuid === uuid);
+    if (index < 0) return false;
+    this.queue.splice(index, 1);
+    return true;
+  }
+
   [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
     return {
       next: (): Promise<IteratorResult<SDKUserMessage>> => {
@@ -857,6 +866,36 @@ export class ClaudeCodeProcess extends EventEmitter {
     }
     console.log(`[Session ${this.sessionId}] Sending message (userMessageCount=${this.userMessageCount}):`, content.substring(0, 100));
     this.messageQueue!.push(message);
+  }
+
+  /**
+   * Cancel a queued (not yet picked up) message by the uuid it was sent with.
+   * Returns true when the message was dropped before the agent saw it.
+   */
+  async cancelQueuedMessage(uuid: UUID): Promise<boolean> {
+    // Window before the SDK pulled it from our queue
+    if (this.messageQueue?.remove(uuid)) {
+      console.log(`[Session ${this.sessionId}] Cancelled queued message (local buffer):`, uuid);
+      return true;
+    }
+    if (!this.queryInstance) return false;
+    try {
+      // cancel_async_message control request: drops a pending message from the
+      // CLI's command queue by the SDKUserMessage uuid; no-op (false) if it was
+      // already dequeued for execution. Present in sdk.mjs but stripped from
+      // the public typings — behavior verified against CLI 2.1.170: the queue
+      // entry retains our uuid and a cancelled message leaves no transcript
+      // trace (queue-operation enqueue/dequeue only).
+      const cancellable = this.queryInstance as unknown as {
+        cancelAsyncMessage(messageUuid: string): Promise<boolean>;
+      };
+      const cancelled = await cancellable.cancelAsyncMessage(uuid);
+      console.log(`[Session ${this.sessionId}] cancelAsyncMessage(${uuid}) ->`, cancelled);
+      return cancelled;
+    } catch (error) {
+      console.warn(`[Session ${this.sessionId}] cancelAsyncMessage failed:`, error);
+      return false;
+    }
   }
 
   // Restart the session (used when session exits and user sends a new message)
