@@ -21,16 +21,18 @@ interface MessageInputProps {
   sessionId: string
   agentSlug: string
   /** Called right before the POST so the caller can show the optimistic copy. `queued` is true when the agent is mid-turn. */
-  onMessageSent?: (content: string, uuid: string, queued: boolean) => void
+  onMessageSent?: (content: string, localId: string, queued: boolean) => void
+  /** Called when the POST response arrives with the server-assigned message uuid. */
+  onMessageUuidAssigned?: (localId: string, uuid: string) => void
   /** Called when the POST fails, so the caller can drop the optimistic copy. */
-  onMessageFailed?: (uuid: string) => void
+  onMessageFailed?: (localId: string) => void
   /** Effort level last used on this session; seeds the composer selector. Defaults to 'high' when absent. */
   initialEffort?: EffortLevel
   /** Model last used on this session; seeds the composer selector. Defaults to provider's agent default. */
   initialModel?: string
 }
 
-export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageFailed, initialEffort, initialModel }: MessageInputProps) {
+export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUuidAssigned, onMessageFailed, initialEffort, initialModel }: MessageInputProps) {
   useRenderTracker('MessageInput')
   const { canUseAgent, isAuthMode } = useUser()
   const isViewOnly = !canUseAgent(agentSlug)
@@ -59,26 +61,30 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageFai
       [uploadFolder, sessionId, agentSlug]
     ),
     onSubmit: useCallback(async (content: string) => {
-      const uuid = crypto.randomUUID()
+      // Local correlation id for the optimistic copy; the server-assigned
+      // message uuid arrives with the POST response (the server always
+      // generates it — a client-chosen id could forge attribution).
+      const localId = crypto.randomUUID()
       // Mid-turn sends are queued by the agent loop (SDK streaming input) and
       // picked up after the current step. They must not carry model/effort —
       // a parameter change would interrupt/restart the in-flight query.
+      // (The server also strips them when it sees the session is active.)
       const queued = isActive && !isWaitingBackground
-      onMessageSent?.(content, uuid, queued)
+      onMessageSent?.(content, localId, queued)
       try {
-        await sendMessage.mutateAsync({
+        const result = await sendMessage.mutateAsync({
           sessionId,
           agentSlug,
           content,
-          uuid,
           ...(queued ? {} : composerOptions.toRuntimeOptions()),
         })
+        onMessageUuidAssigned?.(localId, result.uuid)
       } catch (error) {
-        onMessageFailed?.(uuid)
+        onMessageFailed?.(localId)
         throw error
       }
       track('message_sent')
-    }, [onMessageSent, onMessageFailed, sendMessage, sessionId, agentSlug, track, composerOptions, isActive, isWaitingBackground]),
+    }, [onMessageSent, onMessageUuidAssigned, onMessageFailed, sendMessage, sessionId, agentSlug, track, composerOptions, isActive, isWaitingBackground]),
     submitDisabled: sendMessage.isPending || isOffline,
     draftKey: `session:${sessionId}`,
   })

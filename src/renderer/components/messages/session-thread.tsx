@@ -16,7 +16,8 @@ interface SessionThreadProps {
   // MessageList passthrough — supplied by the interactive session view, omitted when read-only.
   pendingUserMessages?: PendingMessage[]
   pendingRequestCount?: number
-  onPendingMessageAppeared?: (uuid: string) => void
+  onPendingMessageAppeared?: (localId: string) => void
+  onPendingMessageDropped?: (localId: string) => void
 }
 
 /**
@@ -37,6 +38,7 @@ export function SessionThread({
   pendingUserMessages,
   pendingRequestCount,
   onPendingMessageAppeared,
+  onPendingMessageDropped,
 }: SessionThreadProps) {
   return (
     <div className="relative flex-1 flex min-h-0">
@@ -49,6 +51,7 @@ export function SessionThread({
           pendingUserMessages={pendingUserMessages}
           pendingRequestCount={pendingRequestCount}
           onPendingMessageAppeared={onPendingMessageAppeared}
+          onPendingMessageDropped={onPendingMessageDropped}
         />
         <div className={footerClassName}>
           <AgentActivityIndicator sessionId={sessionId} agentSlug={agentSlug} />

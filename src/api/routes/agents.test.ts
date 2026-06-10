@@ -1997,20 +1997,23 @@ describe('message author attribution — POST /:id/sessions/:sessionId/messages'
     mockSendMessage.mockResolvedValue(undefined)
   })
 
-  it('does not generate UUID or insert messageAuthor in non-auth mode', async () => {
+  it('generates a server uuid, returns it, and skips messageAuthor in non-auth mode', async () => {
     mockIsAuthMode.mockReturnValue(false)
 
     const res = await postJson(app, URL, { content: 'hello' })
     expect(res.status).toBe(201)
 
-    // sendMessage called with only sessionId and content (no uuid, no runtime options)
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', undefined, {})
+    // Server always generates the uuid and returns it for ghost matching
+    const body = await res.json()
+    expect(typeof body.uuid).toBe('string')
+    expect(body.queued).toBe(false)
+    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', body.uuid, {})
 
-    // No DB insert for message author
+    // No DB insert for message author outside auth mode
     expect(mockDbInsertValues).not.toHaveBeenCalled()
   })
 
-  it('generates UUID, inserts messageAuthor, and passes UUID to sendMessage in auth mode', async () => {
+  it('generates UUID, inserts messageAuthor, passes it to sendMessage, and returns it in auth mode', async () => {
     mockIsAuthMode.mockReturnValue(true)
 
     const res = await postJson(app, URL, { content: 'hello from user' })
@@ -2027,40 +2030,25 @@ describe('message author attribution — POST /:id/sessions/:sessionId/messages'
     expect(insertedValues.id).toBeDefined()
     expect(typeof insertedValues.id).toBe('string')
 
-    // sendMessage should receive the same UUID and empty runtime options (not provided in test payload)
+    // sendMessage and the response both carry the same server uuid
     expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello from user', insertedValues.id, {})
+    const body = await res.json()
+    expect(body.uuid).toBe(insertedValues.id)
   })
 
-  it('passes a client-supplied uuid through to sendMessage in non-auth mode', async () => {
-    mockIsAuthMode.mockReturnValue(false)
-    const uuid = '123e4567-e89b-12d3-a456-426614174000'
-
-    const res = await postJson(app, URL, { content: 'hello', uuid })
-    expect(res.status).toBe(201)
-
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', uuid, {})
-    // Still no author record outside auth mode
-    expect(mockDbInsertValues).not.toHaveBeenCalled()
-  })
-
-  it('uses the client-supplied uuid for the messageAuthor record in auth mode', async () => {
+  it('ignores a client-supplied uuid — the attribution PK is always server-generated', async () => {
     mockIsAuthMode.mockReturnValue(true)
-    const uuid = '123e4567-e89b-12d3-a456-426614174000'
+    const clientUuid = '123e4567-e89b-12d3-a456-426614174000'
 
-    const res = await postJson(app, URL, { content: 'hello', uuid })
+    const res = await postJson(app, URL, { content: 'hello', uuid: clientUuid })
     expect(res.status).toBe(201)
 
-    expect(mockDbInsertValues.mock.calls[0][0].id).toBe(uuid)
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', uuid, {})
-  })
-
-  it('ignores a malformed client uuid', async () => {
-    mockIsAuthMode.mockReturnValue(false)
-
-    const res = await postJson(app, URL, { content: 'hello', uuid: 'not-a-uuid' })
-    expect(res.status).toBe(201)
-
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', undefined, {})
+    // A client-chosen id could collide with another user's messageAuthor row
+    // (silent misattribution) — the server must never honor it.
+    expect(mockDbInsertValues.mock.calls[0][0].id).not.toBe(clientUuid)
+    const body = await res.json()
+    expect(body.uuid).not.toBe(clientUuid)
+    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', body.uuid, {})
   })
 
   // ---- Runtime options forwarding ----
@@ -2070,7 +2058,7 @@ describe('message author attribution — POST /:id/sessions/:sessionId/messages'
 
     const res = await postJson(app, URL, { content: 'hello', effort: 'low' })
     expect(res.status).toBe(201)
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', undefined, { effort: 'low' })
+    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', expect.any(String), { effort: 'low' })
   })
 
   it('forwards model to sendMessage when present in body', async () => {
@@ -2078,7 +2066,7 @@ describe('message author attribution — POST /:id/sessions/:sessionId/messages'
 
     const res = await postJson(app, URL, { content: 'hello', model: 'claude-haiku-4-5' })
     expect(res.status).toBe(201)
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', undefined, { model: 'claude-haiku-4-5' })
+    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', expect.any(String), { model: 'claude-haiku-4-5' })
   })
 
   it('forwards both effort and model when both are present', async () => {
@@ -2090,7 +2078,7 @@ describe('message author attribution — POST /:id/sessions/:sessionId/messages'
       model: 'claude-opus-4-7',
     })
     expect(res.status).toBe(201)
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', undefined, {
+    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', expect.any(String), {
       effort: 'medium',
       model: 'claude-opus-4-7',
     })
@@ -2105,9 +2093,27 @@ describe('message author attribution — POST /:id/sessions/:sessionId/messages'
       model: 'claude-sonnet-4-6',
     })
     expect(res.status).toBe(201)
-    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', undefined, {
+    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', expect.any(String), {
       model: 'claude-sonnet-4-6',
     })
+  })
+
+  it('strips model/effort when the session is already active (mid-turn send)', async () => {
+    mockIsAuthMode.mockReturnValue(false)
+    // The container interprets a changed effort/model as interrupt/restart of
+    // the in-flight query — the server must not forward them on queued sends,
+    // regardless of what the (possibly stale) client included.
+    vi.mocked(messagePersister.isSessionActive).mockReturnValueOnce(true)
+
+    const res = await postJson(app, URL, {
+      content: 'hello',
+      effort: 'low',
+      model: 'claude-opus-4-7',
+    })
+    expect(res.status).toBe(201)
+    const body = await res.json()
+    expect(body.queued).toBe(true)
+    expect(mockSendMessage).toHaveBeenCalledWith('sess-1', 'hello', expect.any(String), {})
   })
 })
 

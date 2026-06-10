@@ -822,6 +822,43 @@ describe('session-service', () => {
       expect(remaining[1].uuid).toBe('user-2')
     })
 
+    it('removes a queued message by its source_uuid (underlying attachment entry)', async () => {
+      const entries = [
+        {
+          type: 'user',
+          uuid: 'user-1',
+          parentUuid: null,
+          sessionId: 'sess-1',
+          timestamp: '2026-01-24T01:00:00.000Z',
+          message: { role: 'user', content: 'Start' },
+        },
+        // Mid-turn message: persisted as an attachment, surfaced in the UI
+        // with id = attachment.source_uuid (not the entry's top-level uuid)
+        {
+          type: 'attachment',
+          uuid: 'attachment-entry-uuid',
+          parentUuid: 'user-1',
+          sessionId: 'sess-1',
+          timestamp: '2026-01-24T01:00:05.000Z',
+          attachment: {
+            type: 'queued_command',
+            prompt: [{ type: 'text', text: 'Queued steer' }],
+            source_uuid: 'queue-source-uuid',
+            commandMode: 'prompt',
+          },
+        },
+      ]
+
+      await createSessionFile('test-agent', 'sess-1', entries)
+
+      const result = await removeMessage('test-agent', 'sess-1', 'queue-source-uuid')
+      expect(result).toBe(true)
+
+      const remaining = await readSessionEntries('test-agent', 'sess-1')
+      expect(remaining.length).toBe(1)
+      expect(remaining[0].uuid).toBe('user-1')
+    })
+
     it('removes an assistant message and associated tool_result entries', async () => {
       const entries = [
         {

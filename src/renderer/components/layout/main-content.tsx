@@ -131,11 +131,11 @@ export function MainContent() {
 
   const pendingUserMessages = sessionId ? (pendingMessagesRef.current.get(sessionId) ?? EMPTY_PENDING_MESSAGES) : EMPTY_PENDING_MESSAGES
 
-  const handleMessageSent = useCallback((content: string, uuid: string, queued: boolean) => {
+  const handleMessageSent = useCallback((content: string, localId: string, queued: boolean) => {
     if (sessionId) {
       const existing = pendingMessagesRef.current.get(sessionId) ?? []
       pendingMessagesRef.current.set(sessionId, [...existing, {
-        uuid,
+        localId,
         text: content,
         sentAt: Date.now(),
         queued,
@@ -145,11 +145,22 @@ export function MainContent() {
     }
   }, [sessionId, isAuthMode, user])
 
-  const handlePendingMessageAppeared = useCallback((uuid: string) => {
+  // The POST response carries the server-assigned message uuid — attach it to
+  // the optimistic entry so it can be materialized by exact id match.
+  const handleMessageUuidAssigned = useCallback((localId: string, uuid: string) => {
     if (sessionId) {
       const existing = pendingMessagesRef.current.get(sessionId)
-      if (!existing?.some((m) => m.uuid === uuid)) return
-      const remaining = existing.filter((m) => m.uuid !== uuid)
+      if (!existing?.some((m) => m.localId === localId)) return
+      pendingMessagesRef.current.set(sessionId, existing.map((m) => (m.localId === localId ? { ...m, uuid } : m)))
+      forceUpdate((n) => n + 1)
+    }
+  }, [sessionId])
+
+  const handlePendingMessageAppeared = useCallback((localId: string) => {
+    if (sessionId) {
+      const existing = pendingMessagesRef.current.get(sessionId)
+      if (!existing?.some((m) => m.localId === localId)) return
+      const remaining = existing.filter((m) => m.localId !== localId)
       if (remaining.length > 0) {
         pendingMessagesRef.current.set(sessionId, remaining)
       } else {
@@ -159,9 +170,25 @@ export function MainContent() {
     }
   }, [sessionId])
 
-  // Callback for AgentHome when a new session is created with initial message
+  // The session went idle without the message ever materializing (e.g. the
+  // turn was interrupted before the agent picked it up) — mark it undelivered
+  // instead of silently dropping it, so the user can see it was lost.
+  const handlePendingMessageDropped = useCallback((localId: string) => {
+    if (sessionId) {
+      const existing = pendingMessagesRef.current.get(sessionId)
+      const entry = existing?.find((m) => m.localId === localId)
+      if (!entry || entry.failed) return
+      pendingMessagesRef.current.set(sessionId, existing!.map((m) => (m.localId === localId ? { ...m, failed: true } : m)))
+      forceUpdate((n) => n + 1)
+    }
+  }, [sessionId])
+
+  // Callback for AgentHome when a new session is created with initial message.
+  // The uuid is server-assigned (from the create response), so it's known
+  // up-front — no re-keying needed on this path.
   const handleSessionCreated = useCallback((newSessionId: string, initialMessage: string, messageUuid: string) => {
     pendingMessagesRef.current.set(newSessionId, [{
+      localId: messageUuid,
       uuid: messageUuid,
       text: initialMessage,
       sentAt: Date.now(),
@@ -489,7 +516,9 @@ export function MainContent() {
                 effort={session?.effort}
                 model={session?.model}
                 onPendingMessageAppeared={handlePendingMessageAppeared}
+                onPendingMessageDropped={handlePendingMessageDropped}
                 onMessageSent={handleMessageSent}
+                onMessageUuidAssigned={handleMessageUuidAssigned}
                 onMessageFailed={handlePendingMessageAppeared}
               />
             </div>

@@ -39,7 +39,7 @@ const mockStreamState = {
   activeSubagents: [] as any[],
   completedSubagents: null as Set<string> | null,
   typingUser: null as { id: string; name?: string } | null,
-  peerUserMessages: [] as Array<{ uuid: string; content: string; sender: { id: string; name?: string; email?: string }; queued?: boolean }>,
+  peerUserMessages: [] as Array<{ uuid: string; receivedAt: number; content: string; sender: { id: string; name?: string; email?: string }; queued?: boolean }>,
 }
 
 const mockClearCompacting = vi.fn()
@@ -175,7 +175,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'pm-1', text: 'Sending...', sentAt: Date.now() }]}
+        pendingUserMessages={[{ localId: 'pm-1', uuid: 'pm-1', text: 'Sending...', sentAt: Date.now() }]}
       />
     )
     expect(screen.getByText('Sending...')).toBeInTheDocument()
@@ -190,8 +190,8 @@ describe('MessageList', () => {
         sessionId="s-1"
         agentSlug="agent-1"
         pendingUserMessages={[
-          { uuid: 'pm-1', text: 'First queued', sentAt: Date.now(), queued: true },
-          { uuid: 'pm-2', text: 'Second queued', sentAt: Date.now(), queued: true },
+          { localId: 'pm-1', uuid: 'pm-1', text: 'First queued', sentAt: Date.now(), queued: true },
+          { localId: 'pm-2', uuid: 'pm-2', text: 'Second queued', sentAt: Date.now(), queued: true },
         ]}
       />
     )
@@ -455,7 +455,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'uuid-1', text: 'My message', sentAt }]}
+        pendingUserMessages={[{ localId: 'uuid-1', uuid: 'uuid-1', text: 'My message', sentAt }]}
         onPendingMessageAppeared={onAppeared}
       />
     )
@@ -482,7 +482,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'uuid-1', text: 'My message', sentAt, queued: true }]}
+        pendingUserMessages={[{ localId: 'uuid-1', uuid: 'uuid-1', text: 'My message', sentAt, queued: true }]}
         onPendingMessageAppeared={onAppeared}
       />
     )
@@ -507,7 +507,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'uuid-1', text: 'My message', sentAt, queued: true }]}
+        pendingUserMessages={[{ localId: 'uuid-1', uuid: 'uuid-1', text: 'My message', sentAt, queued: true }]}
         onPendingMessageAppeared={onAppeared}
       />
     )
@@ -528,7 +528,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'q1', text: 'Queued msg', sentAt: Date.now(), queued: true }]}
+        pendingUserMessages={[{ localId: 'q1', uuid: 'q1', text: 'Queued msg', sentAt: Date.now(), queued: true }]}
       />
     )
 
@@ -599,8 +599,8 @@ describe('MessageList', () => {
         sessionId="s-1"
         agentSlug="agent-1"
         pendingUserMessages={[
-          { uuid: 'uuid-1', text: 'Do it', sentAt, queued: true },
-          { uuid: 'uuid-2', text: 'Do it', sentAt, queued: true },
+          { localId: 'uuid-1', uuid: 'uuid-1', text: 'Do it', sentAt, queued: true },
+          { localId: 'uuid-2', uuid: 'uuid-2', text: 'Do it', sentAt, queued: true },
         ]}
         onPendingMessageAppeared={onAppeared}
       />
@@ -624,8 +624,8 @@ describe('MessageList', () => {
         sessionId="s-1"
         agentSlug="agent-1"
         pendingUserMessages={[
-          { uuid: 'uuid-1', text: 'First', sentAt, queued: true },
-          { uuid: 'uuid-2', text: 'Second', sentAt, queued: true },
+          { localId: 'uuid-1', uuid: 'uuid-1', text: 'First', sentAt, queued: true },
+          { localId: 'uuid-2', uuid: 'uuid-2', text: 'Second', sentAt, queued: true },
         ]}
         onPendingMessageAppeared={onAppeared}
       />
@@ -633,6 +633,88 @@ describe('MessageList', () => {
 
     expect(onAppeared).toHaveBeenCalledWith('uuid-1')
     expect(onAppeared).not.toHaveBeenCalledWith('uuid-2')
+  })
+
+  it('does not text-fallback for non-queued pendings that already have their server uuid', () => {
+    // A turn-starting send persists under its server-assigned uuid, so an
+    // identical-text OLD message must never clear it (wrong-copy match).
+    const onAppeared = vi.fn()
+
+    mockMessagesData.data = [
+      createUserMessage({ id: 'old-copy', content: { text: 'continue' }, createdAt: new Date() }),
+    ]
+    mockStreamState.isActive = true
+
+    renderWithProviders(
+      <MessageList
+        sessionId="s-1"
+        agentSlug="agent-1"
+        pendingUserMessages={[{ localId: 'l1', uuid: 'server-uuid', text: 'continue', sentAt: Date.now() }]}
+        onPendingMessageAppeared={onAppeared}
+      />
+    )
+
+    expect(onAppeared).not.toHaveBeenCalled()
+  })
+
+  it('text-fallback applies while the POST response (uuid) is still pending', () => {
+    const onAppeared = vi.fn()
+
+    mockMessagesData.data = [
+      createUserMessage({ id: 'persisted-1', content: { text: 'hello there' }, createdAt: new Date() }),
+    ]
+
+    renderWithProviders(
+      <MessageList
+        sessionId="s-1"
+        agentSlug="agent-1"
+        pendingUserMessages={[{ localId: 'l1', text: 'hello there', sentAt: Date.now() - 1000 }]}
+        onPendingMessageAppeared={onAppeared}
+      />
+    )
+
+    expect(onAppeared).toHaveBeenCalledWith('l1')
+  })
+
+  it('renders undelivered ghosts with a notice and dismisses via the button', () => {
+    const onAppeared = vi.fn()
+    mockMessagesData.data = []
+
+    renderWithProviders(
+      <MessageList
+        sessionId="s-1"
+        agentSlug="agent-1"
+        pendingUserMessages={[{ localId: 'l1', text: 'lost message', sentAt: Date.now(), queued: true, failed: true }]}
+        onPendingMessageAppeared={onAppeared}
+      />
+    )
+
+    const failed = screen.getByTestId('failed-user-message')
+    expect(failed).toHaveTextContent('lost message')
+    expect(failed).toHaveTextContent('Not delivered')
+    // Failed ghosts are not matched/removed by the materialization effect
+    expect(onAppeared).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('dismiss-failed-message'))
+    expect(onAppeared).toHaveBeenCalledWith('l1')
+  })
+
+  it('drops the sender own user_message echo from peer state immediately', () => {
+    mockCurrentUser = { id: 'me', name: 'Me', email: 'me@test.com' }
+    mockMessagesData.data = []
+    Object.assign(mockStreamState, {
+      typingUser: { id: 'other-user', name: 'Alice Baker' },
+      peerUserMessages: [
+        { uuid: 'own-echo', receivedAt: Date.now(), content: 'my own message', sender: { id: 'me', name: 'Me' } },
+      ],
+    })
+
+    renderWithProviders(<MessageList sessionId="s-1" agentSlug="agent-1" />)
+
+    // Own echo is pruned from stream state without waiting for a persisted match
+    expect(mockRemovePeerUserMessage).toHaveBeenCalledWith('s-1', 'own-echo')
+    // And it must not suppress other peers' typing indicator
+    expect(screen.getByText('...')).toBeInTheDocument()
   })
 
   // ---- isStreamingMessagePersisted edge cases ----
@@ -726,7 +808,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'pm-1', text: 'Follow up', sentAt: Date.now() }]}
+        pendingUserMessages={[{ localId: 'pm-1', uuid: 'pm-1', text: 'Follow up', sentAt: Date.now() }]}
       />
     )
 
@@ -761,7 +843,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'pm-1', text: 'Follow up', sentAt: Date.now() }]}
+        pendingUserMessages={[{ localId: 'pm-1', uuid: 'pm-1', text: 'Follow up', sentAt: Date.now() }]}
       />
     )
 
@@ -838,7 +920,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'pm-1', text: 'New message', sentAt: Date.now() }]}
+        pendingUserMessages={[{ localId: 'pm-1', uuid: 'pm-1', text: 'New message', sentAt: Date.now() }]}
       />
     )
 
@@ -915,7 +997,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'pm-1', text: 'Waiting...', sentAt: Date.now() }]}
+        pendingUserMessages={[{ localId: 'pm-1', uuid: 'pm-1', text: 'Waiting...', sentAt: Date.now() }]}
       />
     )
     // Should show pending message, not spinner
@@ -1018,7 +1100,7 @@ describe('MessageList', () => {
       <MessageList
         sessionId="s-1"
         agentSlug="agent-1"
-        pendingUserMessages={[{ uuid: 'pm-1', text: 'Now do X', sentAt: Date.now() }]}
+        pendingUserMessages={[{ localId: 'pm-1', uuid: 'pm-1', text: 'Now do X', sentAt: Date.now() }]}
       />
     )
 
@@ -1196,7 +1278,7 @@ describe('MessageList', () => {
       mockCurrentUser = { id: 'me', name: 'Me', email: 'me@test.com' }
       mockMessagesData.data = []
       Object.assign(mockStreamState, {
-        peerUserMessages: [{ uuid: 'peer-1', content: 'Hello from peer', sender: { id: 'other-user', name: 'Alice Baker' } }],
+        peerUserMessages: [{ uuid: 'peer-1', receivedAt: Date.now(), content: 'Hello from peer', sender: { id: 'other-user', name: 'Alice Baker' } }],
       })
 
       renderWithProviders(
@@ -1211,7 +1293,7 @@ describe('MessageList', () => {
       mockMessagesData.data = []
       Object.assign(mockStreamState, {
         peerUserMessages: [
-          { uuid: 'peer-1', content: 'Queued peer message', sender: { id: 'other-user', name: 'Alice' }, queued: true },
+          { uuid: 'peer-1', receivedAt: Date.now(), content: 'Queued peer message', sender: { id: 'other-user', name: 'Alice' }, queued: true },
         ],
       })
 
@@ -1227,7 +1309,7 @@ describe('MessageList', () => {
       mockCurrentUser = { id: 'me', name: 'Me', email: 'me@test.com' }
       mockMessagesData.data = []
       Object.assign(mockStreamState, {
-        peerUserMessages: [{ uuid: 'peer-own', content: 'My own message', sender: { id: 'me', name: 'Me' } }],
+        peerUserMessages: [{ uuid: 'peer-own', receivedAt: Date.now(), content: 'My own message', sender: { id: 'me', name: 'Me' } }],
       })
 
       renderWithProviders(
@@ -1243,7 +1325,7 @@ describe('MessageList', () => {
         createUserMessage({ id: 'peer-1', content: { text: 'Hello from peer' } }),
       ]
       Object.assign(mockStreamState, {
-        peerUserMessages: [{ uuid: 'peer-1', content: 'Hello from peer', sender: { id: 'other-user', name: 'Alice' } }],
+        peerUserMessages: [{ uuid: 'peer-1', receivedAt: Date.now(), content: 'Hello from peer', sender: { id: 'other-user', name: 'Alice' } }],
       })
 
       renderWithProviders(
@@ -1391,7 +1473,7 @@ describe('MessageList', () => {
       mockMessagesData.data = []
       Object.assign(mockStreamState, {
         typingUser: { id: 'other-user', name: 'Alice Baker' },
-        peerUserMessages: [{ uuid: 'peer-1', content: 'Done typing', sender: { id: 'other-user', name: 'Alice Baker' } }],
+        peerUserMessages: [{ uuid: 'peer-1', receivedAt: Date.now(), content: 'Done typing', sender: { id: 'other-user', name: 'Alice Baker' } }],
       })
 
       renderWithProviders(

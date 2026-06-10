@@ -6,6 +6,7 @@ import { apiFetch } from '@renderer/lib/api'
 import { ProviderErrorCard } from '@renderer/components/ui/provider-error-card'
 import { InsufficientBalanceCard, usePlatformBillingUrl } from './insufficient-balance-card'
 import { PROVIDER_ERROR_CODES } from '@shared/lib/types/api'
+import { isTurnStartingUserMessage } from './pending-message'
 import { cn } from '@shared/lib/utils'
 import { AlertTriangle, Monitor, X } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
@@ -64,11 +65,13 @@ export function AgentActivityIndicator({ sessionId, agentSlug }: AgentActivityIn
 
   // Use activeStartTime from SSE (set when session_active fires) as primary source.
   // Falls back to last persisted user message timestamp (for page refresh recovery).
+  // Queued (mid-turn) messages don't start a turn — skipping them keeps the
+  // elapsed timer anchored to the turn-starting prompt after a refresh.
   const timerStartTime = useMemo(() => {
     if (activeStartTime) return new Date(activeStartTime)
     if (!messages) return null
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].type === 'user') {
+      if (isTurnStartingUserMessage(messages[i])) {
         return new Date(messages[i].createdAt)
       }
     }

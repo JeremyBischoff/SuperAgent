@@ -414,7 +414,7 @@ describe('usePendingRequests', () => {
     const { result } = renderHook(() =>
       usePendingRequests({
         ...defaultArgs,
-        pendingUserMessages: [{ uuid: 'pm-1', text: 'New input', sentAt: Date.now() }],
+        pendingUserMessages: [{ localId: 'pm-1', uuid: 'pm-1', text: 'New input', sentAt: Date.now() }],
       }),
     )
 

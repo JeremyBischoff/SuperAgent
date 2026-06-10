@@ -9,7 +9,7 @@ import { useEffect } from 'react'
 
 // Mock hooks
 const mockSendMessage = {
-  mutateAsync: vi.fn().mockResolvedValue({}),
+  mutateAsync: vi.fn().mockResolvedValue({ success: true, uuid: 'server-uuid-1', queued: false }),
   isPending: false,
 }
 const mockUploadFile = { mutateAsync: vi.fn().mockResolvedValue({ path: '/tmp/file' }) }
@@ -122,12 +122,13 @@ describe('MessageInput', () => {
     expect(screen.getByTestId('send-button')).toBeInTheDocument()
   })
 
-  it('queues a message sent while the agent is active (uuid, queued=true, no model/effort)', async () => {
+  it('queues a message sent while the agent is active (localId, queued=true, no model/effort)', async () => {
     mockStreamState.isActive = true
     const user = userEvent.setup()
     const onMessageSent = vi.fn()
+    const onMessageUuidAssigned = vi.fn()
     renderWithProviders(
-      <MessageInput sessionId="s-1" agentSlug="agent-1" onMessageSent={onMessageSent} />
+      <MessageInput sessionId="s-1" agentSlug="agent-1" onMessageSent={onMessageSent} onMessageUuidAssigned={onMessageUuidAssigned} />
     )
 
     const input = screen.getByTestId('message-input')
@@ -142,16 +143,19 @@ describe('MessageInput', () => {
         sessionId: 's-1',
         agentSlug: 'agent-1',
         content: 'Follow up',
-        uuid: expect.any(String),
       })
     })
     // Mid-turn sends must not carry runtime options — a model/effort change
-    // would interrupt the in-flight query.
+    // would interrupt the in-flight query. The uuid is server-assigned, so
+    // the payload never includes one.
     const call = mockSendMessage.mutateAsync.mock.calls[0][0]
     expect(call).not.toHaveProperty('effort')
     expect(call).not.toHaveProperty('model')
-    // The uuid handed to onMessageSent is the one sent to the server
-    expect(onMessageSent.mock.calls[0][1]).toBe(call.uuid)
+    expect(call).not.toHaveProperty('uuid')
+    // The server-assigned uuid from the response is attached to the same localId
+    await waitFor(() => {
+      expect(onMessageUuidAssigned).toHaveBeenCalledWith(onMessageSent.mock.calls[0][1], 'server-uuid-1')
+    })
   })
 
   it('reports failure so the optimistic copy can be dropped', async () => {

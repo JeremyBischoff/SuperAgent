@@ -173,16 +173,14 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
     onSubmit: useCallback(async (content: string) => {
       const shouldRename =
         agent.name === UNTITLED_AGENT_NAME && sessions.length === 0 && !nameAssignedRef.current
-      // Client-generated uuid travels into the session JSONL so the optimistic
-      // pending copy is materialized by exact id match.
-      const messageUuid = crypto.randomUUID()
       const session = await createSession.mutateAsync({
         agentSlug: agent.slug,
         message: content,
-        messageUuid,
         ...composerOptions.toRuntimeOptions(),
       })
-      onSessionCreated(session.id, content, messageUuid)
+      // The server assigns the initial message's uuid and returns it; the
+      // optimistic pending copy is materialized by exact id match.
+      onSessionCreated(session.id, content, session.initialMessageUuid)
       // Fire rename after the session is created + navigated — the mutation
       // survives AgentHome unmounting since the queryClient is app-scoped.
       if (shouldRename) {

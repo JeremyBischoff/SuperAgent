@@ -43,19 +43,20 @@ export function useMessages(sessionId: string | null, agentSlug: string | null) 
 
 export function useSendMessage() {
   return useMutation({
-    mutationFn: async (data: { sessionId: string; agentSlug: string; content: string; uuid?: string; effort?: EffortLevel; model?: string }) => {
+    mutationFn: async (data: { sessionId: string; agentSlug: string; content: string; effort?: EffortLevel; model?: string }) => {
       const res = await apiFetch(`/api/agents/${data.agentSlug}/sessions/${data.sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: data.content,
-          ...(data.uuid ? { uuid: data.uuid } : {}),
           ...(data.effort ? { effort: data.effort } : {}),
           ...(data.model ? { model: data.model } : {}),
         }),
       })
       if (!res.ok) throw new Error('Failed to send message')
-      return res.json()
+      // uuid is the server-assigned message id, used to materialize the
+      // optimistic pending copy by exact id match.
+      return res.json() as Promise<{ success: boolean; uuid: string; queued: boolean }>
     },
     // No onSuccess - we'll handle the pending message via props
   })

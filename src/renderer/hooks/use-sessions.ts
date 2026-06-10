@@ -37,19 +37,20 @@ export function useCreateSession() {
   const { track } = useAnalyticsTracking()
 
   return useMutation({
-    mutationFn: async (data: { agentSlug: string; message: string; messageUuid?: string; effort?: EffortLevel; model?: string }) => {
+    mutationFn: async (data: { agentSlug: string; message: string; effort?: EffortLevel; model?: string }) => {
       const res = await apiFetch(`/api/agents/${data.agentSlug}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: data.message,
-          ...(data.messageUuid ? { messageUuid: data.messageUuid } : {}),
           ...(data.effort ? { effort: data.effort } : {}),
           ...(data.model ? { model: data.model } : {}),
         }),
       })
       if (!res.ok) throw new Error('Failed to create session')
-      return res.json() as Promise<ApiSession>
+      // initialMessageUuid is the server-assigned id of the initial message,
+      // used to materialize the optimistic pending copy by exact id match.
+      return res.json() as Promise<ApiSession & { initialMessageUuid: string }>
     },
     onSuccess: (_, variables) => {
       track('session_created')

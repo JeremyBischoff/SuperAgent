@@ -12,7 +12,7 @@ import {
 } from '@renderer/hooks/use-message-stream'
 import { useMessages } from '@renderer/hooks/use-messages'
 import { usePendingProxyReviews, type PendingReview } from '@renderer/hooks/use-proxy-reviews'
-import type { PendingMessage } from './pending-message'
+import { isTurnStartingUserMessage, type PendingMessage } from './pending-message'
 
 interface UsePendingRequestsArgs {
   sessionId: string
@@ -50,8 +50,8 @@ export function usePendingRequests({
   pendingUserMessages,
 }: UsePendingRequestsArgs): UsePendingRequestsResult {
   // Only turn-starting sends mean the user "moved past" a request; queued
-  // (mid-turn) messages leave the agent blocked on the request.
-  const hasPendingUserMessage = !!pendingUserMessages?.some((p) => !p.queued)
+  // (mid-turn) and undelivered messages leave the agent blocked on it.
+  const hasPendingUserMessage = !!pendingUserMessages?.some((p) => !p.queued && !p.failed)
   const { data: messages } = useMessages(sessionId, agentSlug)
   const {
     isActive,
@@ -90,8 +90,7 @@ export function usePendingRequests({
       // Queued (mid-turn) messages don't count — the agent hasn't moved past
       // the request; it stays blocked until the request is answered.
       const hasSubsequentUserMessage =
-        hasPendingUserMessage ||
-        messages.slice(i + 1).some((m) => m.type === 'user' && !(m as { queued?: boolean }).queued)
+        hasPendingUserMessage || messages.slice(i + 1).some(isTurnStartingUserMessage)
       if (hasSubsequentUserMessage) continue
 
       for (const toolCall of message.toolCalls) {

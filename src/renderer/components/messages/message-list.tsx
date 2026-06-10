@@ -9,7 +9,7 @@ import {
   removePeerUserMessage,
   clearPeerUserMessages,
 } from '@renderer/hooks/use-message-stream'
-import type { PendingMessage } from './pending-message'
+import { isTurnStartingUserMessage, type PendingMessage } from './pending-message'
 import { MessageItem } from './message-item'
 import { ToolCallItem, StreamingToolCallItem } from './tool-call-item'
 import { SubAgentBlock } from './subagent-block'
@@ -55,10 +55,13 @@ interface MessageListProps {
   agentSlug: string
   pendingUserMessages?: PendingMessage[]
   pendingRequestCount?: number
-  onPendingMessageAppeared?: (uuid: string) => void
+  /** The pending message materialized (or was dismissed) — remove it. */
+  onPendingMessageAppeared?: (localId: string) => void
+  /** The session went idle without the message materializing — mark it undelivered. */
+  onPendingMessageDropped?: (localId: string) => void
 }
 
-export function MessageList({ sessionId, agentSlug, pendingUserMessages, pendingRequestCount = 0, onPendingMessageAppeared }: MessageListProps) {
+export function MessageList({ sessionId, agentSlug, pendingUserMessages, pendingRequestCount = 0, onPendingMessageAppeared, onPendingMessageDropped }: MessageListProps) {
   useRenderTracker('MessageList')
   const { data: messages, isLoading, error } = useMessages(sessionId, agentSlug)
   const deleteMessage = useDeleteMessage()
@@ -124,66 +127,84 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
   const hasPendingMessages = !!pendingUserMessages?.length
   // Pending messages sent from idle start a NEW turn, so the previous turn is
   // over (close elapsed times, no more running tools). Queued ghosts (sent
-  // mid-turn) don't end the current turn and must not flip turn-derived state.
-  const hasTurnStartingPendingMessage = !!pendingUserMessages?.some((p) => !p.queued)
+  // mid-turn) don't end the current turn, and undelivered ghosts never start
+  // one — neither may flip turn-derived state.
+  const hasTurnStartingPendingMessage = !!pendingUserMessages?.some((p) => !p.queued && !p.failed)
 
-  // Persisted message ids already used to materialize a ghost. Prevents one
-  // persisted copy from clearing two ghosts with identical text when the
-  // fallback text match is used. Reset on session switch (keyed remount).
+  // Persisted message ids already consumed by a text-fallback match. Prevents
+  // one persisted copy from clearing two ghosts with identical text. Exact
+  // uuid matches don't need claiming (ids are 1:1). Reset on session switch
+  // (keyed remount).
   const claimedMessageIdsRef = useRef(new Set<string>())
 
-  // Materialize optimistic copies. Primary signal: a pending message's uuid
-  // travels with it into the session JSONL, so a fetched message carrying that
-  // id is OUR copy. Fallback: messages sent mid-turn (queued/steering) lose
-  // the client uuid — the CLI re-ids them on enqueue (see
-  // normalizeQueuedCommandEntry in session-service) — so match those by
-  // trimmed text + time window, claiming each persisted id at most once.
+  // Materialize optimistic copies. Primary signal: the server-assigned uuid
+  // (from the POST response) becomes the JSONL entry id, so a fetched message
+  // carrying that id is OUR copy — exact match. Fallback: messages sent
+  // mid-turn (queued/steering) are re-id'd by the CLI on enqueue (see
+  // normalizeQueuedCommandEntry in session-service), so those — and sends
+  // whose POST response hasn't arrived yet — match by trimmed text + arrival
+  // window, claiming each persisted id at most once.
   useEffect(() => {
     if (!messages) return
     const claimed = claimedMessageIdsRef.current
-    for (const pending of pendingUserMessages ?? []) {
-      const match = messages.find(
+    const findTextMatch = (text: string, notBefore: number) => {
+      const trimmed = text.trim()
+      return messages.find(
         (m) =>
           m.type === 'user' &&
           !claimed.has(m.id) &&
-          (m.id === pending.uuid ||
-            ((m.content as { text?: string }).text?.trim() === pending.text.trim() &&
-              new Date(m.createdAt).getTime() >= pending.sentAt - 5000))
+          (m.content as { text?: string }).text?.trim() === trimmed &&
+          new Date(m.createdAt).getTime() >= notBefore
       )
+    }
+    for (const pending of pendingUserMessages ?? []) {
+      if (pending.failed) continue
+      let match = pending.uuid ? messages.find((m) => m.id === pending.uuid) : undefined
+      // Text fallback only where the uuid can't work: queued messages (CLI
+      // re-ids them) and sends still awaiting their POST response.
+      if (!match && (pending.queued || !pending.uuid)) {
+        match = findTextMatch(pending.text, pending.sentAt - 5000)
+        if (match) claimed.add(match.id)
+      }
       if (match) {
-        claimed.add(match.id)
-        onPendingMessageAppeared?.(pending.uuid)
+        onPendingMessageAppeared?.(pending.localId)
       }
     }
     for (const peer of peerUserMessages) {
-      const match = messages.find(
-        (m) =>
-          m.type === 'user' &&
-          !claimed.has(m.id) &&
-          (m.id === peer.uuid ||
-            (m.content as { text?: string }).text?.trim() === peer.content.trim())
-      )
+      // The server echoes user_message to the sender too; our own echo is
+      // redundant with the local pending copy — drop it immediately so it
+      // can't linger in stream state (it would suppress the typing indicator).
+      if (peer.sender.id === user?.id) {
+        removePeerUserMessage(sessionId, peer.uuid)
+        continue
+      }
+      let match = messages.find((m) => m.id === peer.uuid)
+      if (!match && peer.queued) {
+        match = findTextMatch(peer.content, peer.receivedAt - 5000)
+        if (match) claimed.add(match.id)
+      }
       if (match) {
-        claimed.add(match.id)
         removePeerUserMessage(sessionId, peer.uuid)
       }
     }
-  }, [messages, pendingUserMessages, peerUserMessages, onPendingMessageAppeared, sessionId])
+  }, [messages, pendingUserMessages, peerUserMessages, onPendingMessageAppeared, sessionId, user?.id])
 
   // Safety net: once the session is idle, every accepted message has been
   // persisted — anything still pending after a grace period was lost (e.g.
-  // the agent was interrupted before picking up a queued message), so drop it.
-  // While the agent is active, queued ghosts may legitimately wait minutes.
+  // the agent was interrupted before picking up a queued message). Mark local
+  // ghosts as undelivered (visible feedback, dismissed by the user) and drop
+  // peer ghosts. While the agent is active, queued ghosts may wait minutes.
   useEffect(() => {
-    if (isActive || (!pendingUserMessages?.length && peerUserMessages.length === 0)) return
+    const undelivered = pendingUserMessages?.filter((p) => !p.failed) ?? []
+    if (isActive || (undelivered.length === 0 && peerUserMessages.length === 0)) return
     const timerId = setTimeout(() => {
-      for (const pending of pendingUserMessages ?? []) {
-        onPendingMessageAppeared?.(pending.uuid)
+      for (const pending of undelivered) {
+        onPendingMessageDropped?.(pending.localId)
       }
       clearPeerUserMessages(sessionId)
     }, 10000)
     return () => clearTimeout(timerId)
-  }, [pendingUserMessages, peerUserMessages, isActive, onPendingMessageAppeared, sessionId])
+  }, [pendingUserMessages, peerUserMessages, isActive, onPendingMessageDropped, sessionId])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const isScrolledToBottomRef = useRef(true)
@@ -345,7 +366,7 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
 
     for (const msg of messages) {
       // Queued (mid-turn) user messages don't end the turn they appear in
-      if (msg.type === 'user' && !(msg as ApiMessage).queued) {
+      if (isTurnStartingUserMessage(msg)) {
         // Close previous turn
         if (lastUserMessageTime && lastAssistantMessageId && lastAssistantMessageTime) {
           elapsed.set(lastAssistantMessageId, lastAssistantMessageTime - lastUserMessageTime)
@@ -377,7 +398,7 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     let lastAssistantMessageId: string | null = null
 
     for (const msg of messages) {
-      if (msg.type === 'user' && !(msg as ApiMessage).queued) {
+      if (isTurnStartingUserMessage(msg)) {
         if (lastAssistantMessageId && turnFiles.length > 0) {
           filesMap.set(lastAssistantMessageId, turnFiles)
         }
@@ -418,7 +439,7 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     // shouldn't defer the previous turn's elapsed/files.
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].type === 'assistant') return messages[i].id
-      if (messages[i].type === 'user' && !(messages[i] as ApiMessage).queued) return null
+      if (isTurnStartingUserMessage(messages[i])) return null
     }
     return null
   }, [messages, hasTurnStartingPendingMessage, streamingMessage, isStreamingMessagePersisted, unpersistedStreamingToolUses])
@@ -433,7 +454,7 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     // Walk backwards - only assistant messages after the last turn-starting user
     // message can have running tools (queued mid-turn messages don't end the turn)
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].type === 'user' && !(messages[i] as ApiMessage).queued) break
+      if (isTurnStartingUserMessage(messages[i])) break
       if (messages[i].type === 'assistant') {
         result.add(messages[i].id)
       }
@@ -441,16 +462,23 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     return result
   }, [messages, isActive, hasTurnStartingPendingMessage])
 
-  // Re-pin to bottom when the user sends a new message (count grew — removal
-  // of a materialized ghost shouldn't yank a scrolled-up reader back down)
-  const prevPendingCountRef = useRef(0)
+  // Re-pin to bottom when the user sends a new message. Track ids actually
+  // seen — not a count — so a send racing a ghost removal still re-pins, and
+  // a removal alone never yanks a scrolled-up reader back down.
+  const seenPendingIdsRef = useRef(new Set<string>())
   useEffect(() => {
-    const count = pendingUserMessages?.length ?? 0
-    if (count > prevPendingCountRef.current) {
+    const seen = seenPendingIdsRef.current
+    let hasNewSend = false
+    for (const pending of pendingUserMessages ?? []) {
+      if (!seen.has(pending.localId)) {
+        seen.add(pending.localId)
+        hasNewSend = true
+      }
+    }
+    if (hasNewSend) {
       isScrolledToBottomRef.current = true
       setShowScrollToBottom(false)
     }
-    prevPendingCountRef.current = count
   }, [pendingUserMessages])
 
   // Auto-scroll to bottom when new messages arrive or requests appear,
@@ -462,62 +490,88 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
   }, [messages, pendingUserMessages, streamingMessage, streamingToolUses, isCompacting, pendingRequestCount, activeSubagents])
 
   // Peer messages still worth showing optimistically: not our own, and the
-  // persisted copy (by uuid, or text for queued/steering messages whose uuid
-  // the CLI replaces) hasn't been fetched yet.
-  const visiblePeerMessages = peerUserMessages.filter(
-    (p) =>
-      p.sender.id !== user?.id &&
-      !messages?.some(
-        (m) =>
-          m.type === 'user' &&
-          (m.id === p.uuid || (m.content as { text?: string }).text?.trim() === p.content.trim())
-      )
+  // persisted copy (by uuid, or — for queued/steering messages whose uuid the
+  // CLI replaces — recent identical text) hasn't been fetched yet.
+  const visiblePeerMessages = useMemo(
+    () =>
+      peerUserMessages.filter(
+        (p) =>
+          p.sender.id !== user?.id &&
+          !messages?.some(
+            (m) =>
+              m.type === 'user' &&
+              (m.id === p.uuid ||
+                (p.queued &&
+                  (m.content as { text?: string }).text?.trim() === p.content.trim() &&
+                  new Date(m.createdAt).getTime() >= p.receivedAt - 5000))
+          )
+      ),
+    [peerUserMessages, messages, user?.id]
   )
 
-  const renderPeerGhost = (peer: (typeof peerUserMessages)[number]) => (
-    <MessageErrorBoundary key={peer.uuid} kind="message" raw={peer} itemId={`peer-${peer.uuid}`}>
-      <div className={peer.queued ? 'opacity-60' : undefined}>
+  // Single render path for both local pending ghosts and peer ghosts.
+  const renderGhost = (ghost: {
+    key: string
+    text: string
+    sentAt: number
+    queued?: boolean
+    failed?: boolean
+    sender?: { id: string; name: string; email: string }
+    testId?: string
+  }) => (
+    <MessageErrorBoundary key={ghost.key} kind="message" raw={ghost} itemId={`ghost-${ghost.key}`}>
+      <div className={ghost.queued && !ghost.failed ? 'opacity-60' : undefined} data-testid={ghost.testId}>
         <MessageItem
           message={{
-            id: peer.uuid,
+            id: ghost.key,
             type: 'user',
-            content: { text: peer.content },
+            content: { text: ghost.text },
             toolCalls: [],
-            createdAt: new Date(),
-            ...(peer.sender.name ? { sender: { id: peer.sender.id, name: peer.sender.name, email: peer.sender.email || '' } } : {}),
+            createdAt: new Date(ghost.sentAt),
+            sender: ghost.sender,
           }}
           agentSlug={agentSlug}
         />
-        {peer.queued && (
+        {ghost.failed ? (
+          <div className="flex items-center justify-end gap-2 mt-1 text-xs text-destructive">
+            <span>Not delivered — the agent stopped before reading this</span>
+            <button
+              type="button"
+              className="underline hover:no-underline"
+              onClick={() => onPendingMessageAppeared?.(ghost.key)}
+              data-testid="dismiss-failed-message"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : ghost.queued ? (
           <div className="flex justify-end mt-1 text-xs text-muted-foreground italic">Queued</div>
-        )}
+        ) : null}
       </div>
     </MessageErrorBoundary>
   )
 
-  const renderPendingGhost = (pending: PendingMessage) => (
-    <MessageErrorBoundary key={pending.uuid} kind="message" raw={pending} itemId={`pending-${pending.uuid}`}>
-      <div
-        className={pending.queued ? 'opacity-60' : undefined}
-        data-testid={pending.queued ? 'queued-user-message' : 'pending-user-message'}
-      >
-        <MessageItem
-          message={{
-            id: pending.uuid,
-            type: 'user',
-            content: { text: pending.text },
-            toolCalls: [],
-            createdAt: new Date(pending.sentAt),
-            sender: pending.sender,
-          }}
-          agentSlug={agentSlug}
-        />
-        {pending.queued && (
-          <div className="flex justify-end mt-1 text-xs text-muted-foreground italic">Queued</div>
-        )}
-      </div>
-    </MessageErrorBoundary>
-  )
+  const renderPendingGhost = (pending: PendingMessage) =>
+    renderGhost({
+      key: pending.localId,
+      text: pending.text,
+      sentAt: pending.sentAt,
+      queued: pending.queued,
+      failed: pending.failed,
+      sender: pending.sender,
+      testId: pending.failed ? 'failed-user-message' : pending.queued ? 'queued-user-message' : 'pending-user-message',
+    })
+
+  const renderPeerGhost = (peer: (typeof peerUserMessages)[number]) =>
+    renderGhost({
+      key: peer.uuid,
+      text: peer.content,
+      sentAt: peer.receivedAt,
+      queued: peer.queued,
+      sender: peer.sender.name
+        ? { id: peer.sender.id, name: peer.sender.name, email: peer.sender.email || '' }
+        : undefined,
+    })
 
   if (isLoading && !hasPendingMessages) {
     return (
@@ -593,8 +647,9 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
         {visiblePeerMessages.filter((p) => !p.queued).map(renderPeerGhost)}
         {pendingUserMessages?.filter((p) => !p.queued).map(renderPendingGhost)}
 
-        {/* Typing indicator - shown when another user is typing */}
-        {typingUser && peerUserMessages.length === 0 && (
+        {/* Typing indicator - shown when another user is typing (gated on the
+            sender-filtered peer list — our own echo must not suppress it) */}
+        {typingUser && visiblePeerMessages.length === 0 && (
           <div className="flex gap-3 flex-row-reverse">
             <div className="h-8 w-8 rounded-full items-center justify-center shrink-0 hidden md:flex bg-primary text-primary-foreground">
               <span className="text-xs font-medium">

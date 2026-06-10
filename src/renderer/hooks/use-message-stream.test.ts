@@ -2032,7 +2032,7 @@ describe('useMessageStream', () => {
       })
 
       expect(result.current.peerUserMessages).toEqual([
-        { uuid: 'peer-uuid-1', content: 'Hello from Alice', sender: { id: 'u2', name: 'Alice' }, queued: true },
+        { uuid: 'peer-uuid-1', content: 'Hello from Alice', sender: { id: 'u2', name: 'Alice' }, queued: true, receivedAt: expect.any(Number) },
       ])
     })
 

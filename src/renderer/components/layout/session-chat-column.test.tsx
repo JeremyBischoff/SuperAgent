@@ -53,7 +53,9 @@ const baseProps = {
   isViewOnly: false,
   contextPercent: null,
   onPendingMessageAppeared: () => {},
+  onPendingMessageDropped: () => {},
   onMessageSent: () => {},
+  onMessageUuidAssigned: () => {},
   onMessageFailed: () => {},
 }
 

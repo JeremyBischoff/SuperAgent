@@ -1277,13 +1277,10 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
     const agentLimits = getEffectiveAgentLimits()
     const customEnvVars = getCustomEnvVars()
 
-    // Client-supplied uuid for the initial message (optimistic-UI ghost
-    // matching); in auth mode it doubles as the author-attribution id.
-    const clientMessageUuid = z.string().uuid().safeParse(body.messageUuid)
-    let initialMessageUuid: string | undefined = clientMessageUuid.success ? clientMessageUuid.data : undefined
-    if (isAuthMode()) {
-      initialMessageUuid = initialMessageUuid ?? randomUUID()
-    }
+    // Server-generated uuid for the initial message (never client-supplied —
+    // it keys the messageAuthor attribution row). Returned in the response so
+    // the client can materialize its optimistic copy by exact id match.
+    const initialMessageUuid = randomUUID()
 
     const sessionModel = runtimeOptions.model ?? getEffectiveModels().agentModel
 
@@ -1304,14 +1301,14 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
     const sessionId = containerSession.id
 
     // Record author for initial message after we know the sessionId
-    if (isAuthMode() && initialMessageUuid) {
+    if (isAuthMode()) {
       const userId = getCurrentUserId(c)
       await db.insert(messageAuthor).values({
         id: initialMessageUuid,
         sessionId,
         agentSlug: slug,
         userId,
-      }).onConflictDoNothing()
+      })
     }
 
     await registerSession(slug, sessionId, 'New Session')
@@ -1350,6 +1347,7 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
         lastActivityAt: new Date(),
         messageCount: 0,
         isActive: true,
+        initialMessageUuid,
       },
       201
     )
@@ -1542,23 +1540,32 @@ agents.post('/:id/sessions/:sessionId/messages', AgentUser(), async (c) => {
 
     messagePersister.markSessionActive(sessionId, agentSlug)
 
-    // Client-supplied message uuid (optimistic-UI ghost matching). The uuid is
-    // forwarded to the container, becomes the JSONL entry id, and so lets the
-    // client materialize its pending copy by exact id match.
-    const clientUuid = z.string().uuid().safeParse(body.uuid)
-    let messageUuid: string | undefined = clientUuid.success ? clientUuid.data : undefined
+    // A mid-turn send must not carry model/effort: the container treats a
+    // parameter change as interrupt/restart of the in-flight query. The
+    // composer strips these client-side, but its view of "active" comes from
+    // SSE and can be stale (reconnect, second window, shared-session peer) —
+    // the server's check is authoritative.
+    if (wasQueued) {
+      delete runtimeOptions.effort
+      delete runtimeOptions.model
+    }
+
+    // Server-generated message uuid (never client-supplied — the uuid keys the
+    // messageAuthor attribution row, so a client-chosen value could collide
+    // with another user's message and misattribute it). It is forwarded to the
+    // container, becomes the JSONL entry id, and is returned in the response
+    // so the client can materialize its optimistic copy by exact id match.
+    const messageUuid = randomUUID()
 
     // In auth mode, record the sender for message attribution
     if (isAuthMode()) {
       const userId = getCurrentUserId(c)
-      messageUuid = messageUuid ?? randomUUID()
-      // onConflictDoNothing: a client retry of a failed send may resend the same uuid
       await db.insert(messageAuthor).values({
         id: messageUuid,
         sessionId,
         agentSlug,
         userId,
-      }).onConflictDoNothing()
+      })
     }
 
     // Broadcast user message to other SSE viewers (auth mode shared agents)
@@ -1581,7 +1588,7 @@ agents.post('/:id/sessions/:sessionId/messages', AgentUser(), async (c) => {
       updateSessionMetadata(agentSlug, sessionId, updates).catch(console.error)
     }
 
-    return c.json({ success: true }, 201)
+    return c.json({ success: true, uuid: messageUuid, queued: wasQueued }, 201)
   } catch (error) {
     console.error('Failed to send message:', error)
     return c.json({ error: 'Failed to send message' }, 500)

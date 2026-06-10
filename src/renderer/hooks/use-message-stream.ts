@@ -93,6 +93,8 @@ export interface PeerUserMessage {
   sender: { id: string; name?: string; email?: string }
   /** Sent while the agent was mid-turn — rendered as a queued ghost. */
   queued?: boolean
+  /** Local arrival time — bounds the text-fallback match so an old identical-text message can't claim this ghost. */
+  receivedAt: number
 }
 
 interface StreamState {
@@ -666,7 +668,7 @@ function getOrCreateEventSource(
             ...current,
             peerUserMessages: existing.some((p) => p.uuid === data.uuid)
               ? existing
-              : [...existing, { uuid: data.uuid, content: data.content, sender: data.sender, queued: data.queued }],
+              : [...existing, { uuid: data.uuid, content: data.content, sender: data.sender, queued: data.queued, receivedAt: Date.now() }],
             typingUser: null, // Clear typing since they sent
           })
         }

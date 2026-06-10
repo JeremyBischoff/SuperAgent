@@ -182,7 +182,9 @@ function parseSessionInfo(
   entries: JsonlEntry[],
   metadata?: SessionMetadata
 ): SessionInfo {
-  const messages = entries.filter(isMessageEntry)
+  // Normalize queued_command attachments so mid-turn messages count toward
+  // naming, messageCount, and activity timestamps like any other user message.
+  const messages = entries.map(normalizeQueuedCommandEntry).filter(isMessageEntry)
 
   // Get timestamps
   let createdAt = new Date()
@@ -586,11 +588,15 @@ export async function removeMessage(
 
   const entries = await readJsonlFile<JsonlEntry>(jsonlPath)
 
-  // Find the target entry by uuid
-  const target = entries.find(
-    (e): e is JsonlMessageEntry =>
-      'uuid' in e && e.uuid === messageUuid
-  )
+  // Find the target entry by id. Regular messages match by top-level uuid;
+  // queued (mid-turn) messages surface in the UI with id = the queued_command
+  // attachment's source_uuid (see normalizeQueuedCommandEntry), so match the
+  // underlying attachment entry as well.
+  const matchesTargetId = (e: JsonlEntry): boolean =>
+    ('uuid' in e && e.uuid === messageUuid) ||
+    (e.type === 'attachment' && (e as JsonlAttachmentEntry).attachment?.source_uuid === messageUuid)
+
+  const target = entries.find(matchesTargetId)
   if (!target) return false
 
   // Collect message IDs and tool_use IDs to remove
@@ -620,11 +626,10 @@ export async function removeMessage(
 
   // Filter entries
   const filtered = entries.filter((entry) => {
+    // Remove the target entry (user message or queued_command attachment)
+    if (matchesTargetId(entry)) return false
     if (!('uuid' in entry)) return true // keep non-message entries
     const e = entry as JsonlMessageEntry
-
-    // Remove the target entry (user message) or all entries with same message.id (assistant)
-    if (e.uuid === messageUuid) return false
     if (e.type === 'assistant' && e.message.id && messageIdsToRemove.has(e.message.id)) return false
 
     // Remove tool_result user entries referencing removed tool calls
