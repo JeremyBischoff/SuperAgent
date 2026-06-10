@@ -1,25 +1,24 @@
 {
   "storyId": "agent-chat",
   "passed": true,
-  "reason": "Verified agent chat functionality - agent responded correctly to math question with accurate answer",
+  "reason": "Successfully sent a math question to the QA agent and received the correct answer within 3 minutes",
   "steps": [
-    "Navigated to http://localhost:47891 — Page loaded successfully with title \"Super Agent\"",
-    "Found agent \"QA-20260610-213605-3j2f\" in sidebar with status \"idle\" — Agent was visible and clickable in the \"Your Agents\" section",
-    "Clicked on the agent \"QA-20260610-213605-3j2f\" — Agent page loaded, showing the agent home with message input field and idle status indicator",
-    "Verified agent status is \"running\" or \"idle\" — Status indicator showed \"idle\" which is acceptable per test requirements",
-    "Sent message \"Hello! What is 2+2?\" — Message was successfully typed into the message input field and sent using the Send button",
-    "Waited up to 3 minutes for response — Activity indicator disappeared after 2 seconds, indicating agent completed processing",
-    "Verified response mentions \"4\" and took screenshot — Agent responded with exactly \"4\", which correctly answers the math question 2+2=4. Screenshot saved as page-2026-06-10T21-36-59-237Z.png showing the conversation with the correct response"
+    "Step 1: Navigated to http://localhost:47891 — page loaded successfully with sidebar visible showing agents and two agents listed (QA-20260610-222806-fysz and QA-20260610-222804-j8yo)",
+    "Step 2: Clicked on agent \"QA-20260610-222804-j8yo\" in sidebar — agent detail page loaded with message input field and configuration options visible",
+    "Step 3: Verified agent status is \"idle\" — agent status indicator displays \"idle\" status which is acceptable for sending messages",
+    "Step 4: Typed message \"Hello! What is 2+2?\" into the message input — message text visible in textbox with send button enabled, then clicked send button to submit",
+    "Step 5: Waited for agent response — agent status changed to \"working\", activity indicator showed progress, and response was received within seconds showing \"4\" as the last message",
+    "Step 6: Verified response mentions \"4\" and took screenshot — screenshot confirms the chat displays user message \"Hello! What is 2+2?\" and agent response \"4\", with elapsed time \"Worked for 4s\" and agent status returned to \"idle\""
   ],
   "bugs": [],
-  "durationMs": 62064,
-  "sessionId": "8067816b-249d-4938-a3cb-7e9957f33e02",
+  "durationMs": 61883,
+  "sessionId": "7298bf39-0b12-4dd0-b3f5-e15bc8220777",
   "cost": {
-    "inputTokens": 336,
-    "outputTokens": 9457,
-    "cacheCreationTokens": 104249,
-    "cacheReadTokens": 943366,
+    "inputTokens": 261,
+    "outputTokens": 10555,
+    "cacheCreationTokens": 105451,
+    "cacheReadTokens": 725370,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.272269
+    "totalCostUsd": 0.257387
   }
 }
