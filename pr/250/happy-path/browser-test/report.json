@@ -1,0 +1,25 @@
+{
+  "storyId": "browser-test",
+  "passed": true,
+  "reason": "Browser-use feature test: Agent successfully navigated to https://example.com and returned the correct page title \"Example Domain\" via browser tools (ToolSearch, Open Browser, Browser Get State)",
+  "steps": [
+    "Navigated to http://localhost:47891 — Application loaded successfully with SuperAgent interface showing two agents in sidebar",
+    "Found and clicked \"QA-20260611-230839-y53j\" agent in sidebar — Agent chat interface opened, showing message input field and agent settings panels (Triggers, Connections, Skills, etc.)",
+    "Typed message \"Open a browser and go to https://example.com. Tell me the page title.\" into input field — Message successfully entered in the textbox",
+    "Clicked \"Send message\" button — Message sent successfully; agent status changed to \"working\" and task \"Browser Navigation and Page Title Retrieval\" appeared in sidebar with \"working\" indicator",
+    "Waited for agent response (up to 3 minutes) — Agent completed response in approximately 20 seconds, well within time limit",
+    "Verified response mentions \"Example Domain\" — ✓ VERIFIED: Response explicitly states \"The page title is \"Example Domain\".\" and confirms \"The page at https://example.com loaded successfully. The page title is \"Example Domain\".\"",
+    "Reviewed tool execution — All browser tools executed successfully with completion checkmarks:"
+  ],
+  "bugs": [],
+  "durationMs": 77453,
+  "sessionId": "503568e4-da2f-4a79-b21e-7059cfc75861",
+  "cost": {
+    "inputTokens": 369,
+    "outputTokens": 12977,
+    "cacheCreationTokens": 77019,
+    "cacheReadTokens": 1190528,
+    "model": "claude-haiku-4-5-20251001",
+    "totalCostUsd": 0.280581
+  }
+}
