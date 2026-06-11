@@ -814,6 +814,7 @@ export class BackgroundBashScenario implements MockScenario {
 
     // Tool result with backgroundTaskId
     setTimeout(() => {
+      client.registerBackgroundTask(sessionId, bgTaskId)
       client.emitStreamMessage(sessionId, {
         type: 'user',
         content: {
@@ -902,6 +903,7 @@ export class BackgroundBashScenario implements MockScenario {
     // background-bash-busy-completion replay fixture.
     const notificationDelay = firstResultDelay + this.delayMs
     setTimeout(() => {
+      client.completeBackgroundTask(sessionId, bgTaskId)
       client.emitStreamMessage(sessionId, {
         type: 'system',
         content: {
@@ -1112,10 +1114,14 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
         },
       },
     ])],
+    // Script type must be valid for the host platform (VALID_SCRIPT_TYPES in
+    // settings.ts) or the persister auto-rejects before the card ever pends.
     ['ask script', new UserInputRequestScenario([
       {
         name: 'mcp__user-input__request_script_run',
-        input: { script: 'sw_vers', explanation: 'Check macOS version', scriptType: 'shell' },
+        input: process.platform === 'win32'
+          ? { script: 'Get-ComputerInfo', explanation: 'Check OS version', scriptType: 'powershell' }
+          : { script: 'sw_vers', explanation: 'Check OS version', scriptType: 'shell' },
       },
     ])],
     ['use computer', new UserInputRequestScenario([
@@ -1307,6 +1313,9 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
   // 'result' event). Messages sent while busy take the queued/steering path,
   // mirroring the real CLI.
   private busySessions = new Set<string>()
+  // Background tasks the mock runtime considers still running, per session.
+  // Mirrors the real CLI: 'idle' is withheld while any of these exist.
+  private runningBackgroundTaskIds = new Map<string, Set<string>>()
 
   // Pending steering injections by message uuid, so queued messages can be
   // cancelled before pickup (mirrors the CLI's cancel_async_message).
@@ -1407,6 +1416,40 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       callbacks.forEach((cb) => cb(message))
       this.emit('message', sessionId, content)
     }
+    // Mirror the real CLI's session_state_changed lifecycle: 'idle' is the
+    // authoritative settled signal and is withheld while queued (steering)
+    // messages are still awaiting pickup or background tasks are still
+    // running — their completion emits it instead.
+    if (content.type === 'result') {
+      const timers = this.queuedSteeringTimers.get(sessionId)
+      const bgTasks = this.runningBackgroundTaskIds.get(sessionId)
+      if ((!timers || timers.size === 0) && (!bgTasks || bgTasks.size === 0)) {
+        this.emitSessionState(sessionId, 'idle')
+      }
+    }
+  }
+
+  /**
+   * Track a running background task — the real runtime stays non-idle while
+   * background work runs, so the result hook withholds 'idle' until the
+   * scenario marks the task complete.
+   */
+  registerBackgroundTask(sessionId: string, taskId: string): void {
+    const tasks = this.runningBackgroundTaskIds.get(sessionId) ?? new Set()
+    tasks.add(taskId)
+    this.runningBackgroundTaskIds.set(sessionId, tasks)
+  }
+
+  completeBackgroundTask(sessionId: string, taskId: string): void {
+    this.runningBackgroundTaskIds.get(sessionId)?.delete(taskId)
+  }
+
+  /** Emit a session_state_changed system event (mirrors CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS). */
+  emitSessionState(sessionId: string, stateValue: 'idle' | 'running'): void {
+    this.emitStreamMessage(sessionId, {
+      type: 'system',
+      content: { type: 'system', subtype: 'session_state_changed', state: stateValue },
+    })
   }
 
   // Volume flag builder (no-op in mock — mounts are not simulated)
@@ -1640,6 +1683,7 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
 
         // Execute the scenario (session is busy until the scenario's 'result')
         this.busySessions.add(sessionId)
+        this.emitSessionState(sessionId, 'running')
         scenario.execute(sessionId, this, options.initialMessage!)
       }, 100)  // Brief delay to ensure subscription is set up
     }
@@ -1718,9 +1762,21 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     // message triggers the refetch that materializes the ghost. Until pickup
     // the injection is cancellable by uuid (cancel_async_message semantics).
     if (this.busySessions.has(sessionId)) {
+      // Content keyword lets tests pick the long pickup window: with the slow
+      // scenario's 5s turn, a 5500ms delay deterministically lands pickup
+      // AFTER the turn's result (late-window settle path) no matter when the
+      // message was queued during the turn.
+      const steeringDelayMs = content.includes('pickup after turn') ? 5500 : 1200
       const steeringUuid = uuid ?? randomUUID()
       const timer = setTimeout(() => {
         this.queuedSteeringTimers.get(sessionId)?.delete(steeringUuid)
+        // The drain signal: the real CLI emits status 'requesting' when it
+        // picks queued messages up — the persister clears its pending-queued
+        // set and broadcasts a refetch on it.
+        this.emitStreamMessage(sessionId, {
+          type: 'system',
+          content: { type: 'system', subtype: 'status', status: 'requesting' },
+        })
         this.writeJsonlEntry(sessionId, {
           type: 'attachment',
           timestamp: new Date().toISOString(),
@@ -1741,7 +1797,13 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
           type: 'assistant',
           content: { type: 'assistant', message: { content: ackContent } },
         })
-      }, 1200)
+        // If the turn's result already fired (queued late in the window), this
+        // pickup is the real end of the session's work — settle it now.
+        const remaining = this.queuedSteeringTimers.get(sessionId)
+        if (!this.busySessions.has(sessionId) && (!remaining || remaining.size === 0)) {
+          this.emitSessionState(sessionId, 'idle')
+        }
+      }, steeringDelayMs)
       const timers = this.queuedSteeringTimers.get(sessionId) ?? new Map()
       timers.set(steeringUuid, timer)
       this.queuedSteeringTimers.set(sessionId, timers)
@@ -1780,6 +1842,7 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
 
     // Execute the scenario (session is busy until the scenario's 'result')
     this.busySessions.add(sessionId)
+    this.emitSessionState(sessionId, 'running')
     scenario.execute(sessionId, this, content)
   }
 
@@ -1824,6 +1887,17 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     callbacks.add(callback)
 
     console.log(`[MockContainerClient] Subscribed to stream for session ${sessionId}`)
+
+    // Mirror the real container's WS hello: announce the stream contract
+    // before any relayed message so the persister treats state events as the
+    // idle authority from the first turn (the mock emits them — see
+    // emitSessionState).
+    callback({
+      type: 'system',
+      content: { type: 'system', subtype: 'capabilities', session_state_events: true },
+      timestamp: new Date(),
+      sessionId,
+    })
 
     const unsubscribe = () => {
       callbacks?.delete(callback)

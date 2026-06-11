@@ -1469,6 +1469,20 @@ async function handleWebSocketConnection(ws: WebSocket, sessionId: string) {
     return;
   }
 
+  // Announce the stream contract before relaying any SDK message (WS is FIFO,
+  // and this is sent before the subscription below, so it always precedes the
+  // first relayed message). session_state_events: this build runs the CLI with
+  // CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS, so the host can treat
+  // session_state_changed:'idle' as the idle authority from the first turn —
+  // a 'result' alone must not end the session while queued messages keep the
+  // runtime going.
+  ws.send(JSON.stringify({
+    type: 'system',
+    subtype: 'capabilities',
+    session_state_events: true,
+    timestamp: new Date(),
+  }));
+
   // Subscribe to session events (SDK messages)
   const unsubscribe = sessionManager.subscribe(sessionId, (message) => {
     if (ws.readyState === WebSocket.OPEN) {

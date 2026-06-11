@@ -69,6 +69,10 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
   const cancelQueuedMessage = useCancelQueuedMessage()
   // Ghosts with a cancel request in flight (disables their Cancel button)
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set())
+  // Ghosts whose cancel came back cancelled:false — the agent already picked
+  // the message up, so cancelling is no longer possible; the ghost will
+  // materialize on the next refetch.
+  const [pickedUpIds, setPickedUpIds] = useState<Set<string>>(new Set())
   const { user } = useUser()
   const [, setSessionDraft] = useDraft<string>(`session:${sessionId}`)
 
@@ -160,8 +164,10 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
           new Date(m.createdAt).getTime() >= notBefore
       )
     }
+    // Failed (undelivered-marked) ghosts still participate: if a false idle
+    // marked a message undelivered but the agent delivered it after all, the
+    // arriving persisted copy clears the ghost instead of contradicting it.
     for (const pending of pendingUserMessages ?? []) {
-      if (pending.failed) continue
       let match = pending.uuid ? messages.find((m) => m.id === pending.uuid) : undefined
       // Text fallback only where the uuid can't work: queued messages (CLI
       // re-ids them) and sends still awaiting their POST response.
@@ -513,7 +519,8 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
   )
 
   // Cancel a queued message before the agent picks it up. cancelled: false
-  // means we lost the race to pickup — leave the ghost to materialize.
+  // means we lost the race — the agent already has the message, so flip the
+  // ghost to a picked-up state (no Cancel) until it materializes.
   const handleCancelQueued = useCallback(
     (localId: string, uuid: string) => {
       setCancellingIds((prev) => new Set(prev).add(localId))
@@ -521,7 +528,11 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
         { sessionId, agentSlug, uuid },
         {
           onSuccess: ({ cancelled }) => {
-            if (cancelled) onPendingMessageAppeared?.(localId)
+            if (cancelled) {
+              onPendingMessageAppeared?.(localId)
+            } else {
+              setPickedUpIds((prev) => new Set(prev).add(localId))
+            }
           },
           onSettled: () => {
             setCancellingIds((prev) => {
@@ -548,6 +559,8 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     /** Set for own queued ghosts once the server uuid is known — enables Cancel. */
     onCancel?: () => void
     cancelling?: boolean
+    /** A cancel attempt confirmed the agent already has this message. */
+    pickedUp?: boolean
   }) => (
     <MessageErrorBoundary key={ghost.key} kind="message" raw={ghost} itemId={`ghost-${ghost.key}`}>
       <div className={ghost.queued && !ghost.failed ? 'opacity-60' : undefined} data-testid={ghost.testId}>
@@ -576,8 +589,8 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
           </div>
         ) : ghost.queued ? (
           <div className="flex items-center justify-end gap-2 mt-1 text-xs text-muted-foreground italic">
-            <span>Queued</span>
-            {ghost.onCancel && (
+            <span>{ghost.pickedUp ? 'Picked up by the agent' : 'Queued'}</span>
+            {!ghost.pickedUp && ghost.onCancel && (
               <>
                 <span aria-hidden>·</span>
                 <button
@@ -612,6 +625,7 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
         ? {
             onCancel: () => handleCancelQueued(pending.localId, pending.uuid!),
             cancelling: cancellingIds.has(pending.localId),
+            pickedUp: pickedUpIds.has(pending.localId),
           }
         : {}),
     })

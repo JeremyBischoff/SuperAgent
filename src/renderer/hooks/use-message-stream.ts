@@ -692,6 +692,17 @@ function getOrCreateEventSource(
       else if (data.type === 'messages_updated') {
         queryClient.invalidateQueries({ queryKey: ['messages', sessionId] })
       }
+      else if (data.type === 'turn_output_complete') {
+        // A turn's output finished (the session may or may not settle — e.g.
+        // queued messages or background work can keep it active). Reconcile
+        // the streamed text against the transcript exactly like at idle —
+        // otherwise a follow-up turn's stream_start clears the streaming
+        // bubble before the persisted copy is fetched and the final message
+        // disappears briefly. The reconcile helper is idempotent, so the
+        // session_idle handler's own reconcile coexists harmlessly.
+        queryClient.invalidateQueries({ queryKey: ['messages', sessionId] })
+        void reconcileMessagesAfterIdle(sessionId, queryClient, current?.streamingMessage ?? null)
+      }
       else if (data.type === 'tool_call' || data.type === 'tool_result') {
         // Message has been persisted - keep streamingMessage visible until refetch completes
         if (current) {

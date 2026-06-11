@@ -100,6 +100,86 @@ test.describe('Message queueing while agent is working', () => {
     ).toHaveCount(0)
   })
 
+  test('cancel after pickup flips the ghost to "Picked up by the agent" and the message still lands', async ({ page }) => {
+    await sessionPage.sendMessage('please work slowly for the pickup race')
+    await expect(sessionPage.getStopButton()).toBeVisible({ timeout: 10000 })
+
+    // Hold transcript GETs so the picked-up ghost cannot materialize while we
+    // stage the lost race. Send (POST) and cancel (DELETE …/queued-messages/:uuid)
+    // use other method/URL shapes and pass through.
+    let holdTranscript = true
+    await page.route('**/sessions/*/messages', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue()
+      while (holdTranscript) await new Promise((r) => setTimeout(r, 100))
+      await route.continue()
+    })
+
+    await sessionPage.typeMessage('cancel me too late')
+    await sessionPage.getSendButton().click()
+
+    const ghost = page.locator('[data-testid="queued-user-message"]')
+    await expect(ghost).toBeVisible({ timeout: 5000 })
+    const cancelBtn = page.locator('[data-testid="cancel-queued-message"]')
+    await expect(cancelBtn).toBeVisible({ timeout: 3000 })
+
+    // Let the mock's 1200ms pickup window elapse — the agent now has the message.
+    await page.waitForTimeout(2000)
+
+    // Cancel loses the race (cancelled: false): the ghost flips to the
+    // picked-up state and its Cancel affordance disappears.
+    await cancelBtn.click()
+    await expect(ghost).toContainText('Picked up by the agent', { timeout: 5000 })
+    await expect(page.locator('[data-testid="cancel-queued-message"]')).toHaveCount(0)
+
+    // Release the transcript — the picked-up ghost materializes as a real
+    // message and the steering ack confirms the agent used it.
+    holdTranscript = false
+    await expect(ghost).not.toBeAttached({ timeout: 15000 })
+    await sessionPage.waitForUserMessageCount(2, 15000)
+    await sessionPage.expectUserMessage('cancel me too late', 1)
+    await expect(
+      sessionPage.getAssistantMessages().filter({ hasText: 'Adjusting based on: cancel me too late' })
+    ).toBeVisible({ timeout: 15000 })
+  })
+
+  test('a message queued near turn end keeps the session working until pickup, then settles', async ({ page }) => {
+    await sessionPage.sendMessage('please work slowly until the end')
+    await expect(sessionPage.getStopButton()).toBeVisible({ timeout: 10000 })
+
+    // The 'pickup after turn' keyword makes the mock use a pickup delay longer
+    // than the slow scenario's 5s turn, so pickup deterministically lands after
+    // the turn's result. The runtime withholds idle across the gap — the
+    // session must stay working until the queued message is picked up.
+    await sessionPage.typeMessage('late instruction pickup after turn')
+    await sessionPage.getSendButton().click()
+    const ghost = page.locator('[data-testid="queued-user-message"]')
+    await expect(ghost).toBeVisible({ timeout: 3000 })
+
+    // The turn's output completes and renders while the session is still
+    // working (turn_output_complete reconcile)...
+    await expect(
+      sessionPage.getAssistantMessages().filter({ hasText: 'Finished the slow work.' })
+    ).toBeVisible({ timeout: 10000 })
+    // ...and the queued message is still awaiting pickup, so the session has
+    // not settled.
+    await expect(ghost).toBeVisible()
+    await expect(sessionPage.getStopButton()).toBeVisible()
+
+    // Pickup: ghost materializes, the ack arrives, and only then does the
+    // session settle.
+    await expect(ghost).not.toBeAttached({ timeout: 15000 })
+    await sessionPage.waitForUserMessageCount(2, 15000)
+    await expect(
+      sessionPage.getAssistantMessages().filter({ hasText: 'Adjusting based on: late instruction pickup after turn' })
+    ).toBeVisible({ timeout: 15000 })
+    // The completed turn's output survived the follow-up pickup turn — no
+    // blink/loss from the stream-vs-transcript race.
+    await expect(
+      sessionPage.getAssistantMessages().filter({ hasText: 'Finished the slow work.' })
+    ).toBeVisible()
+    await sessionPage.waitForInputEnabled(15000)
+  })
+
   test('multiple queued messages drain in send order', async ({ page }) => {
     await sessionPage.sendMessage('please work slowly again')
     await expect(sessionPage.getStopButton()).toBeVisible({ timeout: 10000 })
