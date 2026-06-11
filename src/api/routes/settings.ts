@@ -158,7 +158,7 @@ function buildSettingsResponse(
     voice: getVoiceSettings(),
     tenantId: getTenantId(),
     computerUse: appSettings.computerUse,
-    shareAnalytics: !!appSettings.shareAnalytics,
+    shareAnalytics: appSettings.shareAnalytics !== false,
     analyticsTargets: appSettings.analyticsTargets,
     shareErrorReports: appSettings.shareErrorReports !== false,
     enableToolSearch: appSettings.enableToolSearch !== false,

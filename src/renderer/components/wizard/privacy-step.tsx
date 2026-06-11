@@ -9,20 +9,13 @@ export function PrivacyStep() {
   const [shareAnalytics, setShareAnalytics] = useState(true)
   const initializedRef = useRef(false)
 
-  // Initialize from current settings on first load (defaults to true for fresh installs).
-  // Persist the resolved defaults immediately so skipping past this step still records
-  // the opt-out values shown in the UI — elsewhere an unset value is treated as false.
+  // Initialize from current settings on first load. The API resolves unset values
+  // to true (default-on), so fresh installs arrive here with both already true.
   useEffect(() => {
     if (!settings || initializedRef.current) return
     initializedRef.current = true
-    const errorReports = settings.shareErrorReports ?? true
-    const analytics = settings.shareAnalytics ?? true
-    setShareErrorReports(errorReports)
-    setShareAnalytics(analytics)
-    if (settings.shareErrorReports === undefined || settings.shareAnalytics === undefined) {
-      updateSettings.mutate({ shareErrorReports: errorReports, shareAnalytics: analytics })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setShareErrorReports(settings.shareErrorReports ?? true)
+    setShareAnalytics(settings.shareAnalytics ?? true)
   }, [settings])
 
   const handleErrorReportsChange = (checked: boolean) => {
