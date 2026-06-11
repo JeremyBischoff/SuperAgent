@@ -1681,9 +1681,14 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
           }
         }
 
-        // Execute the scenario (session is busy until the scenario's 'result')
+        // Execute the scenario (session is busy until the scenario's 'result').
+        // Deliberately do NOT emit a 'running' state event here: a CLI run starts
+        // already in 'running' and only PUBLISHES transitions, so the session's
+        // very first turn emits nothing until its final idle. Emitting 'running'
+        // here would let the host discover state-event support by observation —
+        // masking a regression of the capabilities handshake that the host
+        // actually relies on (the exact failure that already shipped once).
         this.busySessions.add(sessionId)
-        this.emitSessionState(sessionId, 'running')
         scenario.execute(sessionId, this, options.initialMessage!)
       }, 100)  // Brief delay to ensure subscription is set up
     }
@@ -1840,7 +1845,10 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       }
     }
 
-    // Execute the scenario (session is busy until the scenario's 'result')
+    // Execute the scenario (session is busy until the scenario's 'result').
+    // Unlike the first turn (createSession), this is a real idle -> running
+    // transition (a message waking a settled session), which the CLI does
+    // publish — so emitting 'running' here mirrors the runtime.
     this.busySessions.add(sessionId)
     this.emitSessionState(sessionId, 'running')
     scenario.execute(sessionId, this, content)

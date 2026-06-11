@@ -154,7 +154,7 @@ describe('MessageInput', () => {
     expect(call).not.toHaveProperty('uuid')
     // The server-assigned uuid from the response is attached to the same localId
     await waitFor(() => {
-      expect(onMessageUuidAssigned).toHaveBeenCalledWith(onMessageSent.mock.calls[0][1], 'server-uuid-1')
+      expect(onMessageUuidAssigned).toHaveBeenCalledWith(onMessageSent.mock.calls[0][1], 'server-uuid-1', false)
     })
   })
 

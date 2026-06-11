@@ -23,7 +23,7 @@ interface MessageInputProps {
   /** Called right before the POST so the caller can show the optimistic copy. `queued` is true when the agent is mid-turn. */
   onMessageSent?: (content: string, localId: string, queued: boolean) => void
   /** Called when the POST response arrives with the server-assigned message uuid. */
-  onMessageUuidAssigned?: (localId: string, uuid: string) => void
+  onMessageUuidAssigned?: (localId: string, uuid: string, queued: boolean) => void
   /** Called when the POST fails, so the caller can drop the optimistic copy. */
   onMessageFailed?: (localId: string) => void
   /** Effort level last used on this session; seeds the composer selector. Defaults to 'high' when absent. */
@@ -78,7 +78,12 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
           content,
           ...(queued ? {} : composerOptions.toRuntimeOptions()),
         })
-        onMessageUuidAssigned?.(localId, result.uuid)
+        // Reconcile against the server's authoritative decision: our local
+        // `queued` guess is derived from SSE state that can be stale (reconnect,
+        // a peer's turn, background-task flag), and a mismatch otherwise strands
+        // the ghost — a server-queued message is re-id'd by the CLI, so it never
+        // matches our uuid and never materializes.
+        onMessageUuidAssigned?.(localId, result.uuid, result.queued)
       } catch (error) {
         onMessageFailed?.(localId)
         throw error

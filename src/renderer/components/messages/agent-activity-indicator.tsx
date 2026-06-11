@@ -91,7 +91,13 @@ export function AgentActivityIndicator({ sessionId, agentSlug }: AgentActivityIn
         if ((tc.name === 'Agent' || tc.name === 'Task') && activeMap.has(tc.id)) {
           if (tc.isError) continue
           const input = tc.input as { subagent_type?: string; description?: string }
-          const isCompleted = completedSubagents?.has(tc.id) || tc.result != null
+          // A background agent returns an immediate "async_launched" tool result
+          // — that's the launch ack, NOT completion. It only finishes when the
+          // sidechain result fires the subagent_completed SSE (completedSubagents).
+          // Foreground agents complete when their tool result lands. (Mirrors
+          // subagent-block.tsx so the activity block and the thread block agree.)
+          const isAsyncLaunched = tc.subagent?.status === 'async_launched'
+          const isCompleted = (completedSubagents?.has(tc.id) ?? false) || (!isAsyncLaunched && tc.result != null)
           const sub = activeMap.get(tc.id)
           items.push({
             id: tc.id,

@@ -20,7 +20,7 @@ interface SessionChatColumnProps {
   model?: string
   onPendingMessageAppeared: (localId: string) => void
   onMessageSent: (content: string, localId: string, queued: boolean) => void
-  onMessageUuidAssigned: (localId: string, uuid: string) => void
+  onMessageUuidAssigned: (localId: string, uuid: string, queued: boolean) => void
   onMessageFailed: (localId: string) => void
 }
 

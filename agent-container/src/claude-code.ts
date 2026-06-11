@@ -703,7 +703,15 @@ export class ClaudeCodeProcess extends EventEmitter {
     if (!this.queryInstance) return;
 
     this.isProcessing = true;
-    let receivedResult = false;
+    // Tracks whether the MOST RECENT result was an error. The catch below emits
+    // a synthetic error result only when the SDK hasn't already reported this
+    // failure — but a SUCCESS result must NOT suppress it. In streaming-input
+    // mode this query lives across many turns, so if the process dies after a
+    // success (e.g. while a queued message keeps it running) there would be no
+    // result for that work and the host, which waits for the authoritative idle,
+    // would stay "working" forever. Keying on the last result's error-ness (not
+    // "any result seen") also resets per turn: a success clears it.
+    let lastResultWasError = false;
 
     try {
       for await (const message of this.queryInstance) {
@@ -735,13 +743,14 @@ export class ClaudeCodeProcess extends EventEmitter {
 
         // Check for result message to know when processing is complete
         if (message.type === 'result') {
-          receivedResult = true;
-          // Enrich error results that have no useful error message
           const msg = message as any;
-          if ((msg.subtype === 'error_during_execution' || msg.subtype === 'error') && !msg.error && !msg.message) {
-            if (this.claudeSessionId) {
-              msg.error = 'This session could not be resumed (it may have been corrupted by a previous crash). Please start a new session.';
-            }
+          lastResultWasError =
+            msg.subtype === 'error_during_execution' ||
+            msg.subtype === 'error' ||
+            msg.is_error === true;
+          // Enrich error results that have no useful error message
+          if (lastResultWasError && !msg.error && !msg.message && this.claudeSessionId) {
+            msg.error = 'This session could not be resumed (it may have been corrupted by a previous crash). Please start a new session.';
           }
           console.log(`[Session ${this.sessionId}] Query completed`);
         }
@@ -760,9 +769,12 @@ export class ClaudeCodeProcess extends EventEmitter {
         console.log(`[Session ${this.sessionId}] Query aborted`);
       } else {
         console.error(`[Session ${this.sessionId}] Query error:`, error);
-        // Only emit synthetic result if the SDK didn't already send a real one
-        // (e.g., SDK sends result error_during_execution then throws — don't overwrite)
-        if (!receivedResult) {
+        // Only emit a synthetic result if the SDK hasn't already reported this
+        // failure with an error result (e.g. it sends error_during_execution
+        // then throws — don't double-report). A prior SUCCESS does not count:
+        // a crash after a successful turn still needs to surface so the host
+        // stops waiting.
+        if (!lastResultWasError) {
           // Provide a user-friendly error message for known failure modes
           const errorMsg = error.message || '';
           let userError: string;

@@ -145,13 +145,16 @@ export function MainContent() {
     }
   }, [sessionId, isAuthMode, user])
 
-  // The POST response carries the server-assigned message uuid — attach it to
-  // the optimistic entry so it can be materialized by exact id match.
-  const handleMessageUuidAssigned = useCallback((localId: string, uuid: string) => {
+  // The POST response carries the server-assigned message uuid and its
+  // authoritative queued decision — attach both to the optimistic entry. The
+  // uuid materializes a non-queued copy by exact id match; correcting `queued`
+  // (our send-time guess can be wrong) keeps the ghost's label/placement honest
+  // and enables the text-fallback match that a server-queued message needs.
+  const handleMessageUuidAssigned = useCallback((localId: string, uuid: string, queued: boolean) => {
     if (sessionId) {
       const existing = pendingMessagesRef.current.get(sessionId)
       if (!existing?.some((m) => m.localId === localId)) return
-      pendingMessagesRef.current.set(sessionId, existing.map((m) => (m.localId === localId ? { ...m, uuid } : m)))
+      pendingMessagesRef.current.set(sessionId, existing.map((m) => (m.localId === localId ? { ...m, uuid, queued } : m)))
       forceUpdate((n) => n + 1)
     }
   }, [sessionId])

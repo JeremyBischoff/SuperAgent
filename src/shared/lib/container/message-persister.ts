@@ -562,6 +562,10 @@ class MessagePersister {
     state.isInterrupted = false // Reset interrupted flag on new message
     state.isAwaitingInput = false // Reset awaiting input on new message
     state.lastApiErrorCode = null // Clear previous API error on new message
+    // Clear the previous turn's result subtype so a late idle from an
+    // already-finished (or interrupted) run can't fire a stale "success"
+    // completion notification against the turn this message is starting.
+    state.lastResultSubtype = null
     if (agentSlug) {
       state.agentSlug = agentSlug
     }
@@ -764,10 +768,23 @@ class MessagePersister {
                   }
                 }
 
-                // Background agents get an immediate "async_launched" tool_result that is NOT
-                // the real completion — their actual completion comes via sidechain 'result'.
-                if (!sub.isBackground) {
-                  // Extract result text to include in the completion broadcast
+                // A background (run_in_background) Agent returns an immediate
+                // "async_launched" ack as its tool_result; its REAL completion
+                // arrives later as task_updated/task_notification (handled in the
+                // system switch), never a second tool_result or a sidechain
+                // 'result'. Detect the ack authoritatively from tool_use_result
+                // here and mark the subagent background — the streamed
+                // run_in_background input is unreliable (interleaved content
+                // blocks + the complete assistant message can clear currentToolUse
+                // before it's parsed, leaving isBackground=false). Marking it here
+                // both prevents the ack from completing the subagent and lets the
+                // later task event complete it.
+                const tur = content.tool_use_result as { status?: string; isAsync?: boolean } | undefined
+                const isAsyncLaunchAck = tur?.status === 'async_launched' || tur?.isAsync === true
+                if (isAsyncLaunchAck) {
+                  sub.isBackground = true
+                } else {
+                  // Foreground subagent: the tool_result IS the completion.
                   let resultText: string | undefined
                   if (typeof block.content === 'string') {
                     resultText = block.content
@@ -929,14 +946,47 @@ class MessagePersister {
           // See the background-bash-busy-completion replay fixture.
           const taskId = content.task_id as string | undefined
           const status = (content.patch as { status?: string } | undefined)?.status
-          if (
-            taskId &&
-            (status === 'completed' || status === 'failed' || status === 'killed') &&
-            state.activeBackgroundTasks.has(taskId)
-          ) {
+          const isTerminal = status === 'completed' || status === 'failed' || status === 'killed'
+          if (taskId && isTerminal && state.activeBackgroundTasks.has(taskId)) {
             state.activeBackgroundTasks.delete(taskId)
             this.broadcastToSSE(sessionId, { type: 'background_task_completed', taskId })
             this.broadcastGlobal({ type: 'background_task_completed', sessionId, agentSlug: state.agentSlug, taskId })
+          }
+          // A background *subagent* (task_type 'local_agent') settles via a
+          // task_updated whose task_id equals the subagent's agentId. The busy
+          // path can deliver this without a matching task_notification, so finish
+          // the subagent here too. Scoped to isBackground: foreground subagents
+          // complete via their tool_result (see the 'user' case) and also emit
+          // these task events — acting on them here would fire an early
+          // completion with an unresolved (null) agentId. Idempotent:
+          // broadcastSubagentCompleted removes it, so a trailing task_notification
+          // no-ops.
+          if (taskId && isTerminal) {
+            for (const [parentToolId, sub] of state.activeSubagents) {
+              if (sub.isBackground && sub.agentId === taskId) {
+                this.broadcastSubagentCompleted(sessionId, state, parentToolId)
+                break
+              }
+            }
+          }
+        } else if (content.subtype === 'task_notification') {
+          // A background *subagent* reports completion via task_notification
+          // carrying the launching Agent tool's id (background Bash tasks settle
+          // through the activeBackgroundTasks path near the top of handleMessage).
+          // Without this, broadcastSubagentCompleted never fires for a background
+          // subagent — its tool_result stays the 'async_launched' ack and no
+          // sidechain 'result' arrives — so the UI shows it running until the
+          // whole turn ends. Scoped to isBackground for the same reason as the
+          // task_updated branch above (foreground subagents finish via tool_result).
+          const toolUseId = content.tool_use_id as string | undefined
+          const status = content.status as string | undefined
+          const sub = toolUseId ? state.activeSubagents.get(toolUseId) : undefined
+          if (
+            sub?.isBackground &&
+            (status === 'completed' || status === 'failed' || status === 'killed')
+          ) {
+            const summary = typeof content.summary === 'string' ? content.summary : undefined
+            this.broadcastSubagentCompleted(sessionId, state, toolUseId!, summary)
           }
         } else if (content.subtype === 'capabilities') {
           // The container announces its stream contract when the WebSocket
@@ -960,15 +1010,21 @@ class MessagePersister {
           // covers builds that emit state events but predate that handshake.)
           state.stateEventsAuthority = true
           if (content.state === 'idle') {
-            // Any background tasks still tracked here are phantoms — the
-            // runtime distinguishes "done" from "paused waiting for background
-            // work", so a per-task terminal signal was missed. Clear them.
-            for (const taskId of [...state.activeBackgroundTasks.keys()]) {
-              state.activeBackgroundTasks.delete(taskId)
-              this.broadcastToSSE(sessionId, { type: 'background_task_completed', taskId })
-              this.broadcastGlobal({ type: 'background_task_completed', sessionId, agentSlug: state.agentSlug, taskId })
-            }
-            if (state.isActive) {
+            // Only treat idle as authoritative when a result was actually seen
+            // for this turn (lastResultSubtype is cleared on every new send).
+            // A bare idle with no preceding result — a stale idle from a prior
+            // or interrupted run racing a fresh message, or an event before any
+            // turn output — must not finalize, or it fires a spurious
+            // session_idle (and a bogus completion notification).
+            if (state.isActive && state.lastResultSubtype !== null) {
+              // Any background tasks still tracked here are phantoms — the
+              // runtime distinguishes "done" from "paused waiting for background
+              // work", so a per-task terminal signal was missed. Clear them.
+              for (const taskId of [...state.activeBackgroundTasks.keys()]) {
+                state.activeBackgroundTasks.delete(taskId)
+                this.broadcastToSSE(sessionId, { type: 'background_task_completed', taskId })
+                this.broadcastGlobal({ type: 'background_task_completed', sessionId, agentSlug: state.agentSlug, taskId })
+              }
               this.finalizeIdle(sessionId, state)
               // Completion notification at the real end of the work. Skip
               // resume-exits: the session is pausing for a resume, not done.
