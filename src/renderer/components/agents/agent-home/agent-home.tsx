@@ -547,9 +547,9 @@ export function AgentHome({ agent, onSessionCreated, onOpenSettings }: AgentHome
                 }
               }, 0)
             }} />
-            <HomeChatIntegrations agentSlug={agent.slug} />
-            <HomeVolumes className="intro-step intro-step-7" agentSlug={agent.slug} />
-            <HomeExtras className="intro-step intro-step-8" agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
+            <HomeChatIntegrations className="intro-step intro-step-7" agentSlug={agent.slug} />
+            <HomeVolumes className="intro-step intro-step-8" agentSlug={agent.slug} />
+            <HomeExtras className="intro-step intro-step-9" agentSlug={agent.slug} onOpenSettings={onOpenSettings} />
           </div>
         )}
       </div>
