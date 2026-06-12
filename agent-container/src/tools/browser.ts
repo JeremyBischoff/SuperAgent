@@ -434,7 +434,9 @@ const browserRunTool = tool(
   'browser_run',
   `Run any agent-browser CLI command. Use this for advanced browser operations not covered by the dedicated tools.
 
-Pass the command string WITHOUT the "agent-browser" prefix.
+Provide EXACTLY ONE of (never include the "agent-browser" prefix):
+- args (PREFERRED whenever any argument contains spaces or quotes): pre-tokenized argv array. Each element reaches the CLI verbatim — no quoting or escaping rules to get wrong. Examples: {"args": ["type", "@e1", "chat isn't enough"]} · {"args": ["frame", "iframe[title=\\"Payment frame\\"]"]} · {"args": ["find", "role", "button", "click", "--name", "View demo"]}
+- command: a single command-line string, fine for simple commands like {"command": "get url"}. Shell-style quoting; when in doubt, use args.
 
 Available commands:
 - dblclick <ref> — Double-click element
@@ -460,10 +462,14 @@ Available commands:
 - console / errors — Debug info
 - wait <selector|ms|--text|--url|--load|--fn> — Wait for conditions`,
   {
-    command: z.string().describe('The agent-browser command to run (without "agent-browser" prefix)'),
+    command: z.string().optional().describe('Command string for simple commands, e.g. "get url". Provide either this or args, not both.'),
+    args: z.array(z.string()).optional().describe('Pre-tokenized argv — preferred when any argument contains spaces or quotes, e.g. ["fill", "@e1", "hello world"]. Provide either this or command, not both.'),
   },
   async (args) => {
-    const result = await browserFetch('run', { command: args.command })
+    if ((args.command === undefined) === (args.args === undefined)) {
+      return errorResult('Provide exactly one of "command" (string) or "args" (array of strings).')
+    }
+    const result = await browserFetch('run', { command: args.command, args: args.args })
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown>
     let text = data.output ? String(data.output) : 'Command executed.'

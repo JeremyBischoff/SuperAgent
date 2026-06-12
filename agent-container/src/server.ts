@@ -598,7 +598,7 @@ function validateBrowserSessionWithRecovery(requestSessionId: string): string | 
 
 const execFileAsync = promisify(execFile);
 
-import { buildRunCommandArgs, splitCommandArgs } from './browser-command-args';
+import { resolveRunCommandArgs } from './browser-command-args';
 
 // Ensure Chrome download preferences are set in the browser profile directory.
 // Merges with existing preferences to avoid overwriting other settings.
@@ -1341,11 +1341,17 @@ app.post('/browser/upload', async (c) => {
 // POST /browser/run - Generic catch-all for any agent-browser command
 app.post('/browser/run', async (c) => {
   try {
-    const body = await c.req.json<{ sessionId: string; command: string }>();
+    const body = await c.req.json<{ sessionId: string; command?: string; args?: string[] }>();
 
-    if (!body.sessionId || !body.command) {
-      return c.json({ error: 'sessionId and command are required' }, 400);
+    if (!body.sessionId) {
+      return c.json({ error: 'sessionId is required' }, 400);
     }
+
+    const resolved = resolveRunCommandArgs(body);
+    if (resolved.error !== undefined) {
+      return c.json({ error: resolved.error }, 400);
+    }
+    const commandArgs = resolved.args;
 
     const validationError = validateBrowserSessionWithRecovery(body.sessionId);
     if (validationError) {
@@ -1359,16 +1365,11 @@ app.post('/browser/run', async (c) => {
     // The agent-browser CLI `upload` command does not work reliably in this
     // environment — refuse it and steer the model to `browser_upload`, which
     // routes through the buffer-based path with size verification.
-    if (splitCommandArgs(body.command)[0] === 'upload') {
+    if (commandArgs[0] === 'upload') {
       return c.json({
         error: 'Use the `browser_upload(filePath, selector)` MCP tool for file uploads instead of `browser_run("upload …")`.',
         success: false,
       }, 400);
-    }
-
-    const commandArgs = buildRunCommandArgs(body.command);
-    if (commandArgs.length === 0) {
-      return c.json({ error: 'Empty command' }, 400);
     }
 
     const result = await execBrowser(commandArgs, browserState.cdpUrl || undefined);
@@ -1377,9 +1378,10 @@ app.post('/browser/run', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
-    const cmd = body.command.trim().toLowerCase();
+    const verb = commandArgs[0].toLowerCase();
+    const joined = commandArgs.join(' ').toLowerCase();
     let tabInfo = null;
-    if (cmd.startsWith('tab') || cmd.includes('.click(') || cmd.startsWith('click') || cmd.startsWith('dblclick')) {
+    if (verb.startsWith('tab') || verb === 'click' || verb === 'dblclick' || joined.includes('.click(')) {
       tabInfo = await tabManager.detectNewTab();
     }
 
