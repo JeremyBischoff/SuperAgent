@@ -603,6 +603,11 @@ import { validatePressKey } from './press-key';
 import { prepareEvalScript, finalizeEvalOutput, evalErrorHint } from './eval-script';
 import { judgeSelectCommit, SELECT_COMMIT_SETTLE_MS } from './select-verify';
 import { capBrowserOutput, redactCdpUrls, MAX_BROWSER_OUTPUT_CHARS, MAX_BROWSER_ERROR_CHARS } from './browser-output';
+import {
+  observeUrl, resetUrlTracking,
+  CLICK_SETTLE_MS, FILL_SETTLE_MS, PRESS_ENTER_SETTLE_MS, PRESS_SETTLE_MS,
+  type UrlDigest, type ScrollInfo, parseScrollInfo,
+} from './browser-digest';
 
 // Ensure Chrome download preferences are set in the browser profile directory.
 // Merges with existing preferences to avoid overwriting other settings.
@@ -688,6 +693,15 @@ async function execBrowser(args: string[], cdpUrl?: string): Promise<{ stdout: s
     };
   }
 }
+
+/** Read the current URL after an action and build the navigation digest. */
+async function observeUrlDigest(): Promise<UrlDigest | null> {
+  const r = await execBrowser(['get', 'url'], browserState.cdpUrl || undefined);
+  if (r.exitCode !== 0 || !r.stdout.trim()) return null;
+  return observeUrl(r.stdout.trim());
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 interface HostBrowserInfo {
   cdpUrl: string;
@@ -881,6 +895,7 @@ app.post('/browser/open', async (c) => {
       if (matchingTab) {
         await execBrowser(['tab', matchingTab.tabId], browserState.cdpUrl || undefined);
         await tabManager.syncTabCount();
+        observeUrl(matchingTab.url); // seed URL baseline for post-action digests
         notifyBrowserAction();
         return c.json({ success: true, switchedToExisting: true, tabId: matchingTab.tabId, url: matchingTab.url });
       }
@@ -925,6 +940,14 @@ app.post('/browser/open', async (c) => {
 
     _setBrowserState({ active: true, sessionId: body.sessionId, cdpUrl: cdpUrl || null });
     tabManager.resetTabCount();
+    resetUrlTracking();
+    // Seed the URL baseline so the FIRST post-action digest can distinguish
+    // "navigated" from "unchanged" (validation found a click that navigated
+    // away from the opened page being reported as "URL unchanged").
+    const landed = await execBrowser(['get', 'url'], cdpUrl);
+    if (landed.exitCode === 0 && landed.stdout.trim()) {
+      observeUrl(landed.stdout.trim());
+    }
     broadcastBrowserEvent(true);
 
     return c.json({ success: true });
@@ -1072,9 +1095,12 @@ app.post('/browser/click', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    await sleep(CLICK_SETTLE_MS);
+    const digest = await observeUrlDigest();
+
     const tabInfo = await tabManager.detectNewTab();
     notifyBrowserAction();
-    return c.json({ success: true, ...(tabInfo && { tabInfo }) });
+    return c.json({ success: true, ...(digest && { digest }), ...(tabInfo && { tabInfo }) });
   } catch (error: any) {
     console.error('[Browser] Error clicking:', error);
     return c.json({ error: error.message || 'Failed to click' }, 500);
@@ -1105,8 +1131,15 @@ app.post('/browser/fill', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    // Read the value back after a settle: the CLI reports success regardless
+    // of what the page kept (maxlength truncation, JS reformatting,
+    // keystroke-only widgets — audit F6).
+    await sleep(FILL_SETTLE_MS);
+    const read = await execBrowser(['get', 'value', body.ref], browserState.cdpUrl || undefined);
+    const committedValue = read.exitCode === 0 ? read.stdout.trim() : null;
+
     notifyBrowserAction();
-    return c.json({ success: true });
+    return c.json({ success: true, ...(committedValue !== null && { committedValue }) });
   } catch (error: any) {
     console.error('[Browser] Error filling:', error);
     return c.json({ error: error.message || 'Failed to fill' }, 500);
@@ -1140,8 +1173,14 @@ app.post('/browser/scroll', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    const probe = await execBrowser(
+      ['eval', 'JSON.stringify({y:window.scrollY,vh:window.innerHeight,h:document.documentElement.scrollHeight})'],
+      browserState.cdpUrl || undefined
+    );
+    const scrollInfo: ScrollInfo | null = probe.exitCode === 0 ? parseScrollInfo(probe.stdout) : null;
+
     notifyBrowserAction();
-    return c.json({ success: true });
+    return c.json({ success: true, ...(scrollInfo && { scrollInfo }) });
   } catch (error: any) {
     console.error('[Browser] Error scrolling:', error);
     return c.json({ error: error.message || 'Failed to scroll' }, 500);
@@ -1221,9 +1260,12 @@ app.post('/browser/press', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    await sleep(body.key.trim() === 'Enter' ? PRESS_ENTER_SETTLE_MS : PRESS_SETTLE_MS);
+    const digest = await observeUrlDigest();
+
     const tabInfo = await tabManager.detectNewTab();
     notifyBrowserAction();
-    return c.json({ success: true, ...(tabInfo && { tabInfo }) });
+    return c.json({ success: true, ...(digest && { digest }), ...(tabInfo && { tabInfo }) });
   } catch (error: any) {
     console.error('[Browser] Error pressing key:', error);
     return c.json({ error: error.message || 'Failed to press key' }, 500);

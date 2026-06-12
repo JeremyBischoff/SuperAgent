@@ -11,6 +11,7 @@ import { readFile } from 'fs/promises'
 import { z } from 'zod'
 import { resizeScreenshot } from '../image-utils'
 import { tabManager } from '../tab-manager'
+import { formatUrlDigest, formatUrlDigestBrief, formatFillReadback, formatScrollDigest, type UrlDigest, type ScrollInfo } from '../browser-digest'
 
 const CONTAINER_URL = `http://localhost:${process.env.PORT || '3000'}`
 
@@ -199,8 +200,9 @@ const browserClickTool = tool(
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown> | undefined
     const tabInfo = data?.tabInfo as { activeId: string; activeUrl: string; tabCount: number } | undefined
+    const digest = (data?.digest as UrlDigest | undefined) ?? null
 
-    let text = `Clicked ${args.ref}. Use browser_snapshot to see the updated page.`
+    let text = `Clicked ${args.ref}.${formatUrlDigest(digest)}`
     if (tabInfo) {
       text += tabManager.formatTabNotification(tabInfo)
     } else {
@@ -226,7 +228,9 @@ const browserFillTool = tool(
       value: args.value,
     })
     if (!result.success) return errorResult(result.error!)
-    let text = `Filled ${args.ref} with "${args.value}".`
+    const data = result.data as Record<string, unknown> | undefined
+    const committed = typeof data?.committedValue === 'string' ? data.committedValue : null
+    let text = `Filled ${args.ref}.${formatFillReadback(args.value, committed)}`
     text += getTabWarning()
     return {
       content: [
@@ -257,7 +261,9 @@ const browserScrollTool = tool(
       amount: args.amount,
     })
     if (!result.success) return errorResult(result.error!)
-    let text = `Scrolled ${args.direction}${args.amount ? ` by ${args.amount}px` : ''}.`
+    const data = result.data as Record<string, unknown> | undefined
+    const scrollInfo = (data?.scrollInfo as ScrollInfo | undefined) ?? null
+    let text = `Scrolled ${args.direction}${args.amount ? ` by ${args.amount}px` : ''}.${formatScrollDigest(scrollInfo)}`
     text += getTabWarning()
     return {
       content: [
@@ -304,8 +310,9 @@ This cannot type text — multi-character strings are rejected. To type into the
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown> | undefined
     const tabInfo = data?.tabInfo as { activeId: string; activeUrl: string; tabCount: number } | undefined
+    const digest = (data?.digest as UrlDigest | undefined) ?? null
 
-    let text = `Pressed "${args.key}".`
+    let text = `Pressed "${args.key}".${formatUrlDigestBrief(digest)}`
     if (tabInfo) {
       text += tabManager.formatTabNotification(tabInfo)
     } else {
