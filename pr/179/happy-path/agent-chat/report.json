@@ -1,25 +1,25 @@
 {
   "storyId": "agent-chat",
   "passed": true,
-  "reason": "QA-20260612-183502-aqrw agent successfully received a math question and responded with the correct answer \"4\"",
+  "reason": "Agent QA-20260612-224717-llyl successfully received the message \"Hello! What is 2+2?\" and responded with \"4\" within 1 second.",
   "steps": [
-    "Navigate to http://localhost:47891 — Page loaded successfully with Super Agent interface and agent list visible",
-    "Find and click \"QA-20260612-183502-aqrw\" agent in sidebar — Agent selected and detail view opened showing agent home page with message input",
-    "Verify agent status is \"running\" or \"idle\" — Agent status verified as \"idle\" ✓",
-    "Type and send message \"Hello! What is 2+2?\" — Message successfully entered in input field and sent using Send button",
-    "Wait for response (up to 3 minutes) — Response received immediately (completed in ~1 second)",
-    "Verify response mentions \"4\" — Agent response is \"4\" which correctly answers the math question ✓",
-    "Take screenshot documenting the result — Screenshot saved as agent-response.png showing the complete conversation with user message and agent response"
+    "Navigated to http://localhost:47891 — Page loaded successfully, showing SuperAgent application with sidebar containing two agents.",
+    "Found the \"QA-20260612-224717-llyl\" agent in the sidebar and clicked it — Agent page opened showing the agent home view with status indicator displaying \"idle\".",
+    "Verified agent status is \"running\" or \"idle\" — Agent status displayed as \"idle\" (ref=e62), which meets the requirement.",
+    "Typed message \"Hello! What is 2+2?\" in the message input textbox — Message successfully entered in the input field (ref=e177).",
+    "Clicked the \"Send message\" button (ref=e314) — Message was sent and the chat view transitioned to show the conversation thread.",
+    "Waited for response — Agent responded immediately with the answer \"4\" within 1 second as shown by the \"Worked for 1s\" indicator.",
+    "Verified the response mentions \"4\" and took a screenshot — The agent's response clearly displays \"4\" (ref=e392), and a screenshot was captured showing the complete conversation with the message \"Hello! What is 2+2?\" and the agent's answer \"4\". The session was automatically named \"Quick Math Question Session\"."
   ],
   "bugs": [],
-  "durationMs": 50007,
-  "sessionId": "35c7f8f6-e6a1-4ecf-a43c-e88c411e6b82",
+  "durationMs": 63521,
+  "sessionId": "febdeb50-30a6-415b-8afa-fd3b715a116d",
   "cost": {
-    "inputTokens": 261,
-    "outputTokens": 9966,
-    "cacheCreationTokens": 105209,
-    "cacheReadTokens": 723318,
+    "inputTokens": 288,
+    "outputTokens": 9715,
+    "cacheCreationTokens": 111218,
+    "cacheReadTokens": 835027,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.253934
+    "totalCostUsd": 0.271388
   }
 }
