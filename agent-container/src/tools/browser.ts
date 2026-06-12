@@ -293,9 +293,11 @@ const browserWaitTool = tool(
 
 const browserPressTool = tool(
   'browser_press',
-  `Press a keyboard key. Use this for Enter (submit forms), Tab (next field), Escape (close dialogs), or key combos like "Control+a".`,
+  `Press ONE keyboard key (or a modifier combo). Use this for Enter (submit forms), Tab (next field), Escape (close dialogs), or key combos like "Control+a".
+
+This cannot type text — multi-character strings are rejected. To type into the currently focused element (e.g. fields inside payment iframes), use browser_run with args ["keyboard", "type", "<text>"]; to fill an input that has a ref, use browser_fill.`,
   {
-    key: z.string().describe('Key to press (e.g., "Enter", "Tab", "Escape", "Control+a", "ArrowDown")'),
+    key: z.string().describe('A single key or modifier combo (e.g., "Enter", "Tab", "Escape", "Control+a", "ArrowDown") — never a text string'),
   },
   async (args) => {
     const result = await browserFetch('press', { key: args.key })

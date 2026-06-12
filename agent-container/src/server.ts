@@ -599,6 +599,7 @@ function validateBrowserSessionWithRecovery(requestSessionId: string): string | 
 const execFileAsync = promisify(execFile);
 
 import { resolveRunCommandArgs } from './browser-command-args';
+import { validatePressKey } from './press-key';
 
 // Ensure Chrome download preferences are set in the browser profile directory.
 // Merges with existing preferences to avoid overwriting other settings.
@@ -1191,6 +1192,13 @@ app.post('/browser/press', async (c) => {
       return c.json({ error: 'sessionId and key are required' }, 400);
     }
 
+    // agent-browser forwards any string to CDP and reports success even for
+    // non-keys (typing nothing) — reject up front with typing guidance.
+    const keyError = validatePressKey(body.key);
+    if (keyError) {
+      return c.json({ error: keyError, success: false }, 400);
+    }
+
     const validationError = validateBrowserSessionWithRecovery(body.sessionId);
     if (validationError) {
       return c.json({ error: validationError }, 409);
@@ -1370,6 +1378,15 @@ app.post('/browser/run', async (c) => {
         error: 'Use the `browser_upload(filePath, selector)` MCP tool for file uploads instead of `browser_run("upload …")`.',
         success: false,
       }, 400);
+    }
+
+    // Same guard as /browser/press for the raw CLI form: `press` with a
+    // non-key string silently types nothing while reporting success.
+    if (commandArgs[0] === 'press' && commandArgs.length === 2) {
+      const keyError = validatePressKey(commandArgs[1]);
+      if (keyError) {
+        return c.json({ error: keyError, success: false }, 400);
+      }
     }
 
     const result = await execBrowser(commandArgs, browserState.cdpUrl || undefined);
