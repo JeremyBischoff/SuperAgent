@@ -1,23 +1,25 @@
 {
   "storyId": "browser-test",
   "passed": true,
-  "reason": "Browser use feature test: Agent successfully executed browser tools to navigate to example.com and retrieve the page title \"Example Domain\"",
+  "reason": "Agent successfully opened a browser, navigated to https://example.com, retrieved the page title \"Example Domain\", and reported it back in the chat.",
   "steps": [
-    "Step 1 - Navigated to http://localhost:47891 — Application loaded successfully, displaying SuperAgent interface with agent list in sidebar",
-    "Step 2 - Clicked on \"QA-20260612-021359-kch2\" agent in sidebar — Agent page opened with chat interface and configuration sections visible",
-    "Step 3 - Sent message \"Open a browser and go to https://example.com. Tell me the page title.\" — Message was typed and sent successfully; agent status changed to \"working\"",
-    "Step 4 - Waited for response (max 3 minutes) — Agent completed task in 11 seconds; \"Working\" status cleared indicating completion",
-    "Step 5 - Verified response mentions \"Example Domain\" — Agent's final response states: \"The page title is \\\"Example Domain\\\". I've closed the browser.\" ✓"
+    "Navigated to http://localhost:47891 using browser_run_code with domcontentloaded wait. Page loaded successfully with title \"Super Agent\".",
+    "Located the \"QA-20260612-183503-6qkb\" agent in the sidebar and clicked on it (ref=e47). Agent chat interface opened successfully.",
+    "Clicked the chat message input textbox (ref=e142) to focus it.",
+    "Typed the message \"Open a browser and go to https://example.com. Tell me the page title.\" using browser_type tool.",
+    "Clicked the Send message button (ref=e279) to send the message. Message was accepted and a new session \"Browser Page Title Retrieval Test\" was created in the sidebar showing \"working\" status.",
+    "Waited for the agent response by polling for the \"Working...\" indicator to disappear. Response was received within approximately 11 seconds (well under the 3-minute timeout).",
+    "Took a final screenshot showing the agent's response. The response clearly states: 'The page title is \"Example Domain\".' and 'The page at https://example.com has the title \"Example Domain\". I\\'ve closed the browser.' The agent also showed the tool calls it performed: ToolSearch, Open Browser (https://example.com), Browser MCP: Browser Get State, and Close Browser."
   ],
   "bugs": [],
-  "durationMs": 94220,
-  "sessionId": "8e49e076-a16c-4893-acba-8fe7581f159e",
+  "durationMs": 128002,
+  "sessionId": "045445ca-b4d5-4f12-89db-7d8dd9d5ce8c",
   "cost": {
-    "inputTokens": 456,
-    "outputTokens": 14610,
-    "cacheCreationTokens": 78189,
-    "cacheReadTokens": 1558995,
+    "inputTokens": 384,
+    "outputTokens": 10648,
+    "cacheCreationTokens": 59064,
+    "cacheReadTokens": 1129041,
     "model": "claude-haiku-4-5-20251001",
-    "totalCostUsd": 0.327142
+    "totalCostUsd": 0.240358
   }
 }
