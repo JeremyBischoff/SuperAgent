@@ -109,7 +109,7 @@ Use this to start browsing a website. The browser preserves cookies/sessions via
         content: [
           {
             type: 'text' as const,
-            text: `Switched to existing tab ${data.tabIndex} which already has ${data.url} open. Use browser_snapshot to see the page content.${localhostWarning}`,
+            text: `Switched to existing tab ${data.tabId} which already has ${data.url} open. Use browser_snapshot to see the page content.${localhostWarning}`,
           },
         ],
       }
@@ -197,7 +197,7 @@ export const browserClickTool = tool(
     const result = await browserFetch('click', { ref: args.ref })
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown> | undefined
-    const tabInfo = data?.tabInfo as { activeIndex: number; activeUrl: string; tabCount: number } | undefined
+    const tabInfo = data?.tabInfo as { activeId: string; activeUrl: string; tabCount: number } | undefined
 
     let text = `Clicked ${args.ref}. Use browser_snapshot to see the updated page.`
     if (tabInfo) {
@@ -300,7 +300,7 @@ export const browserPressTool = tool(
     const result = await browserFetch('press', { key: args.key })
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown> | undefined
-    const tabInfo = data?.tabInfo as { activeIndex: number; activeUrl: string; tabCount: number } | undefined
+    const tabInfo = data?.tabInfo as { activeId: string; activeUrl: string; tabCount: number } | undefined
 
     let text = `Pressed "${args.key}".`
     if (tabInfo) {
@@ -448,7 +448,7 @@ Available commands:
 - is visible/enabled/checked <ref> — Check element state
 - find role/text/label/placeholder/alt/title/testid <query> <action> — Semantic locators
 - back / forward / reload — Navigation
-- tab / tab new / tab <n> / tab close — Tab management
+- tab / tab new [--label <name>] [url] / tab <id|label> / tab close [<id|label>] — Tab management. Tabs have STABLE string ids like t1, t2 (shown by "tab"); bare integers are rejected
 - frame <sel> / frame main — Switch frames
 - dialog accept/dismiss — Handle dialogs
 - set viewport/device/geo/offline/headers/media — Browser settings
@@ -466,7 +466,7 @@ Available commands:
     if (!result.success) return errorResult(result.error!)
     const data = result.data as Record<string, unknown>
     let text = data.output ? String(data.output) : 'Command executed.'
-    const tabInfo = data.tabInfo as { activeIndex: number; activeUrl: string; tabCount: number } | undefined
+    const tabInfo = data.tabInfo as { activeId: string; activeUrl: string; tabCount: number } | undefined
     if (tabInfo) {
       text += tabManager.formatTabNotification(tabInfo)
     } else {

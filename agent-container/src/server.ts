@@ -848,10 +848,10 @@ app.post('/browser/open', async (c) => {
     if (browserState.active) {
       const matchingTab = await tabManager.findMatchingTab(body.url);
       if (matchingTab) {
-        await execBrowser(['tab', String(matchingTab.index)], browserState.cdpUrl || undefined);
+        await execBrowser(['tab', matchingTab.tabId], browserState.cdpUrl || undefined);
         await tabManager.syncTabCount();
         notifyBrowserAction();
-        return c.json({ success: true, switchedToExisting: true, tabIndex: matchingTab.index, url: matchingTab.url });
+        return c.json({ success: true, switchedToExisting: true, tabId: matchingTab.tabId, url: matchingTab.url });
       }
     }
 
@@ -1895,7 +1895,9 @@ async function broadcastTabList(prefetched?: { allTargets: PageTarget[]; daemonT
       claimedTargetIds.add(target.id);
       tabs.push({
         targetId: target.id,
-        index: dt.index,
+        // Positional index for the renderer's display fallback only — the daemon's
+        // stable ids (t1, t2, …) are strings and tab switching uses targetId
+        index: tabs.length,
         url: dt.url,
         // Prefer Chrome's title (actual <title> tag) over daemon's (often just domain)
         title: target.title || dt.title || '',
