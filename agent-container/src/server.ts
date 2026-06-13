@@ -603,6 +603,7 @@ import { validatePressKey } from './press-key';
 import { prepareEvalScript, finalizeEvalOutput, evalErrorHint } from './eval-script';
 import { judgeSelectCommit, SELECT_COMMIT_SETTLE_MS } from './select-verify';
 import { capBrowserOutput, redactCdpUrls, MAX_BROWSER_OUTPUT_CHARS, MAX_BROWSER_ERROR_CHARS } from './browser-output';
+import { capSnapshot, formatIframePlaceholders, parseIframeInfo, IFRAME_ENUM_SCRIPT } from './snapshot-format';
 import {
   observeUrl, resetUrlTracking,
   CLICK_SETTLE_MS, FILL_SETTLE_MS, PRESS_ENTER_SETTLE_MS, PRESS_SETTLE_MS,
@@ -1028,7 +1029,15 @@ app.post('/browser/notify-closed', (c) => {
 // POST /browser/snapshot - Get accessibility tree snapshot
 app.post('/browser/snapshot', async (c) => {
   try {
-    const body = await c.req.json<{ sessionId: string; interactive?: boolean; compact?: boolean; json?: boolean }>();
+    const body = await c.req.json<{
+      sessionId: string;
+      interactive?: boolean;
+      compact?: boolean;
+      json?: boolean;
+      scope?: string;
+      fullText?: boolean;
+      includeUrls?: boolean;
+    }>();
 
     if (!body.sessionId) {
       return c.json({ error: 'sessionId is required' }, 400);
@@ -1045,8 +1054,14 @@ app.post('/browser/snapshot', async (c) => {
 
     const snapshotArgs = ['snapshot'];
     if (body.json) snapshotArgs.push('--json');
-    if (body.interactive !== false) snapshotArgs.push('-i');
-    if (body.compact !== false) snapshotArgs.push('-c');
+    // fullText drops BOTH -i and -c: each independently strips static text
+    // (validation errors, prices, instructions) — audit P5.
+    if (!body.fullText) {
+      if (body.interactive !== false) snapshotArgs.push('-i');
+      if (body.compact !== false) snapshotArgs.push('-c');
+    }
+    if (body.scope) snapshotArgs.push('-s', body.scope);
+    if (body.includeUrls) snapshotArgs.push('--urls');
 
     const result = await execBrowser(snapshotArgs, browserState.cdpUrl || undefined);
 
@@ -1054,17 +1069,26 @@ app.post('/browser/snapshot', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    // Enumerate cross-origin iframes so the agent knows about fields the a11y
+    // tree cannot see (e.g. Stripe payment frames — audit P2).
+    const iframeProbe = await execBrowser(['eval', IFRAME_ENUM_SCRIPT], browserState.cdpUrl || undefined);
+    const iframes = iframeProbe.exitCode === 0 ? parseIframeInfo(iframeProbe.stdout) : [];
+
     if (body.json) {
       // Try to parse JSON output
       try {
         const parsed = JSON.parse(result.stdout);
-        return c.json({ ...parsed, tabCount: tabManager.getTabCount() });
+        return c.json({ ...parsed, iframes, tabCount: tabManager.getTabCount() });
       } catch {
-        return c.json({ snapshot: result.stdout, tabCount: tabManager.getTabCount() });
+        return c.json({ snapshot: result.stdout, iframes, tabCount: tabManager.getTabCount() });
       }
     }
 
-    return c.json({ snapshot: result.stdout, tabCount: tabManager.getTabCount() });
+    return c.json({
+      snapshot: capSnapshot(result.stdout, Boolean(body.scope)) + formatIframePlaceholders(iframes),
+      iframes,
+      tabCount: tabManager.getTabCount(),
+    });
   } catch (error: any) {
     console.error('[Browser] Error taking snapshot:', error);
     return c.json({ error: error.message || 'Failed to take snapshot' }, 500);

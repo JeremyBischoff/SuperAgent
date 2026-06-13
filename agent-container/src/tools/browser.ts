@@ -147,9 +147,12 @@ const browserSnapshotTool = tool(
   'browser_snapshot',
   `Get an accessibility tree snapshot of the current page. Returns interactive elements with refs (like @e1, @e2) that you can use with browser_click and browser_fill.
 
-Use interactive=true (default) to get clickable/fillable elements with refs.
-Use compact=true (default) to reduce output size.
-Use json=true to get structured JSON output with a refs dictionary.`,
+The default view shows interactive elements only. Two knobs handle the cases that view misses:
+- scope: limit the snapshot to a CSS-selected region (e.g. "form", "#main", ".modal", a dialog selector). Use this on large pages — it slashes output and avoids truncation. Refs stay valid for the rest of the page.
+- fullText=true: include STATIC text the interactive view drops — validation errors, prices, instructions, toasts, char counters. Reach for this when an action seemed to fail but no error showed, or when you need on-page copy.
+
+Cross-origin iframes (e.g. Stripe payment frames) are listed as placeholders below the tree — their fields are NOT in the snapshot; fill them via coordinate click + browser_type.
+Very large snapshots are truncated with a note rather than failing — scope to recover the rest.`,
   {
     interactive: z
       .boolean()
@@ -166,12 +169,29 @@ Use json=true to get structured JSON output with a refs dictionary.`,
       .optional()
       .default(false)
       .describe('Return structured JSON with refs dictionary (default: false)'),
+    scope: z
+      .string()
+      .optional()
+      .describe('CSS selector to limit the snapshot to one region, e.g. "form", "#main", ".modal". Greatly reduces size on large pages; refs elsewhere stay valid.'),
+    fullText: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Include static text (validation errors, prices, instructions) that the interactive view omits (default: false).'),
+    includeUrls: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Inline link/element URLs — disambiguates junk-labeled links and avoids extra "get attr href" calls (default: false).'),
   },
   async (args) => {
     const result = await browserFetch('snapshot', {
       interactive: args.interactive,
       compact: args.compact,
       json: args.json,
+      scope: args.scope,
+      fullText: args.fullText,
+      includeUrls: args.includeUrls,
     })
     if (!result.success) return errorResult(result.error!)
 
