@@ -99,14 +99,19 @@ const THIN_SCROLLBAR =
 // indented pl-5 (20px), so connectors anchor at -5px from each <li>. Elbows
 // sit at 14px = half the h-7 row. Each row draws its own rail segment
 // (stretched -top-1 to bridge the gap-1 between rows) so the rail tracks
-// variable row heights; the last row's segment stops at its elbow.
+// variable row heights; the last row's segment stops at its elbow. The
+// first row instead starts at -top-0.5 so the rail tops out flush with the
+// agent row's bottom edge (the ul's py-0.5) rather than poking 2px up into
+// the agent row's highlight.
 const TREE_CONNECTORS =
   '[&>li]:relative ' +
   '[&>li]:before:absolute [&>li]:before:-left-[5px] [&>li]:before:top-[14px] [&>li]:before:w-[5px] ' +
   '[&>li]:before:border-t [&>li]:before:border-muted-foreground/25 ' +
   '[&>li]:after:absolute [&>li]:after:-left-[5px] [&>li]:after:-top-1 [&>li]:after:bottom-0 ' +
   '[&>li]:after:border-l [&>li]:after:border-muted-foreground/25 ' +
-  '[&>li:last-child]:after:bottom-auto [&>li:last-child]:after:h-[18px]'
+  '[&>li:first-child]:after:-top-0.5 ' +
+  '[&>li:last-child]:after:bottom-auto [&>li:last-child]:after:h-[18px] ' +
+  '[&>li:first-child:last-child]:after:h-[16px]'
 
 // Session sub-item that tracks its streaming state
 function SessionSubItem({
