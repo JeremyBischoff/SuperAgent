@@ -18,7 +18,7 @@ test.describe('Agent Rename', () => {
 
     // Create an agent
     await agentPage.createAgent(agentName)
-    await expect(agentPage.getAgentItem(agentName)).toBeVisible()
+    await agentPage.waitForAgentInSidebar(agentName)
 
     // Right-click the agent to open context menu
     await agentPage.getAgentItem(agentName).click({ button: 'right' })
@@ -32,16 +32,18 @@ test.describe('Agent Rename', () => {
     // Find the agent name input
     const nameInput = page.locator('#agent-name')
     await expect(nameInput).toBeVisible()
+    await expect(nameInput).toHaveValue(agentName)
 
     // Type with actual keyboard (pressSequentially sends real key events)
-    await nameInput.clear()
+    await nameInput.fill('')
+    await expect(nameInput).toHaveValue('')
     await nameInput.click()
     await nameInput.pressSequentially('Hello World')
     await expect(nameInput).toHaveValue('Hello World')
 
     // Close dialog and clean up
     await page.keyboard.press('Escape')
-    await agentPage.deleteAgent()
+    await agentPage.deleteAgentByNameFromApi(agentName)
   })
 
   test('can rename agent inline from agent home by pressing Enter', async ({ page }) => {
@@ -49,7 +51,6 @@ test.describe('Agent Rename', () => {
     const newName = `${agentName}-Renamed`
 
     await agentPage.createAgent(agentName)
-    await expect(agentPage.getAgentItem(agentName)).toBeVisible()
 
     // Click the agent name heading to enter edit mode
     const nameHeading = page.locator('[data-testid="agent-name"]')
@@ -68,9 +69,9 @@ test.describe('Agent Rename', () => {
 
     // Sidebar + breadcrumb should reflect the new name as well
     await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(newName)
-    await expect(agentPage.getAgentItem(newName)).toBeVisible()
+    await agentPage.waitForAgentInSidebar(newName)
 
-    await agentPage.deleteAgent()
+    await agentPage.deleteAgentByNameFromApi(newName)
   })
 
   test('can rename agent inline from agent home by clicking save button', async ({ page }) => {
@@ -78,7 +79,6 @@ test.describe('Agent Rename', () => {
     const newName = `${agentName}-Renamed`
 
     await agentPage.createAgent(agentName)
-    await expect(agentPage.getAgentItem(agentName)).toBeVisible()
 
     await page.locator('[data-testid="agent-name"]').click()
 
@@ -92,14 +92,13 @@ test.describe('Agent Rename', () => {
     await expect(page.locator('[data-testid="agent-name"]')).toHaveText(newName)
     await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(newName)
 
-    await agentPage.deleteAgent()
+    await agentPage.deleteAgentByNameFromApi(newName)
   })
 
   test('pressing Escape cancels inline rename without saving', async ({ page }) => {
     const agentName = `InlineEscape${Date.now()}`
 
     await agentPage.createAgent(agentName)
-    await expect(agentPage.getAgentItem(agentName)).toBeVisible()
 
     await page.locator('[data-testid="agent-name"]').click()
 
@@ -111,7 +110,7 @@ test.describe('Agent Rename', () => {
     await expect(nameInput).not.toBeVisible()
     await expect(page.locator('[data-testid="agent-name"]')).toHaveText(agentName)
 
-    await agentPage.deleteAgent()
+    await agentPage.deleteAgentByNameFromApi(agentName)
   })
 
   test('control: can type spaces in agent name input when settings opened via button', async ({ page }) => {
@@ -119,7 +118,6 @@ test.describe('Agent Rename', () => {
 
     // Create an agent
     await agentPage.createAgent(agentName)
-    await expect(agentPage.getAgentItem(agentName)).toBeVisible()
 
     // Open settings via the button (not context menu)
     await agentPage.openSettings()
@@ -127,15 +125,17 @@ test.describe('Agent Rename', () => {
     // Find the agent name input
     const nameInput = page.locator('#agent-name')
     await expect(nameInput).toBeVisible()
+    await expect(nameInput).toHaveValue(agentName)
 
     // Type with actual keyboard (pressSequentially sends real key events)
-    await nameInput.clear()
+    await nameInput.fill('')
+    await expect(nameInput).toHaveValue('')
     await nameInput.click()
     await nameInput.pressSequentially('Hello World')
     await expect(nameInput).toHaveValue('Hello World')
 
     // Close dialog and clean up
     await page.keyboard.press('Escape')
-    await agentPage.deleteAgent()
+    await agentPage.deleteAgentByNameFromApi(agentName)
   })
 })

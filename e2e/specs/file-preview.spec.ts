@@ -4,8 +4,12 @@ import { test, expect } from '@playwright/test'
 import { AppPage } from '../pages/app.page'
 import { AgentPage } from '../pages/agent.page'
 import { SessionPage } from '../pages/session.page'
+import { getE2EBaseUrl } from '../helpers/base-url'
 
-const e2eDataDir = path.join(__dirname, '..', '..', '.e2e-data')
+const API = getE2EBaseUrl()
+const e2eDataDir = path.resolve(
+  process.env.SUPERAGENT_DATA_DIR ?? path.join(__dirname, '..', '..', '.e2e-data'),
+)
 
 function getFilePill(page: import('@playwright/test').Page, fileName: string) {
   return page.getByTestId('file-pill').filter({ hasText: fileName })
@@ -23,7 +27,7 @@ async function getLatestAgentSlug(page: import('@playwright/test').Page): Promis
   const breadcrumb = page.locator('[data-testid="agent-breadcrumb"]')
   const agentName = await breadcrumb.textContent() || ''
 
-  const response = await page.request.get('http://localhost:3000/api/agents')
+  const response = await page.request.get(`${API}/api/agents`)
   const agents = await response.json() as Array<{ slug: string; name: string; createdAt: string }>
   const match = agents.find(a => a.name === agentName.trim())
   if (match) return match.slug

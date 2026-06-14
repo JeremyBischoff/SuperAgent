@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { getE2EBaseUrl } from './base-url'
 
-const API = 'http://localhost:3000'
+const API = getE2EBaseUrl()
 
 export interface TestAgent {
   slug: string

@@ -11,7 +11,7 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import Database from 'better-sqlite3'
 
-const BASE_URL = 'http://localhost:3001'
+const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.PORT ?? '3001'}`
 const DEFAULT_PASSWORD = 'password123'
 const AUTH_DATA_DIR = process.env.SUPERAGENT_DATA_DIR
   ? path.resolve(process.env.SUPERAGENT_DATA_DIR)

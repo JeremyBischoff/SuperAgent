@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test'
 import { AppPage } from '../pages/app.page'
 import { AgentPage } from '../pages/agent.page'
 import { getConnectionsHeaderAddButton } from '../helpers/connections'
+import { getE2EBaseUrl } from '../helpers/base-url'
 
-const API = 'http://localhost:3000'
+const API = getE2EBaseUrl()
 
 test.describe('Connections Page — Policy Modal After OAuth', () => {
   let appPage: AppPage

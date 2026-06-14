@@ -92,19 +92,23 @@ test.describe('Chat Flow', () => {
   })
 
   test('multiple messages in conversation', async ({ page }) => {
+    const initialUserCount = await sessionPage.getUserMessages().count()
+    const initialAssistantCount = await sessionPage.getAssistantMessages().count()
+
     // Send first message
     await sessionPage.sendMessage('First message')
 
     // Wait for response
-    await sessionPage.waitForResponse(15000)
+    await expect(sessionPage.getUserMessages()).toHaveCount(initialUserCount + 1, { timeout: 15000 })
+    await expect(sessionPage.getAssistantMessages()).toHaveCount(initialAssistantCount + 1, { timeout: 15000 })
     await sessionPage.waitForInputEnabled()
 
     // Send second message
     await sessionPage.sendMessage('Second message')
-    await sessionPage.waitForUserMessageCount(2)
+    await expect(sessionPage.getUserMessages()).toHaveCount(initialUserCount + 2, { timeout: 15000 })
 
     // Wait for second response
-    await sessionPage.waitForAssistantMessageCount(2, 15000)
+    await expect(sessionPage.getAssistantMessages()).toHaveCount(initialAssistantCount + 2, { timeout: 15000 })
   })
 
   // Note: No cleanup needed - global setup resets data between test runs

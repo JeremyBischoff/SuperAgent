@@ -1329,6 +1329,30 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     this.activeBrowserSessionId = sessionId
   }
 
+  private ensureSessionTranscriptFile(sessionId: string): void {
+    const jsonlPath = getSessionJsonlPath(this.config.agentId, sessionId)
+    try {
+      fs.mkdirSync(path.dirname(jsonlPath), { recursive: true })
+      fs.closeSync(fs.openSync(jsonlPath, 'a'))
+    } catch (error) {
+      console.error(`[MockContainerClient] Failed to create JSONL transcript:`, error)
+    }
+  }
+
+  private runAfterStreamSubscriber(sessionId: string, callback: () => void): void {
+    const maxAttempts = 40
+    const poll = (attempt: number) => {
+      if (!this.sessions.has(sessionId)) return
+      const subscriberCount = this.streamCallbacks.get(sessionId)?.size ?? 0
+      if (subscriberCount > 0 || attempt >= maxAttempts) {
+        callback()
+        return
+      }
+      setTimeout(() => poll(attempt + 1), 25)
+    }
+    setTimeout(() => poll(0), 0)
+  }
+
   /**
    * Write a JSONL entry for a session
    */
@@ -1645,6 +1669,7 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     this.sessions.set(sessionId, session)
     this.sessionMessages.set(sessionId, [])
     this.streamCallbacks.set(sessionId, new Set())
+    this.ensureSessionTranscriptFile(sessionId)
 
     console.log(`[MockContainerClient] Created session ${sessionId}`)
 
@@ -1664,9 +1689,9 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
       }
       this.sessionMessages.get(sessionId)?.push(userMessage)
 
-      // Delay message emission to give time for subscription
-      // The API subscribes after createSession returns, so we need to wait
-      setTimeout(() => {
+      // The API subscribes after createSession returns. Wait for that server-side
+      // subscription instead of racing it with a fixed delay.
+      this.runAfterStreamSubscriber(sessionId, () => {
         this.emitStreamMessage(sessionId, {
           type: 'user_message',
           content: { content: options.initialMessage },
@@ -1690,7 +1715,7 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
         // actually relies on (the exact failure that already shipped once).
         this.busySessions.add(sessionId)
         scenario.execute(sessionId, this, options.initialMessage!)
-      }, 100)  // Brief delay to ensure subscription is set up
+      })
     }
 
     return session

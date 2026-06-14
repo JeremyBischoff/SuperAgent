@@ -2,11 +2,12 @@ import { test, expect } from '@playwright/test'
 import { AppPage } from '../pages/app.page'
 import { startMockMcpServer, type MockMcpServer } from '../helpers/mock-mcp-server'
 import { getConnectionsHeaderAddButton } from '../helpers/connections'
+import { getE2EBaseUrl } from '../helpers/base-url'
 
 // Serial: cross-checks DB state via the API; sensitive to concurrent writes.
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:3000'
+const API = getE2EBaseUrl()
 
 test.describe('Global Settings → Connections — Add MCP flow', () => {
   let appPage: AppPage

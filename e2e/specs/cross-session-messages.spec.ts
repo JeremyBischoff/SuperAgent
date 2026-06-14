@@ -37,6 +37,7 @@ test.describe('Cross-Session Message Isolation', () => {
 
     // 1. Go to Agent A and send a slow message (triggers 3s delay)
     await agentPage.selectAgent(agentAName)
+    await sessionPage.selectFirstSessionInSidebar(agentPage.getAgentLi(agentAName))
     await sessionPage.sendMessage(messageA)
 
     // Wait for the message we just sent to appear; the create-agent prompt may
@@ -48,6 +49,7 @@ test.describe('Cross-Session Message Isolation', () => {
 
     // 2. While Agent A is working, switch to Agent B
     await agentPage.selectAgent(agentBName)
+    await sessionPage.selectFirstSessionInSidebar(agentPage.getAgentLi(agentBName))
 
     // 3. Send a message to Agent B
     await sessionPage.sendMessage(messageB)
@@ -93,6 +95,7 @@ test.describe('Cross-Session Message Isolation', () => {
 
     // Send slow message to Agent A
     await agentPage.selectAgent(agentAName)
+    await sessionPage.selectFirstSessionInSidebar(agentPage.getAgentLi(agentAName))
     await sessionPage.sendMessage(messageA)
     await expect(userMessage(messageA)).toBeVisible({ timeout: 10000 })
 
@@ -101,6 +104,7 @@ test.describe('Cross-Session Message Isolation', () => {
 
     // Switch to Agent B and send a message
     await agentPage.selectAgent(agentBName)
+    await sessionPage.selectFirstSessionInSidebar(agentPage.getAgentLi(agentBName))
     await sessionPage.sendMessage(messageB)
 
     // Agent B should show its own message, not Agent A's
