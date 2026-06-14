@@ -34,7 +34,7 @@ test.describe('Tool Call Rendering', () => {
     await toolCall.locator('button').first().click()
 
     // Verify terminal-style display (black background)
-    await expect(toolCall.locator('.bg-black')).toBeVisible()
+    await expect(toolCall.getByTestId('bash-terminal')).toBeVisible()
   })
 
   test('renders Read tool call with file path summary', async ({ page }) => {
@@ -120,14 +120,14 @@ test.describe('Tool Call Rendering', () => {
     await expect(toolCall).toBeVisible()
 
     // Initially collapsed - no expanded content
-    await expect(toolCall.locator('.bg-black')).not.toBeVisible()
+    await expect(toolCall.getByTestId('bash-terminal')).not.toBeVisible()
 
     // Click to expand
     await toolCall.locator('button').first().click()
-    await expect(toolCall.locator('.bg-black')).toBeVisible()
+    await expect(toolCall.getByTestId('bash-terminal')).toBeVisible()
 
     // Click to collapse
     await toolCall.locator('button').first().click()
-    await expect(toolCall.locator('.bg-black')).not.toBeVisible()
+    await expect(toolCall.getByTestId('bash-terminal')).not.toBeVisible()
   })
 })
