@@ -20,6 +20,9 @@ vi.mock('./tool-call-item', () => ({
   StreamingToolCallItem: ({ name }: { name: string }) => (
     <div data-testid="sub-streaming-tool">{name}</div>
   ),
+  StatusIndicator: ({ status }: { status: string }) => (
+    <span data-testid="status-indicator">{status}</span>
+  ),
 }))
 
 // Mock useElapsedTimer
@@ -93,7 +96,7 @@ describe('SubAgentBlock', () => {
       result: undefined,
     })
 
-    const { container } = render(
+    render(
       <SubAgentBlock
         toolCall={tc}
         sessionId="s-1"
@@ -113,8 +116,8 @@ describe('SubAgentBlock', () => {
       />
     )
 
-    // Running status shows spinner
-    expect(container.querySelector('.animate-spin')).toBeTruthy()
+    // Running status is indicated
+    expect(screen.getByText('running')).toBeTruthy()
   })
 
   it('renders subagent messages when expanded', async () => {

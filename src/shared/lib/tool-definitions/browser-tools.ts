@@ -3,25 +3,25 @@ import type { ToolDefinition } from './types'
 function noSummary(): null { return null }
 
 export const browserOpenDef: ToolDefinition = {
-  displayName: 'Open Browser', iconName: 'Globe',
+  displayName: 'Open Browser',
   getSummary: (input) => (input as { url?: string }).url ?? null,
 }
 
 export const browserCloseDef: ToolDefinition = {
-  displayName: 'Close Browser', iconName: 'X', getSummary: noSummary,
+  displayName: 'Close Browser', getSummary: noSummary,
 }
 
 export const browserSnapshotDef: ToolDefinition = {
-  displayName: 'Page Snapshot', iconName: 'ScanEye', getSummary: noSummary,
+  displayName: 'Page Snapshot', getSummary: noSummary,
 }
 
 export const browserClickDef: ToolDefinition = {
-  displayName: 'Click', iconName: 'MousePointerClick',
+  displayName: 'Click',
   getSummary: (input) => (input as { ref?: string }).ref ?? null,
 }
 
 export const browserFillDef: ToolDefinition = {
-  displayName: 'Fill Input', iconName: 'TextCursorInput',
+  displayName: 'Fill Input',
   getSummary: (input) => {
     const { ref, value } = input as { ref?: string; value?: string }
     if (!ref) return null
@@ -31,7 +31,7 @@ export const browserFillDef: ToolDefinition = {
 }
 
 export const browserScrollDef: ToolDefinition = {
-  displayName: 'Scroll', iconName: 'ArrowDownUp',
+  displayName: 'Scroll',
   getSummary: (input) => {
     const { direction, amount } = input as { direction?: string; amount?: number }
     if (!direction) return null
@@ -40,17 +40,17 @@ export const browserScrollDef: ToolDefinition = {
 }
 
 export const browserWaitDef: ToolDefinition = {
-  displayName: 'Wait', iconName: 'Timer',
+  displayName: 'Wait',
   getSummary: (input) => (input as { for?: string }).for ?? null,
 }
 
 export const browserPressDef: ToolDefinition = {
-  displayName: 'Key Press', iconName: 'Keyboard',
+  displayName: 'Key Press',
   getSummary: (input) => (input as { key?: string }).key ?? null,
 }
 
 export const browserTypeDef: ToolDefinition = {
-  displayName: 'Type Text', iconName: 'Keyboard',
+  displayName: 'Type Text',
   getSummary: (input) => {
     const { text, ref } = input as { text?: string; ref?: string }
     if (!text) return ref ?? null
@@ -60,12 +60,12 @@ export const browserTypeDef: ToolDefinition = {
 }
 
 export const browserScreenshotDef: ToolDefinition = {
-  displayName: 'Screenshot', iconName: 'Camera',
+  displayName: 'Screenshot',
   getSummary: (input) => (input as { full?: boolean }).full ? 'full page' : 'viewport',
 }
 
 export const browserSelectDef: ToolDefinition = {
-  displayName: 'Select Option', iconName: 'ChevronDown',
+  displayName: 'Select Option',
   getSummary: (input) => {
     const { ref, value } = input as { ref?: string; value?: string }
     if (!ref || !value) return ref ?? null
@@ -74,12 +74,12 @@ export const browserSelectDef: ToolDefinition = {
 }
 
 export const browserHoverDef: ToolDefinition = {
-  displayName: 'Hover', iconName: 'MousePointer',
+  displayName: 'Hover',
   getSummary: (input) => (input as { ref?: string }).ref ?? null,
 }
 
 export const browserEvalDef: ToolDefinition = {
-  displayName: 'Run JavaScript', iconName: 'Braces',
+  displayName: 'Run JavaScript',
   getSummary: (input) => {
     const { script } = input as { script?: string }
     if (!script) return null
@@ -89,7 +89,7 @@ export const browserEvalDef: ToolDefinition = {
 }
 
 export const browserRunDef: ToolDefinition = {
-  displayName: 'Browser Command', iconName: 'Terminal',
+  displayName: 'Browser Command',
   getSummary: (input) => {
     const { command, args } = input as { command?: string; args?: string[] }
     const line = command ?? (Array.isArray(args) ? args.join(' ') : null)

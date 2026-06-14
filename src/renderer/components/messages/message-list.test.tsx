@@ -111,6 +111,7 @@ vi.mock('./tool-call-item', () => ({
     <div data-testid={`tool-call-${toolCall.name}`} data-running={isSessionActive ? 'true' : 'false'}>{toolCall.name}</div>
   ),
   StreamingToolCallItem: ({ name }: any) => <div data-testid="streaming-tool-call">{name}</div>,
+  StatusIndicator: ({ status }: any) => <span data-testid="status-indicator">{status}</span>,
 }))
 
 vi.mock('./subagent-block', () => ({
