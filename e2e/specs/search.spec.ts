@@ -161,9 +161,9 @@ test.describe('Search palette', () => {
     await agentRow.getByTestId('search-agent-expand').click()
     await expect(sessionRow).toBeVisible()
 
-    // Enter on a session navigates to it (dialog closes, lands on the agent)
-    await page.keyboard.press('ArrowDown')
-    await page.keyboard.press('Enter')
+    // Click the target session row so this test does not depend on the global
+    // activeIndex in a recents list that can contain agents from parallel specs.
+    await sessionRow.click()
     await expect(page.locator('[data-testid="search-input"]')).not.toBeVisible()
     await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(agentName)
 

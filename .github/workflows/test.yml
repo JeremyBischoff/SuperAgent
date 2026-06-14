@@ -85,8 +85,14 @@ jobs:
       - name: Run browser integration tests
         run: ./agent-container/test-browser-integration.sh superagent-container
 
-  e2e-tests:
+  e2e-web-tests:
+    name: E2E Web (${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4]
+        shardTotal: [4]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -107,11 +113,37 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Web E2E tests
-        run: npm run test:e2e:web
+        run: npm run test:e2e:web -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --fail-on-flaky-tests
         env:
           PLAYWRIGHT_WORKERS: 4
 
+  e2e-persistence-tests:
+    name: E2E Persistence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules
+        run: npm rebuild better-sqlite3
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run persistence E2E tests
+        run: npm run test:e2e:persistence -- --fail-on-flaky-tests
+
   e2e-stateful-tests:
+    name: E2E Stateful
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -133,9 +165,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run stateful E2E tests
-        run: npm run test:e2e:stateful
+        run: npm run test:e2e:stateful -- --fail-on-flaky-tests
 
   e2e-browser-tests:
+    name: E2E Browser Stream
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -157,9 +190,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser E2E tests
-        run: npm run test:e2e:browser
+        run: npm run test:e2e:browser -- --fail-on-flaky-tests
 
   e2e-auth-tests:
+    name: E2E Auth
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -181,9 +215,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Auth E2E tests
-        run: npm run test:e2e:auth
+        run: npm run test:e2e:auth -- --fail-on-flaky-tests
 
   e2e-a11y-audit:
+    name: E2E A11y Audit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -206,4 +241,4 @@ jobs:
 
       - name: Run a11y audit
         continue-on-error: true
-        run: E2E_MOCK=true npx playwright test e2e/specs/a11y-audit.spec.ts --project=web-chromium
+        run: npm run test:e2e:a11y -- --fail-on-flaky-tests

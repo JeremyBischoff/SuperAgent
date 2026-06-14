@@ -6,6 +6,9 @@ const e2eDataDir = path.join(__dirname, '.e2e-data')
 const configuredWorkers = process.env.PLAYWRIGHT_WORKERS
   ? Number(process.env.PLAYWRIGHT_WORKERS)
   : undefined
+const configuredRetries = process.env.PLAYWRIGHT_RETRIES
+  ? Number(process.env.PLAYWRIGHT_RETRIES)
+  : undefined
 const webTestIgnore = [
   '**/auth/**',
   '**/getting-started-wizard.spec.ts',
@@ -15,6 +18,12 @@ const webTestIgnore = [
 
 if (process.env.E2E_SKIP_BROWSER_STREAM === 'true') {
   webTestIgnore.push('**/browser-stream.spec.ts')
+}
+if (process.env.E2E_INCLUDE_A11Y !== 'true') {
+  webTestIgnore.push('**/a11y-audit.spec.ts')
+}
+if (process.env.E2E_INCLUDE_PERSISTENCE !== 'true') {
+  webTestIgnore.push('**/persistence.spec.ts')
 }
 
 // Resolve Playwright's bundled Chromium path for the browser streaming E2E test.
@@ -51,7 +60,7 @@ export default defineConfig({
   testIgnore: ['**/auth/**'],  // Auth tests use separate config (playwright.auth.config.ts)
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: configuredRetries !== undefined && Number.isFinite(configuredRetries) ? configuredRetries : (process.env.CI ? 2 : 0),
   workers: configuredWorkers && Number.isFinite(configuredWorkers) ? configuredWorkers : (process.env.CI ? 4 : 2),
   reporter: process.env.CI ? [['list']] : [['html', { open: 'never' }], ['list']],
 
