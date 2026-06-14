@@ -1,5 +1,6 @@
 import { SquareGanttChart, SquarePlus, SquareArrowRight, MessagesSquare, ArrowUpRight } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps } from './types'
+import { ResultBlock } from './shared'
 import { useSelection } from '@renderer/context/selection-context'
 import {
   listAgentsDef,
@@ -40,19 +41,6 @@ function SessionLink({ slug, sessionId }: { slug: string; sessionId: string }) {
       {sessionId.slice(0, 12)}…
       <ArrowUpRight className="h-3 w-3" />
     </button>
-  )
-}
-
-function ResultBlock({ result, isError }: { result?: string | null; isError?: boolean }) {
-  if (!result) return null
-  return (
-    <pre
-      className={`bg-background whitespace-pre-wrap rounded p-2 text-xs ${
-        isError ? 'text-red-800 dark:text-red-200' : 'text-foreground/90'
-      }`}
-    >
-      {result}
-    </pre>
   )
 }
 

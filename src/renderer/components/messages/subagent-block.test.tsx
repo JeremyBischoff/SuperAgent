@@ -96,7 +96,7 @@ describe('SubAgentBlock', () => {
       result: undefined,
     })
 
-    const { container } = render(
+    render(
       <SubAgentBlock
         toolCall={tc}
         sessionId="s-1"

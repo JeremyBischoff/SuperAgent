@@ -97,7 +97,7 @@ function ToolCallItemComponent({ toolCall, messageCreatedAt, agentSlug, isSessio
   const ToolIcon = renderer?.icon || Search
 
   // Get summary for collapsed view
-  const summary = renderer?.getSummary?.(toolCall.input)
+  const summary = useMemo(() => renderer?.getSummary?.(toolCall.input), [renderer, toolCall.input])
 
   // Format input for display (fallback)
   const inputStr = useMemo(
@@ -163,7 +163,7 @@ function ToolCallItemComponent({ toolCall, messageCreatedAt, agentSlug, isSessio
       </button>
 
       {expanded && (
-        <div className="border-t border-border/70 bg-muted/50 rounded-b-md px-3 py-3">
+        <div className="border-t border-border/70 bg-muted/50 px-3 py-3">
           {CustomExpandedView ? (
             <CustomExpandedView
               input={toolCall.input}
@@ -264,7 +264,7 @@ export function StreamingToolCallItem({ name, partialInput }: StreamingToolCallI
         <StatusIndicator status="running" />
       </div>
 
-      <div className="border-t border-border/70 bg-muted/50 rounded-b-md px-3 py-3">
+      <div className="border-t border-border/70 bg-muted/50 px-3 py-3">
         {CustomStreamingView ? (
           <CustomStreamingView partialInput={partialInput} />
         ) : (

@@ -118,8 +118,10 @@ describe('tool definition getSummary', () => {
   })
 
   describe('deliver_file', () => {
-    it('always returns null (summary suppressed)', () => {
-      expect(summary('mcp__user-input__deliver_file', { filePath: '/workspace/output/report.pdf' })).toBeNull()
+    it('returns filename from path', () => {
+      expect(summary('mcp__user-input__deliver_file', { filePath: '/workspace/output/report.pdf' })).toBe('report.pdf')
+    })
+    it('returns null when missing', () => {
       expect(summary('mcp__user-input__deliver_file', {})).toBeNull()
     })
   })

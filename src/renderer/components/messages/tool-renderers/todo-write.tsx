@@ -2,6 +2,7 @@
 import { SquareCheck } from 'lucide-react'
 import { cn } from '@shared/lib/utils/cn'
 import { todoWriteDef } from '@shared/lib/tool-definitions/todo-write'
+import { TaskStatusIcon } from './shared'
 import type { ToolRenderer, ToolRendererProps } from './types'
 
 function ExpandedView({ input }: ToolRendererProps) {
@@ -22,11 +23,7 @@ function ExpandedView({ input }: ToolRendererProps) {
             todo.status === 'in_progress' && 'font-medium'
           )}
         >
-          <span className="text-muted-foreground">
-            {todo.status === 'completed' && '✓'}
-            {todo.status === 'in_progress' && '→'}
-            {todo.status === 'pending' && '○'}
-          </span>
+          <TaskStatusIcon status={todo.status} />
           {todo.content}
         </li>
       ))}

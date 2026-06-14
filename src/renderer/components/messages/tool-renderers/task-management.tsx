@@ -1,6 +1,7 @@
 import { ListPlus, ListChecks, ListTodo } from 'lucide-react'
 import { cn } from '@shared/lib/utils/cn'
 import { taskCreateDef, taskUpdateDef, taskListDef } from '@shared/lib/tool-definitions/task-management'
+import { TaskStatusIcon } from './shared'
 import type { ToolRenderer, ToolRendererProps } from './types'
 
 function TaskCreateExpandedView({ input }: ToolRendererProps) {
@@ -17,11 +18,7 @@ function TaskUpdateExpandedView({ input }: ToolRendererProps) {
   const { taskId, status } = taskUpdateDef.parseInput(input)
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="text-xs">
-        {status === 'completed' && <span className="text-green-500">✓</span>}
-        {status === 'in_progress' && <span className="text-blue-500">→</span>}
-        {status === 'pending' && <span className="text-muted-foreground">○</span>}
-      </span>
+      <TaskStatusIcon status={status} />
       <span className={cn(status === 'completed' && 'text-muted-foreground')}>
         Task #{taskId}
       </span>

@@ -72,7 +72,20 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
 
 function CollapsedContent({ input, isError, agentSlug }: CollapsedContentProps) {
   const { filePath } = input as DeliverFileInput
-  if (!filePath || !agentSlug || isError) return null
+  if (!filePath) return null
+
+  // Failed delivery: surface an explicit error marker instead of returning null
+  // (which would leave a dangling separator in the collapsed row).
+  if (isError) {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1 text-xs text-red-800 dark:text-red-200">
+        <FileTypeIcon filename={getFilename(filePath)} size={14} />
+        <span className="truncate">delivery failed</span>
+      </span>
+    )
+  }
+
+  if (!agentSlug) return null
 
   return (
     <FileDownloadPill

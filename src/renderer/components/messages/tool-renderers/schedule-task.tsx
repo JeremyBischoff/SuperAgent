@@ -1,43 +1,13 @@
 
 import { Calendar, Repeat, CalendarClock, Globe } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps, StreamingToolRendererProps } from './types'
+import { Field, ResultField } from './shared'
 import { scheduleTaskDef, cronToHuman, type ScheduleTaskInput } from '@shared/lib/tool-definitions/schedule-task'
 
 const parseScheduleTaskInput = scheduleTaskDef.parseInput
 
-function parseResult(result: unknown): string | null {
-  if (!result) return null
-
-  // If it's already parsed as an array (e.g., [{type: "text", text: "..."}])
-  if (Array.isArray(result) && result[0]?.text) {
-    return result[0].text
-  }
-
-  // If it's a string, try to parse as JSON
-  if (typeof result === 'string') {
-    try {
-      const parsed = JSON.parse(result)
-      if (Array.isArray(parsed) && parsed[0]?.text) {
-        return parsed[0].text
-      }
-    } catch {
-      // Not JSON, use as-is
-    }
-    return result
-  }
-
-  // If it's an object with text property
-  if (typeof result === 'object' && result !== null && 'text' in result) {
-    return (result as { text: string }).text
-  }
-
-  // Fallback: stringify
-  return JSON.stringify(result)
-}
-
 function ExpandedView({ input, result, isError }: ToolRendererProps) {
   const { scheduleType, scheduleExpression, prompt, name, timezone } = parseScheduleTaskInput(input)
-  const displayResult = parseResult(result ?? null)
   const isRecurring = scheduleType === 'cron'
 
   return (
@@ -67,41 +37,9 @@ function ExpandedView({ input, result, isError }: ToolRendererProps) {
         )}
       </div>
 
-      {/* Task name */}
-      {name && (
-        <div>
-          <div className="text-xs font-medium tracking-wider text-muted-foreground mb-1">Task Name</div>
-          <div className="bg-background rounded p-2 text-xs font-medium">
-            {name}
-          </div>
-        </div>
-      )}
-
-      {/* Prompt */}
-      {prompt && (
-        <div>
-          <div className="text-xs font-medium tracking-wider text-muted-foreground mb-1">Prompt</div>
-          <div className="bg-background rounded p-2 text-xs whitespace-pre-wrap">{prompt}</div>
-        </div>
-      )}
-
-      {/* Result */}
-      {displayResult && (
-        <div>
-          <div className="text-xs font-medium tracking-wider text-muted-foreground mb-1">
-            {isError ? 'Error' : 'Result'}
-          </div>
-          <div
-            className={`bg-background rounded p-2 text-xs ${
-              isError
-                ? 'text-red-800 dark:text-red-200'
-                : 'text-green-800 dark:text-green-200'
-            }`}
-          >
-            {displayResult}
-          </div>
-        </div>
-      )}
+      {name && <Field label="Task Name" className="font-medium">{name}</Field>}
+      {prompt && <Field label="Prompt" className="whitespace-pre-wrap">{prompt}</Field>}
+      {result && <ResultField result={result} isError={isError} />}
     </div>
   )
 }
@@ -141,25 +79,12 @@ function StreamingView({ partialInput }: StreamingToolRendererProps) {
         )}
       </div>
 
-      {/* Task name */}
-      {parsed.name && (
-        <div>
-          <div className="text-xs font-medium tracking-wider text-muted-foreground mb-1">Task Name</div>
-          <div className="bg-background rounded p-2 text-xs font-medium">
-            {parsed.name}
-          </div>
-        </div>
-      )}
-
-      {/* Prompt */}
+      {parsed.name && <Field label="Task Name" className="font-medium">{parsed.name}</Field>}
       {parsed.prompt && (
-        <div>
-          <div className="text-xs font-medium tracking-wider text-muted-foreground mb-1">Prompt</div>
-          <div className="bg-background rounded p-2 text-xs whitespace-pre-wrap">
-            {parsed.prompt}
-            <span className="animate-pulse">|</span>
-          </div>
-        </div>
+        <Field label="Prompt" className="whitespace-pre-wrap">
+          {parsed.prompt}
+          <span className="animate-pulse">|</span>
+        </Field>
       )}
     </div>
   )

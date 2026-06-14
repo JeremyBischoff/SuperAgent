@@ -1,5 +1,6 @@
 import { MessageCircle, Plus, Send } from 'lucide-react'
 import type { ToolRenderer, ToolRendererProps } from './types'
+import { ResultBlock } from './shared'
 import {
   listAvailableChatProvidersDef,
   listChatIntegrationsDef,
@@ -8,21 +9,6 @@ import {
   type AddChatIntegrationInput,
   type SendChatMessageInput,
 } from '@shared/lib/tool-definitions/chat-tools'
-
-function ResultBlock({ result, isError }: { result?: string | null; isError?: boolean }) {
-  if (!result) return null
-  return (
-    <pre
-      className={`whitespace-pre-wrap bg-background rounded p-2 text-xs ${
-        isError
-          ? 'text-red-800 dark:text-red-200'
-          : 'text-foreground/90'
-      }`}
-    >
-      {result}
-    </pre>
-  )
-}
 
 function ProviderBadge({ provider }: { provider?: string }) {
   if (!provider) return null

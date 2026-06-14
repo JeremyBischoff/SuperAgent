@@ -12,6 +12,9 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { markdownUrlTransform } from '@renderer/lib/markdown-url-transform'
 
+const SUBAGENT_LABEL_CLASS =
+  'font-sans font-normal shrink-0 text-sm text-foreground/65 group-hover:text-foreground leading-none transition-colors'
+
 interface SubAgentBlockProps {
   toolCall: ApiToolCall
   sessionId: string
@@ -180,8 +183,8 @@ export function SubAgentBlock({
         className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
         <Workflow className="h-3.5 w-3.5 shrink-0 text-foreground/45 group-hover:text-foreground transition-colors" />
-        <span className="font-sans font-normal shrink-0 text-sm text-foreground/65 group-hover:text-foreground leading-none transition-colors">Sub-agent:</span>
-        <span className="font-sans font-normal shrink-0 text-sm text-foreground/65 group-hover:text-foreground leading-none transition-colors">
+        <span className={SUBAGENT_LABEL_CLASS}>Sub-agent:</span>
+        <span className={SUBAGENT_LABEL_CLASS}>
           {subagentType}
         </span>
         {description && (
@@ -208,7 +211,7 @@ export function SubAgentBlock({
 
       {/* Body - subagent messages */}
       {expanded && (
-        <div className="border-t border-border/70 bg-muted/50 rounded-b-md px-3 py-3">
+        <div className="border-t border-border/70 bg-muted/50 px-3 py-3">
           <div className="space-y-3">
             {totalItems === 0 && isRunning && !hasStreamingContent && (
               <div className="text-xs text-muted-foreground italic py-2">

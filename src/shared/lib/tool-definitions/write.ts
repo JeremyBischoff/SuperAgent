@@ -19,4 +19,4 @@ function getSummary(input: unknown): string | null {
   return file_path ? getDisplayPath(file_path) : null
 }
 
-export const writeDef = { displayName: 'Write', iconName: 'FilePlus', parseInput, getSummary } as const
+export const writeDef = { displayName: 'Write', parseInput, getSummary } as const
