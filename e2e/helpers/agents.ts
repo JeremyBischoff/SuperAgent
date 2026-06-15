@@ -23,6 +23,8 @@ export async function createAgent(request: APIRequestContext, name: string): Pro
 
 export async function openAgentHome(page: Page, agent: Pick<TestAgent, 'slug' | 'name'>) {
   const agentItem = page.locator(`[data-testid="agent-item-${agent.slug}"]`)
+  await expect(agentItem).toHaveCount(1, { timeout: 10000 })
+  await agentItem.scrollIntoViewIfNeeded({ timeout: 10000 })
   await expect(agentItem).toBeVisible({ timeout: 10000 })
   await agentItem.click()
   await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(agent.name, { timeout: 10000 })

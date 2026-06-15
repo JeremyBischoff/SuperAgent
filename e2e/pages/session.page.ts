@@ -173,6 +173,16 @@ export class SessionPage {
   }
 
   /**
+   * Click a specific session from AgentHome's main "Sessions" list.
+   */
+  async selectSessionOnAgentHome(sessionId: string) {
+    const session = this.page.getByTestId(`agent-home-session-${sessionId}`)
+    await expect(session).toBeVisible({ timeout: 15000 })
+    await session.click()
+    await expect(this.getMessageList()).toBeVisible({ timeout: 15000 })
+  }
+
+  /**
    * Assert that the assistant message contains expected text
    */
   async expectAssistantMessage(text: string, index = 0) {

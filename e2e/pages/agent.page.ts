@@ -69,8 +69,9 @@ export class AgentPage {
 
   private async revealAgentItem(slug: string, timeout: number) {
     const item = this.page.locator(`[data-testid="agent-item-${slug}"]`)
-    await item.scrollIntoViewIfNeeded({ timeout: Math.min(timeout, 5000) })
-    await expect(item).toBeVisible({ timeout: Math.min(timeout, 5000) })
+    await expect(item).toHaveCount(1, { timeout })
+    await item.scrollIntoViewIfNeeded({ timeout })
+    await expect(item).toBeVisible({ timeout })
     return item
   }
 
