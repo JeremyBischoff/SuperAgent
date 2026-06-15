@@ -71,6 +71,7 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
   // the message up, so cancelling is no longer possible; the ghost will
   // materialize on the next refetch.
   const [pickedUpIds, setPickedUpIds] = useState<Set<string>>(new Set())
+  const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(new Set())
   const { user } = useUser()
   const [, setSessionDraft] = useDraft<string>(`session:${sessionId}`)
   // Imperative draft access for restoring undelivered messages at idle (must not
@@ -90,6 +91,18 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
     },
     [sessionId, agentSlug, deleteToolCall]
   )
+
+  const handleToolCallExpandedChange = useCallback((toolCallId: string, expanded: boolean) => {
+    setExpandedToolCallIds((current) => {
+      const next = new Set(current)
+      if (expanded) {
+        next.add(toolCallId)
+      } else {
+        next.delete(toolCallId)
+      }
+      return next
+    })
+  }, [])
 
   // Voice Agent feedback dialog state
   const { data: agentData } = useAgent(agentSlug)
@@ -677,7 +690,18 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
             ) : (
               <>
                 <MessageErrorBoundary kind="message" raw={item} itemId={item.id}>
-                  <MessageItem message={item as ApiMessage} agentSlug={agentSlug} sessionId={sessionId} isSessionActive={canHaveRunningToolCalls.has(item.id)} activeSubagents={activeSubagents} completedSubagents={completedSubagents} onRemoveMessage={handleRemoveMessage} onRemoveToolCall={handleRemoveToolCall} />
+                  <MessageItem
+                    message={item as ApiMessage}
+                    agentSlug={agentSlug}
+                    sessionId={sessionId}
+                    isSessionActive={canHaveRunningToolCalls.has(item.id)}
+                    activeSubagents={activeSubagents}
+                    completedSubagents={completedSubagents}
+                    onRemoveMessage={handleRemoveMessage}
+                    onRemoveToolCall={handleRemoveToolCall}
+                    expandedToolCallIds={expandedToolCallIds}
+                    onToolCallExpandedChange={handleToolCallExpandedChange}
+                  />
                 </MessageErrorBoundary>
                 {turnDeliveredFiles.has(item.id) && item.id !== deferredElapsedMessageId && (
                   <DeliveredFiles files={turnDeliveredFiles.get(item.id)!} agentSlug={agentSlug} />
@@ -763,7 +787,13 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
             } else {
               inner = (
                 <div className="max-w-[80%]">
-                  <ToolCallItem toolCall={syntheticToolCall} agentSlug={agentSlug} isSessionActive={isActive} />
+                  <ToolCallItem
+                    toolCall={syntheticToolCall}
+                    agentSlug={agentSlug}
+                    isSessionActive={isActive}
+                    expanded={expandedToolCallIds.has(syntheticToolCall.id)}
+                    onExpandedChange={(expanded) => handleToolCallExpandedChange(syntheticToolCall.id, expanded)}
+                  />
                 </div>
               )
             }

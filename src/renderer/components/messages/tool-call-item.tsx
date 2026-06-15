@@ -1,7 +1,7 @@
 
 import { cn } from '@shared/lib/utils/cn'
 import { Check, X, Ban, ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react'
-import { useState, useRef, useMemo, memo } from 'react'
+import { useState, useRef, useMemo, memo, useCallback } from 'react'
 import { getToolRenderer } from './tool-renderers'
 import { parseToolResult } from '@renderer/lib/parse-tool-result'
 import { useElapsedTimer } from '@renderer/hooks/use-elapsed-timer'
@@ -15,6 +15,8 @@ interface ToolCallItemProps {
   messageCreatedAt?: Date | string
   agentSlug?: string
   isSessionActive?: boolean
+  expanded?: boolean
+  onExpandedChange?: (expanded: boolean) => void
 }
 
 interface StreamingToolCallItemProps {
@@ -88,8 +90,27 @@ export function StatusIndicator({ status }: { status: string }) {
   )
 }
 
-function ToolCallItemComponent({ toolCall, messageCreatedAt, agentSlug, isSessionActive }: ToolCallItemProps) {
-  const [expanded, setExpanded] = useState(false)
+function ToolCallItemComponent({
+  toolCall,
+  messageCreatedAt,
+  agentSlug,
+  isSessionActive,
+  expanded: controlledExpanded,
+  onExpandedChange,
+}: ToolCallItemProps) {
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false)
+  const expanded = controlledExpanded ?? uncontrolledExpanded
+  const setExpanded = useCallback(
+    (next: boolean | ((current: boolean) => boolean)) => {
+      const nextValue = typeof next === 'function' ? next(expanded) : next
+      if (onExpandedChange) {
+        onExpandedChange(nextValue)
+      } else {
+        setUncontrolledExpanded(nextValue)
+      }
+    },
+    [expanded, onExpandedChange]
+  )
   const status = getStatus(toolCall, isSessionActive)
   const renderer = getToolRenderer(toolCall.name)
   const isPendingUserInput = status === 'running' && isUserInputTool(toolCall.name)
@@ -116,7 +137,11 @@ function ToolCallItemComponent({ toolCall, messageCreatedAt, agentSlug, isSessio
   return (
     <div className="text-sm border border-border/70 rounded-md overflow-hidden" data-testid={`tool-call-${toolCall.name}`}>
       <button
-        onClick={() => setExpanded(!expanded)}
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${toolCall.name} tool call`}
+        data-testid={`tool-call-toggle-${toolCall.name}`}
+        onClick={() => setExpanded((current) => !current)}
         className={cn('flex w-full items-center gap-2 pl-2 pr-2 py-1.5 group hover:bg-muted/50 transition-colors', expanded && 'bg-muted/50')}
       >
         <ToolIcon className="h-3.5 w-3.5 shrink-0 text-foreground/45 group-hover:text-foreground transition-colors" />
