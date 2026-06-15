@@ -72,7 +72,7 @@ test.describe('Agent Rename', () => {
     const agentName = uniqueAgentName('InlineEnter')
     const newName = `${agentName}-Renamed`
 
-    await agentPage.createAgent(agentName)
+    const createdAgent = await agentPage.createAgent(agentName)
 
     // Click the agent name heading to enter edit mode
     const nameHeading = page.locator('[data-testid="agent-name"]')
@@ -91,6 +91,7 @@ test.describe('Agent Rename', () => {
 
     // Sidebar + breadcrumb should reflect the new name as well
     await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(newName)
+    agentPage.rememberAgent({ ...createdAgent, name: newName })
     const sidebarItem = await agentPage.waitForAgentInSidebar(newName, { reloadOnMiss: false })
     await expect(sidebarItem).toContainText(newName)
 
@@ -102,7 +103,7 @@ test.describe('Agent Rename', () => {
     const agentName = uniqueAgentName('InlineSave')
     const newName = `${agentName}-Renamed`
 
-    await agentPage.createAgent(agentName)
+    const createdAgent = await agentPage.createAgent(agentName)
 
     await page.locator('[data-testid="agent-name"]').click()
 
@@ -115,6 +116,7 @@ test.describe('Agent Rename', () => {
     await expect(nameInput).not.toBeVisible()
     await expect(page.locator('[data-testid="agent-name"]')).toHaveText(newName)
     await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(newName)
+    agentPage.rememberAgent({ ...createdAgent, name: newName })
     const sidebarItem = await agentPage.waitForAgentInSidebar(newName, { reloadOnMiss: false })
     await expect(sidebarItem).toContainText(newName)
 

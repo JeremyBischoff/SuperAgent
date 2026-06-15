@@ -1,16 +1,12 @@
-import { test, expect } from '@playwright/test'
+import { test as base, expect } from '@playwright/test'
 import { AppPage } from '../pages/app.page'
 import { SessionPage } from '../pages/session.page'
 import { createAgent, openAgentHome } from '../helpers/agents'
 
-
-test.describe('User Input Requests', () => {
-  let appPage: AppPage
-  let sessionPage: SessionPage
-
-  test.beforeEach(async ({ page, request }, testInfo) => {
-    appPage = new AppPage(page)
-    sessionPage = new SessionPage(page)
+const test = base.extend<{ sessionPage: SessionPage }>({
+  sessionPage: async ({ page, request }, provideSessionPage, testInfo) => {
+    const appPage = new AppPage(page)
+    const sessionPage = new SessionPage(page)
 
     const testAgentName = `Input Agent ${testInfo.workerIndex}-${Date.now()}`
     const agent = await createAgent(request, testAgentName)
@@ -18,9 +14,12 @@ test.describe('User Input Requests', () => {
     await appPage.goto()
     await appPage.waitForAgentsLoaded()
     await openAgentHome(page, agent)
-  })
+    await provideSessionPage(sessionPage)
+  },
+})
 
-  test('secret request: provide a secret', async ({ page }) => {
+test.describe('User Input Requests', () => {
+  test('secret request: provide a secret', async ({ sessionPage }) => {
     // "ask secret" triggers UserInputRequestScenario with mcp__user-input__request_secret
     await sessionPage.sendMessage('ask secret')
 
@@ -41,7 +40,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('secret request: decline a secret', async ({ page }) => {
+  test('secret request: decline a secret', async ({ sessionPage }) => {
     await sessionPage.sendMessage('ask secret')
 
     await sessionPage.waitForSecretRequest('OPENAI_API_KEY')
@@ -56,7 +55,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('question request: answer a question', async ({ page }) => {
+  test('question request: answer a question', async ({ sessionPage }) => {
     // "ask question" triggers UserInputRequestScenario with AskUserQuestion
     await sessionPage.sendMessage('ask question')
 
@@ -80,7 +79,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('composer is replaced by the request card while a question is pending', async ({ page }) => {
+  test('composer is replaced by the request card while a question is pending', async ({ page, sessionPage }) => {
     // Composer should be visible before the request arrives
     await expect(sessionPage.getMessageInput()).toBeVisible()
     await expect(page.locator('[data-testid="pending-request-slot"]')).toHaveCount(0)
@@ -100,7 +99,7 @@ test.describe('User Input Requests', () => {
     await expect(page.locator('[data-testid="pending-request-slot"]')).toHaveCount(0)
   })
 
-  test('question request: decline a question', async ({ page }) => {
+  test('question request: decline a question', async ({ sessionPage }) => {
     await sessionPage.sendMessage('ask question')
 
     await sessionPage.waitForQuestionRequest()
@@ -115,7 +114,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('multi-question request: header chevrons flatten across all sub-questions', async ({ page }) => {
+  test('multi-question request: header chevrons flatten across all sub-questions', async ({ page, sessionPage }) => {
     // "ask multi" triggers a single AskUserQuestion containing 3 questions.
     // The header chevrons should advance through every question, not jump to
     // the (non-existent) next card.
@@ -144,7 +143,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.expectStackPagination({ index: 1, total: 3 })
   })
 
-  test('multi-question request: bottom Next button stays in sync with header chevrons', async ({ page }) => {
+  test('multi-question request: bottom Next button stays in sync with header chevrons', async ({ page, sessionPage }) => {
     await sessionPage.sendMessage('ask multi')
     await sessionPage.waitForQuestionRequest()
 
@@ -165,7 +164,7 @@ test.describe('User Input Requests', () => {
     await expect(container).toContainText('Which database should we use?')
   })
 
-  test('multi-question request: submit button only renders on the last sub-page', async ({ page }) => {
+  test('multi-question request: submit button only renders on the last sub-page', async ({ sessionPage }) => {
     await sessionPage.sendMessage('ask multi')
     await sessionPage.waitForQuestionRequest()
 
@@ -183,7 +182,7 @@ test.describe('User Input Requests', () => {
     await expect(container.locator('[data-testid="question-next-btn"]')).toHaveCount(0)
   })
 
-  test('multi-question request: answer all questions and complete', async ({ page }) => {
+  test('multi-question request: answer all questions and complete', async ({ sessionPage }) => {
     await sessionPage.sendMessage('ask multi')
     await sessionPage.waitForQuestionRequest()
 
@@ -193,7 +192,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('multi-question + secret: header pagination flattens across the card boundary', async ({ page }) => {
+  test('multi-question + secret: header pagination flattens across the card boundary', async ({ page, sessionPage }) => {
     // 1 secret + 1 AskUserQuestion (3 questions) = 4 flat positions.
     await sessionPage.sendMessage('ask multi parallel')
     await sessionPage.waitForSecretRequest('DATABASE_URL')
@@ -204,7 +203,7 @@ test.describe('User Input Requests', () => {
     ).toHaveAttribute('data-count', '4')
   })
 
-  test('parallel requests: secret + question appear simultaneously', async ({ page }) => {
+  test('parallel requests: secret + question appear simultaneously', async ({ page, sessionPage }) => {
     // "ask parallel" triggers UserInputRequestScenario with both a secret and a question
     await sessionPage.sendMessage('ask parallel')
 
@@ -230,7 +229,7 @@ test.describe('User Input Requests', () => {
     ).toHaveAttribute('data-count', '2')
   })
 
-  test('parallel requests: answer both independently', async ({ page }) => {
+  test('parallel requests: answer both independently', async ({ sessionPage }) => {
     await sessionPage.sendMessage('ask parallel')
 
     // Wait for both to appear in the stack (order is non-deterministic).
@@ -258,7 +257,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('parallel requests: decline secret, answer question', async ({ page }) => {
+  test('parallel requests: decline secret, answer question', async ({ sessionPage }) => {
     await sessionPage.sendMessage('ask parallel')
 
     await sessionPage.waitForSecretRequest('DATABASE_URL')
@@ -282,7 +281,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('script run request: approve execution', async ({ page }) => {
+  test('script run request: approve execution', async ({ sessionPage }) => {
     // No global toggle needed — permissions are now per-agent via ComputerUsePermissionManager
     // With no cached permission, the request will be shown to the user for approval
 
@@ -309,7 +308,7 @@ test.describe('User Input Requests', () => {
     await sessionPage.waitForInputEnabled(15000)
   })
 
-  test('script run request: deny execution', async ({ page }) => {
+  test('script run request: deny execution', async ({ sessionPage }) => {
     // No global toggle needed — permissions are now per-agent via ComputerUsePermissionManager
 
     await sessionPage.sendMessage('ask script')

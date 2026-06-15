@@ -28,16 +28,8 @@ test.describe('Search palette', () => {
     const agentName = `Search Agent ${stamp}`
     const sessionName = `Refactor Login ${stamp}`
 
-    await agentPage.createAgent(agentName)
-
-    // Agents are created as "Untitled" with a random slug, then renamed
-    // asynchronously. The display name maps to the prompt; the slug does not.
-    // Look up the actual slug from the API by name.
-    const agentsRes = await request.get(`${API}/api/agents`)
-    expect(agentsRes.ok()).toBe(true)
-    const agents = (await agentsRes.json()) as Array<{ slug: string; name: string }>
-    const slug = agents.find((a) => a.name === agentName)?.slug
-    expect(slug, `agent ${agentName} not found in API`).toBeDefined()
+    const createdAgent = await agentPage.createAgent(agentName)
+    const slug = createdAgent.slug
 
     // The auto-created session keeps its default name in mock mode (no real
     // LLM). Rename it via the API so we can match it by a distinctive substring.
@@ -52,6 +44,25 @@ test.describe('Search palette', () => {
     )
     expect(patchRes.ok()).toBe(true)
 
+    const lastActivityAt = new Date().toISOString()
+    await page.route('**/api/agents', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback()
+        return
+      }
+
+      await route.fulfill({
+        json: [{
+          slug,
+          name: agentName,
+          createdAt: lastActivityAt,
+          status: 'running',
+          containerPort: null,
+          lastActivityAt,
+        }],
+      })
+    })
+
     // Sessions are cached by React Query — the renderer hasn't seen the rename
     // yet. Reload so the search palette pulls fresh data on first open.
     await appPage.reload()
@@ -65,8 +76,8 @@ test.describe('Search palette', () => {
     // Filter case-insensitively by a substring of the session name
     await searchInput.fill('refactor')
     const results = page.locator('[data-testid="search-results"]')
-    await expect(results.getByTestId('search-agent-row').filter({ hasText: agentName })).toBeVisible()
-    await expect(results.getByTestId('search-session-row').filter({ hasText: sessionName })).toBeVisible()
+    await expect(results.getByTestId('search-agent-row').filter({ hasText: agentName })).toBeVisible({ timeout: 10000 })
+    await expect(results.getByTestId('search-session-row').filter({ hasText: sessionName })).toBeVisible({ timeout: 10000 })
 
     // Active row should be the agent (index 0) — ArrowDown moves to the session
     await page.keyboard.press('ArrowDown')

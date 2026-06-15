@@ -25,11 +25,9 @@ test.describe('Navigation — discriminated AgentView', () => {
   let sessionPage: SessionPage
 
   async function deleteAgentBestEffort(name?: string) {
+    if (!name) return
     try {
-      if (name) {
-        await agentPage.selectAgent(name)
-      }
-      await agentPage.deleteAgent()
+      await agentPage.deleteAgentByNameFromApi(name)
     } catch {
       // Cleanup is not part of the navigation invariant; the E2E data dir is
       // reset for each run.
@@ -71,7 +69,7 @@ test.describe('Navigation — discriminated AgentView', () => {
     await expect(page.locator('[data-testid="message-list"]')).not.toBeVisible()
 
     // Cleanup
-    await deleteAgentBestEffort()
+    await deleteAgentBestEffort(agentName)
   })
 
   test('Agent → Connections → back returns to agent home', async ({ page }) => {
@@ -90,7 +88,7 @@ test.describe('Navigation — discriminated AgentView', () => {
     await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
 
     // Cleanup
-    await deleteAgentBestEffort()
+    await deleteAgentBestEffort(agentName)
   })
 
   test('API Logs → Connections → API Logs: only one view at a time', async ({ page }) => {
@@ -117,7 +115,7 @@ test.describe('Navigation — discriminated AgentView', () => {
 
     // Cleanup
     await page.locator('[data-testid="api-logs-back-button"]').click()
-    await deleteAgentBestEffort()
+    await deleteAgentBestEffort(agentName)
   })
 
   test('Switching agents resets view to that agent\'s home', async ({ page }) => {
@@ -160,7 +158,7 @@ test.describe('Navigation — discriminated AgentView', () => {
     await expect(page.locator('[data-testid="message-list"]')).not.toBeVisible()
 
     // Cleanup
-    await deleteAgentBestEffort()
+    await deleteAgentBestEffort(agentName)
   })
 
   test('Page reload does not retain selected view (safe default to home)', async ({ page }) => {

@@ -1,33 +1,31 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { AppPage } from '../pages/app.page'
 import { AgentPage } from '../pages/agent.page'
 import { SessionPage } from '../pages/session.page'
 
+async function setupDashboardTaskTest(page: Page) {
+  const appPage = new AppPage(page)
+  const agentPage = new AgentPage(page)
+  const sessionPage = new SessionPage(page)
+
+  await appPage.goto()
+  await appPage.waitForAgentsLoaded()
+
+  return { appPage, agentPage, sessionPage }
+}
+
 test.describe('Dashboard & Scheduled Task Tool Rendering', () => {
-  let appPage: AppPage
-  let agentPage: AgentPage
-  let sessionPage: SessionPage
-
-  test.beforeEach(async ({ page }) => {
-    appPage = new AppPage(page)
-    agentPage = new AgentPage(page)
-    sessionPage = new SessionPage(page)
-
-    await appPage.goto()
-    await appPage.waitForAgentsLoaded()
-  })
-
   test('schedule task tool renders with cron and task details', async ({ page }) => {
+    const { agentPage, sessionPage } = await setupDashboardTaskTest(page)
     const agentName = `Schedule Agent ${Date.now()}`
     await agentPage.createAgent(agentName)
 
     // Trigger the "schedule task" scenario
     await sessionPage.sendMessage('schedule task for daily issues')
-    await sessionPage.waitForResponse(15000)
+    await sessionPage.expectToolCall('mcp__user-input__schedule_task', 15000)
     await sessionPage.waitForInputEnabled(15000)
 
     // Verify the schedule task tool call is rendered
-    await sessionPage.expectToolCall('mcp__user-input__schedule_task', 15000)
     const toolCall = sessionPage.getToolCall('mcp__user-input__schedule_task')
     await expect(toolCall).toBeVisible()
 
@@ -36,11 +34,12 @@ test.describe('Dashboard & Scheduled Task Tool Rendering', () => {
   })
 
   test('schedule task tool call can be expanded', async ({ page }) => {
+    const { agentPage, sessionPage } = await setupDashboardTaskTest(page)
     const agentName = `Schedule Expand ${Date.now()}`
     await agentPage.createAgent(agentName)
 
     await sessionPage.sendMessage('schedule task for daily issues')
-    await sessionPage.waitForResponse(15000)
+    await sessionPage.expectToolCall('mcp__user-input__schedule_task', 15000)
     await sessionPage.waitForInputEnabled(15000)
 
     const toolCall = sessionPage.getToolCall('mcp__user-input__schedule_task')
@@ -64,11 +63,12 @@ test.describe('Dashboard & Scheduled Task Tool Rendering', () => {
   })
 
   test('scheduled task is created in the database and appears on agent home', async ({ page }) => {
+    const { appPage, agentPage, sessionPage } = await setupDashboardTaskTest(page)
     const agentName = `Schedule DB ${Date.now()}`
     await agentPage.createAgent(agentName)
 
     await sessionPage.sendMessage('schedule task for daily issues')
-    await sessionPage.waitForResponse(15000)
+    await sessionPage.expectToolCall('mcp__user-input__schedule_task', 15000)
     await sessionPage.waitForInputEnabled(15000)
 
     // Wait for the tool call to complete
