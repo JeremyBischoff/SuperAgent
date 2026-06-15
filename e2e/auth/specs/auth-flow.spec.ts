@@ -7,8 +7,6 @@ import { AppPage } from '../../pages/app.page'
 import { AgentPage } from '../../pages/agent.page'
 import { SessionPage } from '../../pages/session.page'
 
-type SignupUser = Pick<AuthTestUser, 'name' | 'email' | 'password'>
-
 async function resetForOpenSignup(authFactories: AuthFactories) {
   await authFactories.resetAuthData()
   const bootstrapAdmin = await authFactories.createAdmin({ name: 'Bootstrap Admin' })
@@ -159,6 +157,22 @@ test.describe('Auth Flow', () => {
     await expect(adminAgentPage.getAgentItem(agent.name)).not.toBeVisible()
 
     await closePage(adminPage)
+  })
+
+  test('authenticated user can create an agent through the UI', async ({ authFactories }, testInfo) => {
+    const { owner } = await seedUsers(authFactories)
+    const page = await appPageForUser(authFactories, owner)
+    const agentPage = new AgentPage(page)
+    const agentName = `Auth UI Agent ${testInfo.workerIndex}-${Date.now()}`
+
+    const agent = await agentPage.createAgent(agentName)
+    expect(agent.name).toBe(agentName)
+
+    const sidebarItem = await agentPage.waitForAgentInSidebar(agentName, { reloadOnMiss: false })
+    await expect(sidebarItem).toContainText(agentName)
+
+    await agentPage.deleteAgentByNameFromApi(agentName)
+    await closePage(page)
   })
 
   test('owner invites a user who can use the agent but cannot administer it', async ({ authFactories }) => {

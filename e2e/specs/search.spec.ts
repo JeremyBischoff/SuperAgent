@@ -96,6 +96,68 @@ test.describe('Search palette', () => {
     await expect(page.locator('[data-testid="search-input"]')).not.toBeVisible()
   })
 
+  test('Empty query supports expanding sessions and keyboard navigation', async ({ page, request }, testInfo) => {
+    const stamp = `${testInfo.workerIndex}-${Date.now()}`
+    const agentName = `Search Expand Agent ${stamp}`
+    const sessionName = `Expand Session ${stamp}`
+
+    await agentPage.createAgent(agentName)
+
+    const agentsRes = await request.get(`${API}/api/agents`)
+    expect(agentsRes.ok()).toBe(true)
+    const agents = (await agentsRes.json()) as Array<{ slug: string; name: string }>
+    const slug = agents.find((a) => a.name === agentName)?.slug
+    expect(slug, `agent ${agentName} not found in API`).toBeDefined()
+
+    const sessionsRes = await request.get(`${API}/api/agents/${slug}/sessions`)
+    expect(sessionsRes.ok()).toBe(true)
+    const sessions = (await sessionsRes.json()) as Array<{ id: string }>
+    expect(sessions.length).toBeGreaterThan(0)
+    const sessionId = sessions[0].id
+
+    await expect(async () => {
+      const res = await request.patch(
+        `${API}/api/agents/${slug}/sessions/${sessionId}`,
+        { data: { name: sessionName } }
+      )
+      expect(res.ok()).toBe(true)
+    }).toPass({ timeout: 5000 })
+
+    await appPage.reload()
+
+    await page.keyboard.press('ControlOrMeta+k')
+    const searchInput = page.locator('[data-testid="search-input"]')
+    await expect(searchInput).toBeVisible()
+
+    const results = page.locator('[data-testid="search-results"]')
+    const agentRow = results.getByTestId('search-agent-row').filter({ hasText: agentName })
+    const sessionRow = results.getByTestId('search-session-row').filter({ hasText: sessionName })
+    const expandToggle = agentRow.getByTestId('search-agent-expand')
+
+    await expect(agentRow).toBeVisible()
+    await expect(expandToggle).toBeVisible()
+    await expect(sessionRow).not.toBeVisible()
+
+    await agentRow.hover()
+    await page.keyboard.press('ArrowRight')
+    await expect(sessionRow).toBeVisible()
+
+    await page.keyboard.press('ArrowLeft')
+    await expect(sessionRow).not.toBeVisible()
+
+    await expandToggle.click()
+    await expect(sessionRow).toBeVisible()
+
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(page.locator('[data-testid="search-input"]')).not.toBeVisible()
+    await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(agentName)
+    await expect(page.locator('[data-testid="message-list"]')).toBeVisible({ timeout: 10000 })
+
+    await page.locator('[data-testid="agent-breadcrumb"]').click()
+    await agentPage.deleteAgent()
+  })
+
   test('Search query shows matching session with its agent', async ({ page, request }) => {
     const stamp = Date.now()
     const agentName = `Recent Agent ${stamp}`

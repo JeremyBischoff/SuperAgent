@@ -69,7 +69,8 @@ test.describe('Agent Rename', () => {
 
     // Sidebar + breadcrumb should reflect the new name as well
     await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(newName)
-    await agentPage.waitForAgentInSidebar(newName)
+    const sidebarItem = await agentPage.waitForAgentInSidebar(newName, { reloadOnMiss: false })
+    await expect(sidebarItem).toContainText(newName)
 
     await agentPage.deleteAgentByNameFromApi(newName)
   })
@@ -91,6 +92,8 @@ test.describe('Agent Rename', () => {
     await expect(nameInput).not.toBeVisible()
     await expect(page.locator('[data-testid="agent-name"]')).toHaveText(newName)
     await expect(page.locator('[data-testid="agent-breadcrumb"]')).toHaveText(newName)
+    const sidebarItem = await agentPage.waitForAgentInSidebar(newName, { reloadOnMiss: false })
+    await expect(sidebarItem).toContainText(newName)
 
     await agentPage.deleteAgentByNameFromApi(newName)
   })

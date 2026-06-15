@@ -56,8 +56,15 @@ test.describe('Browser Streaming', () => {
         const ctx = c.getContext('2d')
         if (!ctx) return false
         const imageData = ctx.getImageData(0, 0, c.width, c.height)
-        // Check that at least some non-alpha pixels are non-zero (i.e. a frame was drawn)
-        return imageData.data.some((v, i) => i % 4 !== 3 && v !== 0)
+        // The test page has a blue background. Requiring blue-dominant pixels
+        // proves we drew the requested browser frame, not a blank/fallback image.
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          const r = imageData.data[i]
+          const g = imageData.data[i + 1]
+          const b = imageData.data[i + 2]
+          if (b > 120 && b > r + 40 && b > g + 40) return true
+        }
+        return false
       },
       { timeout: 20000 },
     )
