@@ -82,7 +82,7 @@ function calculateCost(
   cacheCreationTokens: number,
   cacheReadTokens: number,
 ): number {
-  const pricing = (MODEL_PRICING as Record<string, { input: number; output: number; cacheCreation: number; cacheRead: number }>)[model]
+  const pricing = getModelPricing(model)
   if (!pricing) return 0
 
   return (

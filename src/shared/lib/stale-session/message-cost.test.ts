@@ -6,7 +6,7 @@ describe('estimateNextMessageCostUsd', () => {
     // 150k tokens of context re-read, idle => cache creation on the whole context.
     // claude-sonnet-4-6 cacheCreation rate: 3.75 per million => 150_000 * 3.75 / 1_000_000 = 0.5625 USD
     const usd = estimateNextMessageCostUsd({ contextTokens: 150_000, model: 'claude-sonnet-4-6', idle: true })
-    expect(usd).toBeGreaterThan(0)
+    expect(usd).toBeCloseTo(0.5625, 6)
   })
 
   it('returns null for an unknown model rather than throwing', () => {
@@ -15,9 +15,15 @@ describe('estimateNextMessageCostUsd', () => {
 
   it('costs more cold (cache-creation) than warm (cache-read)', () => {
     // claude-sonnet-4-6: cacheCreation=3.75 > cacheRead=0.3 per million
+    // cold: 100_000 * 3.75 / 1_000_000 = 0.375 USD; warm: 100_000 * 0.3 / 1_000_000 = 0.03 USD
     const cold = estimateNextMessageCostUsd({ contextTokens: 100_000, model: 'claude-sonnet-4-6', idle: true })!
     const warm = estimateNextMessageCostUsd({ contextTokens: 100_000, model: 'claude-sonnet-4-6', idle: false })!
+    expect(cold).toBeCloseTo(0.375, 6)
     expect(cold).toBeGreaterThan(warm)
+  })
+
+  it('returns 0 for zero context tokens', () => {
+    expect(estimateNextMessageCostUsd({ contextTokens: 0, model: 'claude-sonnet-4-6', idle: true })).toBe(0)
   })
 })
 
