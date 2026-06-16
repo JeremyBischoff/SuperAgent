@@ -12,5 +12,8 @@ export const STALE_CONTEXT_TOKENS = 100_000
  *  for the instruction + output). */
 export const SUMMARY_INPUT_BUDGET_TOKENS = 150_000
 
+/** Max output tokens for the summary generation. */
+export const SUMMARY_MAX_TOKENS = 700
+
 /** Max wait for summary generation before treating it as a failure. */
 export const SUMMARY_TIMEOUT_MS = 15_000

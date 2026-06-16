@@ -8,8 +8,9 @@
 
 import { getConfiguredLlmClient } from '../llm-provider/helpers'
 import { getEffectiveModels } from '../config/settings'
+import { withRetry } from '@shared/lib/utils/retry'
 import { summaryPayloadSchema } from '../stale-session/stale-session-schema'
-import { SUMMARY_INPUT_BUDGET_TOKENS } from '../stale-session/stale-session-config'
+import { SUMMARY_INPUT_BUDGET_TOKENS, SUMMARY_MAX_TOKENS } from '../stale-session/stale-session-config'
 import { getSessionJsonlPath, readJsonlFile } from '@shared/lib/utils/file-storage'
 import type {
   JsonlEntry,
@@ -91,11 +92,11 @@ export async function summarize(
     (priorBoundarySummary ? `[Earlier summary]\n${priorBoundarySummary}\n\n` : '') +
     slice.map((m) => `${m.role.toUpperCase()}: ${m.text}`).join('\n\n')
 
-  const res = await client.messages.create({
+  const res = await withRetry(() => client.messages.create({
     model,
-    max_tokens: 700,
+    max_tokens: SUMMARY_MAX_TOKENS,
     messages: [{ role: 'user', content: `${SUMMARY_INSTRUCTION}\n\n${transcript}` }],
-  })
+  }))
 
   const text = res.content
     .map((c: { type: string; text?: string }) => (c.type === 'text' ? (c.text ?? '') : ''))
@@ -146,7 +147,7 @@ function extractText(content: string | ContentBlock[]): string {
   if (typeof content === 'string') return content
   return content
     .filter((b): b is ContentBlock & { type: 'text'; text: string } => b.type === 'text')
-    .map((b) => (b as { type: 'text'; text: string }).text)
+    .map((b) => b.text)
     .join('')
 }
 
@@ -185,9 +186,8 @@ export async function loadTranscript(
     if (isSystemEntry(entry) && entry.subtype === 'compact_boundary') {
       for (let j = i + 1; j < entries.length && j <= i + 3; j++) {
         const next = entries[j]
-        if (isMessageEntry(next) && (next as JsonlMessageEntry).isCompactSummary) {
-          const summaryText =
-            typeof next.message.content === 'string' ? next.message.content : ''
+        if (isMessageEntry(next) && next.isCompactSummary) {
+          const summaryText = extractText(next.message.content)
           if (summaryText) priorBoundarySummary = summaryText
           break
         }
@@ -197,7 +197,7 @@ export async function loadTranscript(
 
     // Skip system entries, non-message entries, and compact summary injections
     if (!isMessageEntry(entry)) continue
-    const msgEntry = entry as JsonlMessageEntry
+    const msgEntry = entry
     if (msgEntry.isCompactSummary) continue
 
     // Skip tool-result-only user messages
@@ -212,7 +212,7 @@ export async function loadTranscript(
     const text = extractText(msgEntry.message.content)
     if (!text) continue
 
-    transcript.push({ role: msgEntry.type as 'user' | 'assistant', text })
+    transcript.push({ role: msgEntry.type, text })
   }
 
   return { transcript, priorBoundarySummary }

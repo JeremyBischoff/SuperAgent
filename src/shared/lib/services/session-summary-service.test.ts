@@ -9,7 +9,7 @@ vi.mock('../llm-provider/helpers', () => ({
   }),
 }))
 
-import { buildBranchInitialMessage } from './session-summary-service'
+import { buildBranchInitialMessage, budgetedRecentSlice } from './session-summary-service'
 
 describe('buildBranchInitialMessage', () => {
   it('composes preamble + summary + in-container jsonl path + user message', async () => {
@@ -48,6 +48,32 @@ describe('buildBranchInitialMessage', () => {
           { role: 'assistant', text: 'done' },
         ],
       }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(SyntaxError)
+  })
+})
+
+describe('budgetedRecentSlice', () => {
+  it('keeps at least one message even when it alone exceeds the budget', () => {
+    const msgs = [{ role: 'user' as const, text: 'a'.repeat(100) }]
+    // budget of 5 tokens = 20 chars; message is 100 chars (~25 tokens) — exceeds budget
+    const result = budgetedRecentSlice(msgs, 5)
+    expect(result).toHaveLength(1)
+    expect(result[0].text).toBe('a'.repeat(100))
+  })
+
+  it('trims older messages to fit the budget and returns the kept slice in chronological order', () => {
+    const msgs = [
+      { role: 'user' as const, text: 'aaa' },       // oldest — ~1 token
+      { role: 'assistant' as const, text: 'bbb' },  // ~1 token
+      { role: 'user' as const, text: 'ccc' },       // ~1 token
+      { role: 'assistant' as const, text: 'ddd' },  // ~1 token (newest)
+    ]
+    // budget = 2 tokens (8 chars); each message is 3 chars (~1 token).
+    // Walk newest-first: ddd (1 token, used=1), ccc (1 token, used=2), bbb would push to 3 > 2 and kept>0 so stop.
+    // Kept: [ccc, ddd] in chronological order.
+    const result = budgetedRecentSlice(msgs, 2)
+    expect(result).toHaveLength(2)
+    expect(result[0].text).toBe('ccc')  // older of the two kept
+    expect(result[1].text).toBe('ddd')  // newest last
   })
 })
