@@ -47,6 +47,8 @@ export interface TransformedCompactBoundary {
   createdAt: Date
   /** Optional display label overriding the default "Compacted" button text. */
   label?: string
+  /** Optional header shown in the expanded panel, overriding the default "Compaction Summary". */
+  summaryLabel?: string
 }
 
 export interface TransformedMemoryRecall {
@@ -403,16 +405,16 @@ export function transformMessages(entries: (JsonlMessageEntry | JsonlSystemEntry
         const contextBlock = lines.slice(0, separatorIdx).join('\n').trimEnd()
         const userText = lines.slice(separatorIdx + 1).join('\n').trimStart()
 
-        result.push({
-          id: `${entry.uuid}-ctx`,
-          type: 'compact_boundary',
-          summary: contextBlock,
-          trigger: 'branch',
-          label: 'Continued from previous session',
-          createdAt: new Date(entry.timestamp),
-        })
-
         if (userText) {
+          result.push({
+            id: `${entry.uuid}-ctx`,
+            type: 'compact_boundary',
+            summary: contextBlock,
+            trigger: 'branch',
+            label: 'Continued from previous session',
+            summaryLabel: 'Session context',
+            createdAt: new Date(entry.timestamp),
+          })
           result.push({
             id: entry.uuid,
             type: 'user',
@@ -420,8 +422,9 @@ export function transformMessages(entries: (JsonlMessageEntry | JsonlSystemEntry
             toolCalls: [],
             createdAt: new Date(entry.timestamp),
           })
+          continue
         }
-        continue
+        // separator found but userText empty: fall through to normal rendering below
       }
       // Defensive: no separator found — fall through to render the message normally
     }

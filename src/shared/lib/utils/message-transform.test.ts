@@ -1290,6 +1290,21 @@ describe('transformMessages', () => {
       expect(asMessage(result[0]).content.text).toBe(text)
     })
 
+    it('falls through to normal rendering when --- separator has only blank userText', () => {
+      const text = buildInjected('')
+
+      const entries: JsonlMessageEntry[] = [
+        createUserMessage('uuid-1', text),
+      ]
+
+      const result = transformMessages(entries)
+
+      // No orphaned compact_boundary card — single normal user message with the full original text
+      expect(result).toHaveLength(1)
+      expect(result[0].type).toBe('user')
+      expect(asMessage(result[0]).content.text).toBe(text)
+    })
+
     it('does not split regular user messages that lack the sentinel', () => {
       const entries: JsonlMessageEntry[] = [
         createUserMessage('uuid-1', 'Just a normal message\n---\nwith a separator'),

@@ -186,6 +186,9 @@ export interface ApiCompactBoundary {
   /** Optional display label overriding the default "Compacted" button text.
    *  Set to "Continued from previous session" for branched-session context cards. */
   label?: string
+  /** Optional header shown in the expanded panel, overriding the default "Compaction Summary".
+   *  Set to "Session context" for branched-session context cards. */
+  summaryLabel?: string
 }
 
 /**
