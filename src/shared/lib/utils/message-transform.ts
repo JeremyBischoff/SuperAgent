@@ -49,6 +49,8 @@ export interface TransformedCompactBoundary {
   label?: string
   /** Optional header shown in the expanded panel, overriding the default "Compaction Summary". */
   summaryLabel?: string
+  /** Source session id for a branched-session context card ('branch' trigger); lets the UI link back to it. */
+  fromSessionId?: string
 }
 
 export interface TransformedMemoryRecall {
@@ -409,6 +411,8 @@ export function transformMessages(entries: (JsonlMessageEntry | JsonlSystemEntry
       if (separatorIdx !== -1) {
         const contextBlock = lines.slice(0, separatorIdx).join('\n').trimEnd()
         const userText = lines.slice(separatorIdx + 1).join('\n').trimStart()
+        // The transcript-path line carries the source session id; reuse it to link back.
+        const fromSessionId = lines[pathLineIdx]?.match(/-workspace\/([^/]+)\.jsonl/)?.[1]
 
         if (userText) {
           result.push({
@@ -418,6 +422,7 @@ export function transformMessages(entries: (JsonlMessageEntry | JsonlSystemEntry
             trigger: 'branch',
             label: 'Continued from previous session',
             summaryLabel: 'Session context',
+            ...(fromSessionId ? { fromSessionId } : {}),
             createdAt: new Date(entry.timestamp),
           })
           result.push({

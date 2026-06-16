@@ -20,6 +20,7 @@ import { ArrowDown, FileX2, Loader2, MessageSquarePlus, WifiOff } from 'lucide-r
 import { FileDownloadPill } from '@renderer/components/ui/file-download-pill'
 import { useIsOnline } from '@renderer/context/connectivity-context'
 import { useUser } from '@renderer/context/user-context'
+import { useSelection } from '@renderer/context/selection-context'
 import { useDraft, useDraftsStore } from '@renderer/context/drafts-context'
 import { useRenderTracker } from '@renderer/lib/perf'
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, Fragment, type ReactNode } from 'react'
@@ -61,6 +62,7 @@ interface MessageListProps {
 
 export function MessageList({ sessionId, agentSlug, pendingUserMessages, pendingRequestCount = 0, onPendingMessageAppeared }: MessageListProps) {
   useRenderTracker('MessageList')
+  const { setView } = useSelection()
   const { data: messages, isLoading, error } = useMessages(sessionId, agentSlug)
   const deleteMessage = useDeleteMessage()
   const deleteToolCall = useDeleteToolCall()
@@ -673,7 +675,10 @@ export function MessageList({ sessionId, agentSlug, pendingUserMessages, pending
             {item.type === 'memory_recall' ? (
               <MemoryRecallItem recall={item as ApiMemoryRecall} />
             ) : item.type === 'compact_boundary' ? (
-              <CompactBoundaryItem boundary={item as ApiCompactBoundary} />
+              <CompactBoundaryItem
+                boundary={item as ApiCompactBoundary}
+                onViewSource={(id) => setView({ kind: 'session', id })}
+              />
             ) : (
               <>
                 <MessageErrorBoundary kind="message" raw={item} itemId={item.id}>

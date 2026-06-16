@@ -189,6 +189,9 @@ export interface ApiCompactBoundary {
   /** Optional header shown in the expanded panel, overriding the default "Compaction Summary".
    *  Set to "Session context" for branched-session context cards. */
   summaryLabel?: string
+  /** Source session id when this is a branched-session context card ('branch' trigger).
+   *  Lets the UI link back to the session the summary came from. */
+  fromSessionId?: string
 }
 
 /**

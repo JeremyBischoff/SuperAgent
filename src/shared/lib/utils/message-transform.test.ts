@@ -1257,6 +1257,8 @@ describe('transformMessages', () => {
       expect(card.trigger).toBe('branch')
       expect(card.summary).toContain(SENTINEL)
       expect(card.summary).toContain('Was working on auth.')
+      // Source session id is pulled from the transcript-path line for the back-link
+      expect(card.fromSessionId).toBe('sess-1')
 
       // Second item: the real user message
       expect(result[1].type).toBe('user')
