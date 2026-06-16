@@ -29,7 +29,17 @@ export function splitForRichLimits(md: string): string[] {
 }
 
 /**
- * Draft-only "Thinking…" animation. The <tg-thinking> placeholder may only be
- * used in sendRichMessageDraft and carries no content (no agent reasoning shown).
+ * Animated "Thinking…" indicator shown before the response streams, sent as a
+ * sequence of draft frames under the streaming draft id. A Telegram rich-message
+ * draft renders its *updates* (same draft_id → animated diff), not its first
+ * static snapshot — so a single static draft shows a blank bubble. Cycling these
+ * frames is what makes the indicator render; the first streamed token then
+ * replaces the draft in place. (This is also why the empty <tg-thinking>
+ * placeholder never appeared.)
  */
-export const THINKING_RICH_MESSAGE: InputRichMessage = { html: '<tg-thinking></tg-thinking>' }
+export const THINKING_FRAMES: InputRichMessage[] = [
+  { markdown: '✨ Thinking' },
+  { markdown: '✨ Thinking.' },
+  { markdown: '✨ Thinking..' },
+  { markdown: '✨ Thinking...' },
+]

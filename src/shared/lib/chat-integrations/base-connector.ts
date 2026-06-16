@@ -69,6 +69,14 @@ export abstract class ChatClientConnector {
   abstract showTypingIndicator(chatId: string): Promise<void>
 
   /**
+   * Tear down any "thinking" indicator owned by showTypingIndicator (e.g. a
+   * posted placeholder message) when the response is about to take over. Default
+   * no-op for connectors whose typing indicator is ephemeral (typing actions,
+   * reactions).
+   */
+  async clearThinking(_chatId: string): Promise<void> {}
+
+  /**
    * Send a file to the chat. Returns the external message ID.
    * @param chatId Target chat/channel
    * @param fileData Buffer of the file content

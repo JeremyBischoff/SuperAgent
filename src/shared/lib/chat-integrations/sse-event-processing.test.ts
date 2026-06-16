@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { processSSEEvent, finalizeStreaming, resolvePendingToolMessages, type ManagedConnector } from './chat-integration-manager'
+import { processSSEEvent, finalizeStreaming, resolvePendingToolMessages, startThinking, stopThinking, THINKING_FRAME_MS, type ManagedConnector } from './chat-integration-manager'
 import { MockChatClientConnector } from './mock-connector'
 import type { ChatIntegration } from '@shared/lib/db/schema'
 
@@ -34,6 +34,7 @@ function createManagedConnector(overrides?: Partial<ManagedConnector>): ManagedC
     },
     currentToolInput: '',
     pendingToolMessages: [],
+    thinkingTimer: null,
     ...overrides,
   }
 }
@@ -54,6 +55,45 @@ async function processEvents(
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────
+
+describe('thinking animation', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('sends the first frame immediately and a new frame each interval until stopped', async () => {
+    const managed = createManagedConnector()
+    const mock = getMock(managed)
+
+    startThinking(managed)
+    expect(mock.typingIndicators.length).toBe(1) // first frame right away
+
+    await vi.advanceTimersByTimeAsync(THINKING_FRAME_MS)
+    expect(mock.typingIndicators.length).toBe(2) // next animation frame
+
+    await vi.advanceTimersByTimeAsync(THINKING_FRAME_MS)
+    expect(mock.typingIndicators.length).toBe(3)
+
+    stopThinking(managed)
+    await vi.advanceTimersByTimeAsync(THINKING_FRAME_MS * 5)
+    expect(mock.typingIndicators.length).toBe(3) // no further frames
+    expect(managed.thinkingTimer).toBeNull()
+  })
+
+  it('stops the animation once the first token streams', async () => {
+    const managed = createManagedConnector()
+    managed.streamingState.lastUpdateTime = 0
+    const mock = getMock(managed)
+
+    startThinking(managed)
+    expect(mock.typingIndicators.length).toBe(1)
+
+    await processSSEEvent(managed, { type: 'stream_delta', text: 'Hello' })
+    expect(managed.thinkingTimer).toBeNull() // first token cleared the animation
+
+    await vi.advanceTimersByTimeAsync(THINKING_FRAME_MS * 5)
+    expect(mock.typingIndicators.length).toBe(1) // no thinking frames during streaming
+  })
+})
 
 describe('processSSEEvent', () => {
   let managed: ManagedConnector
@@ -333,15 +373,12 @@ describe('processSSEEvent', () => {
       expect(getMock(managed).typingIndicators.length).toBe(1)
     })
 
-    it('refreshes typing on messages_updated only when streaming', async () => {
-      // No accumulated text — should NOT send typing
-      await processSSEEvent(managed, { type: 'messages_updated' })
-      expect(getMock(managed).typingIndicators.length).toBe(0)
-
-      // With accumulated text — should send typing
+    it('does not re-show "Thinking…" on messages_updated (would clobber the streaming draft)', async () => {
+      // Even mid-stream, messages_updated must not re-send the thinking draft over
+      // already-streamed content — the thinking indicator is a pre-stream-only state.
       managed.streamingState.accumulatedText = 'some text'
       await processSSEEvent(managed, { type: 'messages_updated' })
-      expect(getMock(managed).typingIndicators.length).toBe(1)
+      expect(getMock(managed).typingIndicators.length).toBe(0)
     })
 
     it('does not send typing on tool_use_ready', async () => {
@@ -973,6 +1010,7 @@ describe('no-streaming connector (iMessage-style)', () => {
       },
       currentToolInput: '',
       pendingToolMessages: [],
+      thinkingTimer: null,
     }
   }
 

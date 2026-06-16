@@ -125,6 +125,8 @@ export interface ManagedConnector {
   }
   currentToolInput: string
   pendingToolMessages: Array<{ messageId: string; text: string }>
+  /** Heartbeat re-sending the "Thinking…" draft until the first token streams. */
+  thinkingTimer: ReturnType<typeof setInterval> | null
 }
 
 // ── Manager ─────────────────────────────────────────────────────────────
@@ -193,6 +195,7 @@ class ChatIntegrationManager {
     // Clean up all chat session SSE subscriptions
     for (const [, session] of this.chatSessions) {
       session.sseUnsubscribe?.()
+      stopThinking(session)
     }
     this.chatSessions.clear()
 
@@ -473,6 +476,7 @@ class ChatIntegrationManager {
       },
       currentToolInput: '',
       pendingToolMessages: [],
+      thinkingTimer: null,
     }
     this.chatSessions.set(key, session)
     return session
@@ -763,9 +767,9 @@ class ChatIntegrationManager {
       return
     }
 
-    // Show typing indicator
-    this.chatSessions.get(this.getChatSessionKey(integrationId, chatId))
-      ?.connector.showTypingIndicator(chatId).catch(() => {})
+    // Show the "Thinking…" indicator (kept alive by a heartbeat) until the first token streams.
+    const dispatched = this.chatSessions.get(this.getChatSessionKey(integrationId, chatId))
+    if (dispatched) startThinking(dispatched)
   }
 
   /**
@@ -846,6 +850,7 @@ class ChatIntegrationManager {
     const key = this.getChatSessionKey(integrationId, chatId)
     const managed = this.chatSessions.get(key)
     managed?.sseUnsubscribe?.()
+    if (managed) stopThinking(managed)
     this.chatSessions.delete(key)
     if (opts?.archive) {
       this.lastSessionTouch.delete(opts.archive)
@@ -1306,6 +1311,8 @@ export async function processSSEEvent(
     case 'stream_delta': {
       const text = data.text as string
       if (!text) break
+      // First token of this segment: the response is streaming now, so drop "Thinking…".
+      stopThinking(managed)
       managed.streamingState.accumulatedText += text
 
       const now = Date.now()
@@ -1333,14 +1340,9 @@ export async function processSSEEvent(
       } catch (err) {
         console.error('[ChatIntegrationManager] Failed to finalize on stream_start:', err)
       }
+      // One-shot "Thinking…" for the next segment; the dispatch heartbeat covers the
+      // initial pre-stream wait. Either way, the first token replaces it in place.
       managed.connector.showTypingIndicator(managed.chatId).catch(() => {})
-      break
-    }
-
-    case 'messages_updated': {
-      if (managed.streamingState.accumulatedText) {
-        managed.connector.showTypingIndicator(managed.chatId).catch(() => {})
-      }
       break
     }
 
@@ -1429,6 +1431,7 @@ export async function processSSEEvent(
     }
 
     case 'session_idle': {
+      stopThinking(managed)
       try {
         await finalizeStreaming(managed)
         await resolvePendingToolMessages(managed)
@@ -1439,6 +1442,36 @@ export async function processSSEEvent(
       break
     }
   }
+}
+
+/**
+ * Interval between "Thinking…" dot frames. Each tick edits the posted indicator
+ * message to the next frame (✨ Thinking → Thinking. → Thinking.. → …), so only
+ * the dots animate. Kept at ~1s to stay within Telegram's per-chat edit cadence.
+ */
+export const THINKING_FRAME_MS = 1000
+
+/**
+ * Animate the "Thinking…" indicator until the first token streams. The connector
+ * cycles draft frames under the streaming draft id; stopThinking ends it and the
+ * first streamed token replaces the draft in place.
+ */
+export function startThinking(managed: ManagedConnector): void {
+  stopThinking(managed)
+  managed.connector.showTypingIndicator(managed.chatId).catch(() => {})
+  managed.thinkingTimer = setInterval(() => {
+    managed.connector.showTypingIndicator(managed.chatId).catch(() => {})
+  }, THINKING_FRAME_MS)
+}
+
+export function stopThinking(managed: ManagedConnector): void {
+  if (managed.thinkingTimer) {
+    clearInterval(managed.thinkingTimer)
+    managed.thinkingTimer = null
+  }
+  // Always clear the posted indicator: stream_start shows a one-shot "Thinking…"
+  // with no timer set, which still needs removing when the response takes over.
+  managed.connector.clearThinking(managed.chatId).catch(() => {})
 }
 
 export async function resolvePendingToolMessages(managed: ManagedConnector): Promise<void> {
