@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** When a user sends a message into a stale session (idle >6h or current context >150k tokens), prompt them to start a new topic, continue in a fresh session carrying a summary, or send here anyway — to teach the session model and cut per-message cost.
+**Goal:** When a user sends a message into a stale session (idle >6h **and** current context >100k tokens), prompt them to start a new topic, continue in a fresh session carrying a summary, or send here anyway — to teach the session model and cut per-message cost.
 
 **Architecture:** Client-side trigger gate in the message composer decides *whether* to prompt (it already has every signal). One new server endpoint generates the summary (budgeted-recency, reusing existing compaction summaries) and creates the branched session with an injected first message. Thresholds are code constants. Zod validates every boundary.
 
@@ -60,8 +60,9 @@
 /** Idle gap after which a returning user is prompted. Default 6h. */
 export const STALE_TIME_GAP_MS = 6 * 60 * 60 * 1000
 
-/** Current context occupancy (tokens) above which the session is "expensive now". */
-export const STALE_CONTEXT_TOKENS = 150_000
+/** Current context occupancy (tokens) above which the session is "expensive now".
+ *  Only fires in combination with the idle gate (AND). */
+export const STALE_CONTEXT_TOKENS = 100_000
 
 /** Token budget for what we feed the summarizer (Haiku ~200k window minus headroom
  *  for the instruction + output). */
@@ -183,30 +184,29 @@ import { STALE_TIME_GAP_MS, STALE_CONTEXT_TOKENS } from './stale-session-config'
 
 const base = { idleMs: 0, contextTokens: 0, isAwaitingInput: false, isRunning: false, dismissed: false }
 
+const stale = { idleMs: STALE_TIME_GAP_MS + 1, contextTokens: STALE_CONTEXT_TOKENS + 1 }
+
 describe('evaluateStalePrompt', () => {
   it('does not prompt a fresh, small, active session', () => {
     expect(evaluateStalePrompt(base).shouldPrompt).toBe(false)
   })
-  it('prompts (reason=idle) past the idle gap', () => {
-    const r = evaluateStalePrompt({ ...base, idleMs: STALE_TIME_GAP_MS + 1 })
-    expect(r).toEqual({ shouldPrompt: true, reason: 'idle' })
+  it('does NOT prompt on idle alone when the context is small', () => {
+    expect(evaluateStalePrompt({ ...base, idleMs: STALE_TIME_GAP_MS + 1 }).shouldPrompt).toBe(false)
   })
-  it('prompts (reason=size) past the token threshold', () => {
-    const r = evaluateStalePrompt({ ...base, contextTokens: STALE_CONTEXT_TOKENS + 1 })
-    expect(r).toEqual({ shouldPrompt: true, reason: 'size' })
+  it('does NOT prompt on size alone when recently active', () => {
+    expect(evaluateStalePrompt({ ...base, contextTokens: STALE_CONTEXT_TOKENS + 1 }).shouldPrompt).toBe(false)
+  })
+  it('prompts only when BOTH idle past the gap AND large', () => {
+    expect(evaluateStalePrompt({ ...base, ...stale }).shouldPrompt).toBe(true)
   })
   it('suppresses while awaiting a permission/tool decision, even when stale', () => {
-    expect(evaluateStalePrompt({ ...base, idleMs: STALE_TIME_GAP_MS + 1, isAwaitingInput: true }).shouldPrompt).toBe(false)
+    expect(evaluateStalePrompt({ ...base, ...stale, isAwaitingInput: true }).shouldPrompt).toBe(false)
   })
   it('suppresses while actively running', () => {
-    expect(evaluateStalePrompt({ ...base, contextTokens: STALE_CONTEXT_TOKENS + 1, isRunning: true }).shouldPrompt).toBe(false)
+    expect(evaluateStalePrompt({ ...base, ...stale, isRunning: true }).shouldPrompt).toBe(false)
   })
   it('suppresses once dismissed for the session', () => {
-    expect(evaluateStalePrompt({ ...base, idleMs: STALE_TIME_GAP_MS + 1, dismissed: true }).shouldPrompt).toBe(false)
-  })
-  it('prefers size as the reason when both fire', () => {
-    const r = evaluateStalePrompt({ ...base, idleMs: STALE_TIME_GAP_MS + 1, contextTokens: STALE_CONTEXT_TOKENS + 1 })
-    expect(r.reason).toBe('size')
+    expect(evaluateStalePrompt({ ...base, ...stale, dismissed: true }).shouldPrompt).toBe(false)
   })
 })
 ```
@@ -221,8 +221,6 @@ Expected: FAIL ("evaluateStalePrompt is not a function").
 ```ts
 import { STALE_TIME_GAP_MS, STALE_CONTEXT_TOKENS } from './stale-session-config'
 
-export type StaleReason = 'idle' | 'size'
-
 export interface StaleInput {
   idleMs: number          // now - lastActivityAt
   contextTokens: number   // currentContextTokens(lastUsage)
@@ -233,16 +231,15 @@ export interface StaleInput {
 
 export interface StaleDecision {
   shouldPrompt: boolean
-  reason: StaleReason | null
 }
 
 export function evaluateStalePrompt(i: StaleInput): StaleDecision {
-  if (i.dismissed || i.isAwaitingInput || i.isRunning) return { shouldPrompt: false, reason: null }
-  const bySize = i.contextTokens > STALE_CONTEXT_TOKENS
-  const byIdle = i.idleMs > STALE_TIME_GAP_MS
-  if (bySize) return { shouldPrompt: true, reason: 'size' } // size leads the copy when both fire
-  if (byIdle) return { shouldPrompt: true, reason: 'idle' }
-  return { shouldPrompt: false, reason: null }
+  if (i.dismissed || i.isAwaitingInput || i.isRunning) return { shouldPrompt: false }
+  // Both must hold (AND): idle long enough that the prompt isn't mid-flow,
+  // AND large enough that continuing is genuinely costly. A small session is
+  // cheap to continue; a large-but-active one is bounded by auto-compact.
+  const shouldPrompt = i.idleMs > STALE_TIME_GAP_MS && i.contextTokens > STALE_CONTEXT_TOKENS
+  return { shouldPrompt }
 }
 ```
 
@@ -551,7 +548,6 @@ const decision = evaluateStalePrompt({
 })
 if (decision.shouldPrompt) {
   setPendingContent(content)          // stash the typed message
-  setStaleReason(decision.reason)     // 'idle' | 'size'
   setStalePromptOpen(true)
   return                              // do NOT send yet
 }
@@ -593,8 +589,8 @@ import { estimateNextMessageCostUsd } from '@shared/lib/stale-session/message-co
 interface StaleSessionPromptProps {
   open: boolean
   agentName: string
-  reason: 'idle' | 'size'
   contextTokens: number
+  lastActivityAt: Date | null
   model: string
   isSummarizing: boolean
   error: string | null
@@ -607,7 +603,7 @@ interface StaleSessionPromptProps {
 ```
 
 Behavior in the component:
-- Header text is `reason`-driven (size → "This chat is holding ~{formatTokens(contextTokens)} in context. Your next message re-reads all of it — about ${cost}…"; idle → "Last active … If this is a new topic, a fresh chat keeps {agentName} focused."). Use `estimateNextMessageCostUsd({ contextTokens, model, idle: true })`; if it returns `null`, omit the dollar figure and show tokens only.
+- Header is a single combined line (the trigger always means old AND large): "This chat is holding ~{formatTokens(contextTokens)} tokens and was last used {relativeTime(lastActivityAt)}. Your next message re-reads all of it — about ${cost}, and that repeats on every message." Use `estimateNextMessageCostUsd({ contextTokens, model, idle: true })`; if it returns `null`, omit the dollar figure and show tokens only.
 - Three options exactly as Variant A: "Continue from a summary" (recommended/default; shows spinner + "Carrying over context…" when `isSummarizing`), "Start a new topic with {agentName}", "Send here anyway" (note: "We won't ask again in this one").
 - When `error` is set: show the inline error and keep all three actions, with "Continue from a summary" relabeled to allow Retry (`onRetry`).
 
@@ -695,4 +691,4 @@ git commit -m "test(stale-session): e2e for trigger, suppression, actions, dismi
 - [ ] `npm run test:run` PASS (all new unit tests green)
 - [ ] `E2E_MOCK=true npx playwright test e2e/stale-session-prompt.spec.ts 2>&1 | tee /tmp/e2e-results.txt` PASS
 - [ ] Manual: idle>threshold prompt; size>threshold prompt; awaiting-permission suppressed; each of the 3 actions lands correctly; dismissal sticks per session; cost/token line shows accurate next-message numbers.
-- [ ] Confirm `STALE_CONTEXT_TOKENS` (150k) actually trips relative to where auto-compact caps context; note if it needs lowering toward ~100-120k.
+- [ ] Confirm the AND trigger (idle >6h AND `STALE_CONTEXT_TOKENS` 100k) actually trips on real returned-to sessions relative to where auto-compact caps context; note if 100k needs lowering.

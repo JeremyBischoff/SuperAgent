@@ -31,11 +31,11 @@ Fires when a user sends a message into an **existing** session (not the new-sess
 
 - `!isAwaitingInput` — session is **not** parked on a permission/tool/secret/etc. decision. (Team's rule: a hanging permission needs full live context to resolve; never offer to branch it.)
 - session is **not actively running** (agent mid-turn).
-- **AND** one of (OR):
+- **AND both** of:
   - **idle gap:** `now − lastActivityAt > STALE_TIME_GAP_MS` (default **6h**)
-  - **size:** current context > `STALE_CONTEXT_TOKENS` (default **~150k**, ≈75% of the 200k window — near the likely auto-compact point, so it fires in a narrow band before a compaction; confirm it trips in practice)
+  - **size:** current context > `STALE_CONTEXT_TOKENS` (default **~100k**)
 
-OR (not AND) because the two signals serve different goals: idle → "returning, maybe new topic" (teaching); size → "expensive right now" (cost). AND would miss the old-but-small case and the big-but-recent case.
+Both (AND), not either (OR): only prompt when branching clearly pays off — you're returning to a session that is *both* idle long enough that the prompt isn't mid-flow *and* large enough that continuing is genuinely costly. A small session is cheap to continue (don't nag); a large but still-active session is bounded by auto-compact, not by us. Matches Claude Code's resume prompt, which also ANDs age and size. **Consequence:** a small session returned to after a while is *not* prompted — the teaching nudge is reserved for heavy sessions where it actually matters.
 
 **Why current context, not cumulative:** branching saves *future* per-message cost, which is driven by the current live context, not the sunk cumulative total. Auto-compact (on by default) keeps the live context bounded and oscillating under ~200k; the current value is also what the client already has (`lastUsage`), so the trigger needs no new plumbing.
 
@@ -50,9 +50,8 @@ OR (not AND) because the two signals serve different goals: idle → "returning,
 
 An `AlertDialog` (reuse the `MountChoiceDialog` button-grid pattern, `mount-choice-dialog.tsx:20-69`) over the dimmed chat, in SuperAgent's existing monochrome dark theme.
 
-**Header — concrete numbers, scenario-adaptive:**
-- size trigger: "This chat is holding ~152k tokens in context. Your next message re-reads all of it — about $0.55, and that repeats on every message."
-- idle trigger: "Last active 3 days ago. (~12k tokens, ~$0.04 to continue.) If this is a new topic, a fresh chat keeps \<Agent\> focused."
+**Header — concrete numbers (single combined line):** the trigger always means old AND large, so the header states both, like Claude Code's "3d 3h old and 448.8k tokens":
+- "This chat is holding ~128k tokens and was last used 3 days ago. Your next message re-reads all of it — about $0.45, and that repeats on every message."
 - Dollar figure assumes API billing; on a subscription it reads as "a chunk of your usage limits." The app knows the billing mode (`platform-tab.tsx` subscription vs `ANTHROPIC_API_KEY`).
 
 **Three explicit options** (each states what happens to the just-typed message):
@@ -133,7 +132,7 @@ Add `stalePromptDismissed?: boolean` to `SessionMetadata` (`agent.ts:78-108`, st
 
 ## Testing
 
-- **Trigger helper (pure):** unit tests over (idle time, current tokens, isAwaitingInput, running, dismissed) → prompt/suppress decision, including each OR branch and every suppression case.
+- **Trigger helper (pure):** unit tests over (idle time, current tokens, isAwaitingInput, running, dismissed) → prompt/suppress decision: each signal alone must NOT prompt (AND), both together prompt, and every suppression case suppresses.
 - **Summary service:** mock the LLM boundary; assert budgeted-recency slicing, compact_boundary reuse, payload composition, in-container jsonl path, and the failure path.
 - **Cost helper:** unit test `estimateMessageCost` against `model-pricing.json`, incl. cache-creation-when-idle.
 - **E2E:** stale session → prompt appears; awaiting-permission session → suppressed; each action lands in the right place; "send here anyway" → never prompts that session again. (Run mock-mode, tee'd: `E2E_MOCK=true npx playwright test 2>&1 | tee /tmp/e2e-results.txt`.)
@@ -141,5 +140,5 @@ Add `stalePromptDismissed?: boolean` to `SessionMetadata` (`agent.ts:78-108`, st
 ## Open calibration items (post-ship, from real usage)
 
 - `STALE_TIME_GAP_MS` (6h) — top candidate for tuning.
-- `STALE_CONTEXT_TOKENS` (~150k) — sits near the auto-compact point; verify it actually fires, drop toward ~100-120k if it rarely trips.
+- `STALE_CONTEXT_TOKENS` (~100k) — only matters in combination with the 6h gate (AND); confirm it trips on real returned-to sessions.
 - Summarizer budget headroom; whether Haiku fidelity is sufficient or worth the main model.
