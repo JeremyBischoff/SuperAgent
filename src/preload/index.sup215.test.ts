@@ -71,21 +71,6 @@ describe('SUP-215 preload per-listener unsubscribe (oauth-callback)', () => {
     expect(getApi().onOAuthCallback).toBeTypeOf('function')
   })
 
-  it('removeOAuthCallback() is a channel-wide reset that nukes every listener (documented behavior)', () => {
-    const api = getApi()
-    const h1 = vi.fn()
-    const h2 = vi.fn()
-
-    api.onOAuthCallback(h1)
-    api.onOAuthCallback(h2)
-    // Channel-wide reset — intentionally removes ALL listeners.
-    ;(api.removeOAuthCallback as () => void)()
-    emit('oauth-callback', { toolkit: 'slack' })
-
-    expect(h1).not.toHaveBeenCalled()
-    expect(h2).not.toHaveBeenCalled()
-  })
-
   it('onOAuthCallback returns a per-listener unsubscribe that leaves co-subscribers intact', () => {
     const api = getApi()
     const h1 = vi.fn()
@@ -132,6 +117,11 @@ const channels: Array<{ name: string; on: string; channel: string; payload: unkn
   { name: 'onNavigateToAgent', on: 'onNavigateToAgent', channel: 'navigate-to-agent', payload: ['agent-slug', 'session-id'] },
   { name: 'onOpenSettings', on: 'onOpenSettings', channel: 'open-settings', payload: [] },
   { name: 'onOpenCreateAgent', on: 'onOpenCreateAgent', channel: 'open-create-agent', payload: [] },
+  // Window-state channels: these had the most concurrent subscribers (useFullScreen
+  // is mounted in ~5 places; window-maximized-change is shared by WindowControls +
+  // useInsetRadius), so they must honor per-listener unsubscribe too.
+  { name: 'onFullScreenChange', on: 'onFullScreenChange', channel: 'fullscreen-change', payload: [true] },
+  { name: 'onWindowMaximizedChange', on: 'onWindowMaximizedChange', channel: 'window-maximized-change', payload: [true] },
 ]
 
 describe.each(channels)('SUP-215 per-listener unsubscribe family — $name', ({ on, channel, payload }) => {

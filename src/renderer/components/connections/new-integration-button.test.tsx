@@ -75,7 +75,6 @@ describe('NewIntegrationButton — post-OAuth policy editor', () => {
     window.electronAPI = {
       // onOAuthCallback now returns a per-listener unsubscribe (SUP-215).
       onOAuthCallback: vi.fn((cb: any) => { capturedOAuthCallback = cb; return unsubscribe }),
-      removeOAuthCallback: vi.fn(),
       openExternal: vi.fn(),
     } as any
 
