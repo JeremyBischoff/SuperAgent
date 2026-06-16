@@ -316,16 +316,15 @@ export class TelegramConnector extends ChatClientConnector {
   async sendMessage(chatId: string, message: OutgoingMessage): Promise<string> {
     if (!this.bot) throw new Error('Bot not connected')
 
-    const html = this.markdownToHtml(message.text || '(empty message)')
-    const chunks = splitChatMessage(html, MAX_MESSAGE_LENGTH)
+    const chunks = splitForRichLimits(message.text || '(empty message)')
+    const replyParams = message.replyToExternalId
+      ? { reply_parameters: { message_id: Number(message.replyToExternalId) } }
+      : undefined
 
     let lastMessageId = ''
-    for (const chunk of chunks) {
-      const sent = await this.bot.api.sendMessage(chatId, chunk, {
-        parse_mode: 'HTML',
-        ...(message.replyToExternalId ? { reply_parameters: { message_id: Number(message.replyToExternalId) } } : {}),
-      })
-      lastMessageId = String(sent.message_id)
+    for (let i = 0; i < chunks.length; i++) {
+      // Only the first chunk carries the reply-to.
+      lastMessageId = await this.sendRichOrHtml(chatId, chunks[i], i === 0 ? replyParams : undefined)
     }
     return lastMessageId
   }

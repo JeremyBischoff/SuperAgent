@@ -178,3 +178,20 @@ describe('TelegramConnector.sendRichOrHtml', () => {
     expect(id).toBe('22')
   })
 })
+
+describe('TelegramConnector.sendMessage (rich)', () => {
+  it('sends the body as a rich message split at the 32768 ceiling', async () => {
+    const connector = new TelegramConnector({ botToken: 'fake:token' })
+    const mockSendRich = vi.fn().mockResolvedValue({ message_id: 7 })
+    ;(connector as any).bot = { api: { raw: { sendRichMessage: mockSendRich }, sendMessage: vi.fn() } }
+
+    const id = await connector.sendMessage('500', { text: '# Brief\n\n| a | b |\n|---|---|\n| 1 | 2 |' })
+
+    expect(mockSendRich).toHaveBeenCalledTimes(1)
+    expect(mockSendRich).toHaveBeenCalledWith(expect.objectContaining({
+      chat_id: 500,
+      rich_message: expect.objectContaining({ markdown: expect.stringContaining('| a | b |') }),
+    }))
+    expect(id).toBe('7')
+  })
+})
