@@ -352,8 +352,15 @@ export class TelegramConnector extends ChatClientConnector {
     if (!this.bot) throw new Error('Bot not connected')
     const body = text || 'Thinking...'
 
-    // DM animated draft path (Task 9 fills in driveDraftStream).
-    if (this.useRich && this.config.draftStreaming !== false && this.isPrivateChat(chatId)) {
+    // DM animated draft path — only for the streaming-response flow (no real
+    // message yet, or an existing draft). A real message id (e.g. a tool-status
+    // pill posted via sendMessage) must be edited, not replaced by a new draft.
+    if (
+      this.useRich &&
+      this.config.draftStreaming !== false &&
+      this.isPrivateChat(chatId) &&
+      (!existingMessageId || existingMessageId.startsWith(RICH_DRAFT_SENTINEL_PREFIX))
+    ) {
       return this.driveDraftStream(chatId, body)
     }
 

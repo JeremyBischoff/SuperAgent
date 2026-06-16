@@ -311,3 +311,39 @@ describe('TelegramConnector.showTypingIndicator', () => {
     expect(sendChatAction).toHaveBeenCalledWith('-1001', 'typing')
   })
 })
+
+describe('TelegramConnector.sendStreamingUpdate (DM, real message edit)', () => {
+  // The tool-status pill path: the manager posts a real (non-draft) message via
+  // sendMessage, then calls sendStreamingUpdate with that real id to flip ⏳→✅.
+  // In a DM this must EDIT the real message, not spawn a throwaway draft.
+  let connector: TelegramConnector
+  let raw: {
+    sendRichMessageDraft: ReturnType<typeof vi.fn>
+    editMessageText: ReturnType<typeof vi.fn>
+    sendRichMessage: ReturnType<typeof vi.fn>
+  }
+  beforeEach(() => {
+    connector = new TelegramConnector({ botToken: 'fake:token' })
+    raw = {
+      sendRichMessageDraft: vi.fn().mockResolvedValue(true),
+      editMessageText: vi.fn().mockResolvedValue(true),
+      sendRichMessage: vi.fn().mockResolvedValue({ message_id: 1 }),
+    }
+    ;(connector as any).bot = { api: { raw, sendMessage: vi.fn(), editMessageText: vi.fn() } }
+  })
+
+  it('edits a real (non-draft) message id in a DM instead of spawning a draft', async () => {
+    const id = await connector.sendStreamingUpdate('999', '🔧 Bash ✅', '12345')
+    expect(raw.editMessageText).toHaveBeenCalledWith(expect.objectContaining({ chat_id: 999, message_id: 12345 }))
+    expect(raw.sendRichMessageDraft).not.toHaveBeenCalled()
+    expect(id).toBe('12345')
+  })
+
+  it('still uses the draft path for the streaming-response flow (no id, then draft sentinel)', async () => {
+    const first = await connector.sendStreamingUpdate('999', 'partial')
+    expect(first).toBe('draft:999')
+    await connector.sendStreamingUpdate('999', 'partial more', first)
+    expect(raw.sendRichMessageDraft).toHaveBeenCalledTimes(2)
+    expect(raw.editMessageText).not.toHaveBeenCalled()
+  })
+})
