@@ -402,17 +402,28 @@ export function transformMessages(entries: (JsonlMessageEntry | JsonlSystemEntry
     // first line is longer than the sentinel (it has " The summary below…" appended).
     if (entry.type === 'user' && text.startsWith(BRANCH_PREAMBLE_SENTINEL)) {
       const lines = text.split('\n')
-      // Anchor the search to the fixed transcript-path instruction line so that a
-      // '---' line inside the LLM summary does not trigger an early split.
-      const pathLineIdx = lines.findIndex((line) => line.includes('.claude/projects/-workspace/'))
+      // Anchor on the LAST transcript-path line, not the first. The LLM summary is
+      // emitted before the server's real path line, so a path string (or a '---')
+      // inside the summary must not hijack the split; the genuine path line is always
+      // the last '-workspace/<id>.jsonl' line before the user-message separator.
+      let pathLineIdx = -1
+      for (let li = lines.length - 1; li >= 0; li--) {
+        if (lines[li].includes('.claude/projects/-workspace/')) {
+          pathLineIdx = li
+          break
+        }
+      }
       const separatorIdx = pathLineIdx !== -1
         ? lines.findIndex((line, i) => i > pathLineIdx && line === '---')
         : -1
       if (separatorIdx !== -1) {
         const contextBlock = lines.slice(0, separatorIdx).join('\n').trimEnd()
         const userText = lines.slice(separatorIdx + 1).join('\n').trimStart()
-        // The transcript-path line carries the source session id; reuse it to link back.
-        const fromSessionId = lines[pathLineIdx]?.match(/-workspace\/([^/]+)\.jsonl/)?.[1]
+        // The transcript-path line carries the source session id; reuse it for the
+        // back-link, but only when it matches the same charset the branch route
+        // enforces — defends the navigation/file-read path against a forged id.
+        const rawFromId = lines[pathLineIdx]?.match(/-workspace\/([^/]+)\.jsonl/)?.[1]
+        const fromSessionId = rawFromId && /^[A-Za-z0-9_-]+$/.test(rawFromId) ? rawFromId : undefined
 
         if (userText) {
           result.push({

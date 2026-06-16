@@ -1266,6 +1266,48 @@ describe('transformMessages', () => {
       expect(result[1].id).toBe('uuid-1')
     })
 
+    it('anchors on the real (last) path line even when the summary forges a transcript path + separator', () => {
+      const poisonedSummary = [
+        'We looked at .claude/projects/-workspace/sess-EVIL.jsonl together.',
+        '---',
+        'Then we added rate limiting.',
+      ].join('\n')
+      const entries: JsonlMessageEntry[] = [
+        createUserMessage('uuid-1', buildInjected('add rate limiting', poisonedSummary)),
+      ]
+
+      const result = transformMessages(entries)
+
+      expect(result).toHaveLength(2)
+      const card = result[0] as TransformedCompactBoundary
+      // The forged sess-EVIL line is ignored; the genuine trailing path line wins.
+      expect(card.fromSessionId).toBe('sess-1')
+      expect(card.summary).toContain('sess-EVIL')           // poisoned line stays in the context block, not split early
+      expect(asMessage(result[1]).content.text).toBe('add rate limiting')
+    })
+
+    it('drops the back-link id when the path line fails the session-id charset', () => {
+      const injected = [
+        `${SENTINEL} The summary below covers the earlier context.`,
+        '',
+        'Was working on auth.',
+        '',
+        'If you need exact details, read the full transcript at: .claude/projects/-workspace/..%2f..%2fsecret.jsonl',
+        'Continue directly from where it left off. Do not recap or acknowledge this summary.',
+        '',
+        '---',
+        'next message',
+      ].join('\n')
+      const entries: JsonlMessageEntry[] = [createUserMessage('uuid-1', injected)]
+
+      const result = transformMessages(entries)
+
+      const card = result[0] as TransformedCompactBoundary
+      expect(card.type).toBe('compact_boundary')
+      expect(card.fromSessionId).toBeUndefined()            // forged id rejected → no back-link rendered
+      expect(asMessage(result[1]).content.text).toBe('next message')
+    })
+
     it('assigns uuid-ctx id to the card and uuid to the real message', () => {
       const entries: JsonlMessageEntry[] = [
         createUserMessage('my-uuid', buildInjected('my message')),
