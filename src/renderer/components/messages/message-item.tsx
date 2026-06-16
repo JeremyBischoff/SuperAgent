@@ -189,7 +189,7 @@ function MessageItemComponent({ message, isStreaming, agentSlug, sessionId, isSe
     <div
       className={cn(
         'flex gap-3',
-        isUser && 'flex-row-reverse'
+        isUser && 'flex-row-reverse !my-6'
       )}
       data-testid={isUser ? 'message-user' : isAssistant ? 'message-assistant' : undefined}
     >
@@ -243,7 +243,8 @@ function MessageItemComponent({ message, isStreaming, agentSlug, sessionId, isSe
               {/* Text content */}
               {hasText && !isSlashCommand && !showBillingCard && !isProviderErrorMessage && (
                 <div dir="auto" className={cn(
-                  'prose prose-sm max-w-none min-w-0 break-words font-medium dark:prose-invert'
+                  'prose prose-sm max-w-none min-w-0 break-words font-normal dark:prose-invert',
+                  'prose-strong:font-medium'
                 )}>
                   {streamingSplit ? (
                     <>

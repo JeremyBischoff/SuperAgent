@@ -598,7 +598,17 @@ function validateBrowserSessionWithRecovery(requestSessionId: string): string | 
 
 const execFileAsync = promisify(execFile);
 
-import { buildRunCommandArgs, splitCommandArgs } from './browser-command-args';
+import { resolveRunCommandArgs } from './browser-command-args';
+import { validatePressKey } from './press-key';
+import { prepareEvalScript, finalizeEvalOutput, evalErrorHint } from './eval-script';
+import { judgeSelectCommit, SELECT_COMMIT_SETTLE_MS } from './select-verify';
+import { capBrowserOutput, redactCdpUrls, MAX_BROWSER_OUTPUT_CHARS, MAX_BROWSER_ERROR_CHARS } from './browser-output';
+import { capSnapshot, formatIframePlaceholders, parseIframeInfo, IFRAME_ENUM_SCRIPT } from './snapshot-format';
+import {
+  observeUrl, resetUrlTracking,
+  CLICK_SETTLE_MS, FILL_SETTLE_MS, PRESS_ENTER_SETTLE_MS, PRESS_SETTLE_MS,
+  type UrlDigest, type ScrollInfo, parseScrollInfo,
+} from './browser-digest';
 
 // Ensure Chrome download preferences are set in the browser profile directory.
 // Merges with existing preferences to avoid overwriting other settings.
@@ -655,31 +665,44 @@ async function execBrowser(args: string[], cdpUrl?: string): Promise<{ stdout: s
     const fullArgs = cdpUrl ? ['--cdp', cdpUrl, ...args] : args;
     const { stdout } = await execFileAsync('agent-browser', fullArgs, {
       timeout: 30000,
+      // Large-but-legitimate outputs must not THROW (the throw path used to
+      // stuff up to 1 MiB of partial output into an error string);
+      // capBrowserOutput below bounds what the model actually sees.
+      maxBuffer: 4 * 1024 * 1024,
       env: {
         ...process.env,
         AGENT_BROWSER_STREAM_PORT: process.env.AGENT_BROWSER_STREAM_PORT || '9223',
         AGENT_BROWSER_ARGS: process.env.AGENT_BROWSER_ARGS || '--no-sandbox,--disable-blink-features=AutomationControlled',
       },
     });
-    return { stdout: stdout.trim(), exitCode: 0 };
+    return { stdout: capBrowserOutput(stdout.trim(), MAX_BROWSER_OUTPUT_CHARS), exitCode: 0 };
   } catch (error: any) {
+    // Full, unsanitized detail (incl. the command line with the CDP URL) goes
+    // to container logs for connectivity debugging — never to the model.
+    console.error('[Browser] agent-browser failed:', error.message);
     if (error.stderr) {
       console.error('[Browser] agent-browser stderr:', error.stderr);
     }
-    // Combine stdout, stderr, and message for maximum debuggability.
-    // The error shown to users includes the full command line (from error.message)
-    // which contains the CDP URL — helpful for diagnosing connectivity issues.
     const parts = [
       error.stdout?.trim(),
       error.stderr?.trim(),
     ].filter(Boolean);
-    const detail = parts.length > 0 ? parts.join('\n') : (error.message || 'Command failed');
+    const rawDetail = parts.length > 0 ? parts.join('\n') : (error.message || 'Command failed');
     return {
-      stdout: detail,
-      exitCode: error.code || 1,
+      stdout: redactCdpUrls(capBrowserOutput(rawDetail, MAX_BROWSER_ERROR_CHARS)),
+      exitCode: typeof error.code === 'number' ? error.code : 1,
     };
   }
 }
+
+/** Read the current URL after an action and build the navigation digest. */
+async function observeUrlDigest(): Promise<UrlDigest | null> {
+  const r = await execBrowser(['get', 'url'], browserState.cdpUrl || undefined);
+  if (r.exitCode !== 0 || !r.stdout.trim()) return null;
+  return observeUrl(r.stdout.trim());
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 interface HostBrowserInfo {
   cdpUrl: string;
@@ -873,6 +896,7 @@ app.post('/browser/open', async (c) => {
       if (matchingTab) {
         await execBrowser(['tab', matchingTab.tabId], browserState.cdpUrl || undefined);
         await tabManager.syncTabCount();
+        observeUrl(matchingTab.url); // seed URL baseline for post-action digests
         notifyBrowserAction();
         return c.json({ success: true, switchedToExisting: true, tabId: matchingTab.tabId, url: matchingTab.url });
       }
@@ -917,6 +941,14 @@ app.post('/browser/open', async (c) => {
 
     _setBrowserState({ active: true, sessionId: body.sessionId, cdpUrl: cdpUrl || null });
     tabManager.resetTabCount();
+    resetUrlTracking();
+    // Seed the URL baseline so the FIRST post-action digest can distinguish
+    // "navigated" from "unchanged" (validation found a click that navigated
+    // away from the opened page being reported as "URL unchanged").
+    const landed = await execBrowser(['get', 'url'], cdpUrl);
+    if (landed.exitCode === 0 && landed.stdout.trim()) {
+      observeUrl(landed.stdout.trim());
+    }
     broadcastBrowserEvent(true);
 
     return c.json({ success: true });
@@ -997,7 +1029,15 @@ app.post('/browser/notify-closed', (c) => {
 // POST /browser/snapshot - Get accessibility tree snapshot
 app.post('/browser/snapshot', async (c) => {
   try {
-    const body = await c.req.json<{ sessionId: string; interactive?: boolean; compact?: boolean; json?: boolean }>();
+    const body = await c.req.json<{
+      sessionId: string;
+      interactive?: boolean;
+      compact?: boolean;
+      json?: boolean;
+      scope?: string;
+      fullText?: boolean;
+      includeUrls?: boolean;
+    }>();
 
     if (!body.sessionId) {
       return c.json({ error: 'sessionId is required' }, 400);
@@ -1014,8 +1054,14 @@ app.post('/browser/snapshot', async (c) => {
 
     const snapshotArgs = ['snapshot'];
     if (body.json) snapshotArgs.push('--json');
-    if (body.interactive !== false) snapshotArgs.push('-i');
-    if (body.compact !== false) snapshotArgs.push('-c');
+    // fullText drops BOTH -i and -c: each independently strips static text
+    // (validation errors, prices, instructions) — audit P5.
+    if (!body.fullText) {
+      if (body.interactive !== false) snapshotArgs.push('-i');
+      if (body.compact !== false) snapshotArgs.push('-c');
+    }
+    if (body.scope) snapshotArgs.push('-s', body.scope);
+    if (body.includeUrls) snapshotArgs.push('--urls');
 
     const result = await execBrowser(snapshotArgs, browserState.cdpUrl || undefined);
 
@@ -1023,17 +1069,26 @@ app.post('/browser/snapshot', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    // Enumerate cross-origin iframes so the agent knows about fields the a11y
+    // tree cannot see (e.g. Stripe payment frames — audit P2).
+    const iframeProbe = await execBrowser(['eval', IFRAME_ENUM_SCRIPT], browserState.cdpUrl || undefined);
+    const iframes = iframeProbe.exitCode === 0 ? parseIframeInfo(iframeProbe.stdout) : [];
+
     if (body.json) {
       // Try to parse JSON output
       try {
         const parsed = JSON.parse(result.stdout);
-        return c.json({ ...parsed, tabCount: tabManager.getTabCount() });
+        return c.json({ ...parsed, iframes, tabCount: tabManager.getTabCount() });
       } catch {
-        return c.json({ snapshot: result.stdout, tabCount: tabManager.getTabCount() });
+        return c.json({ snapshot: result.stdout, iframes, tabCount: tabManager.getTabCount() });
       }
     }
 
-    return c.json({ snapshot: result.stdout, tabCount: tabManager.getTabCount() });
+    return c.json({
+      snapshot: capSnapshot(result.stdout, Boolean(body.scope)) + formatIframePlaceholders(iframes),
+      iframes,
+      tabCount: tabManager.getTabCount(),
+    });
   } catch (error: any) {
     console.error('[Browser] Error taking snapshot:', error);
     return c.json({ error: error.message || 'Failed to take snapshot' }, 500);
@@ -1064,9 +1119,12 @@ app.post('/browser/click', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    await sleep(CLICK_SETTLE_MS);
+    const digest = await observeUrlDigest();
+
     const tabInfo = await tabManager.detectNewTab();
     notifyBrowserAction();
-    return c.json({ success: true, ...(tabInfo && { tabInfo }) });
+    return c.json({ success: true, ...(digest && { digest }), ...(tabInfo && { tabInfo }) });
   } catch (error: any) {
     console.error('[Browser] Error clicking:', error);
     return c.json({ error: error.message || 'Failed to click' }, 500);
@@ -1097,8 +1155,15 @@ app.post('/browser/fill', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    // Read the value back after a settle: the CLI reports success regardless
+    // of what the page kept (maxlength truncation, JS reformatting,
+    // keystroke-only widgets — audit F6).
+    await sleep(FILL_SETTLE_MS);
+    const read = await execBrowser(['get', 'value', body.ref], browserState.cdpUrl || undefined);
+    const committedValue = read.exitCode === 0 ? read.stdout.trim() : null;
+
     notifyBrowserAction();
-    return c.json({ success: true });
+    return c.json({ success: true, ...(committedValue !== null && { committedValue }) });
   } catch (error: any) {
     console.error('[Browser] Error filling:', error);
     return c.json({ error: error.message || 'Failed to fill' }, 500);
@@ -1132,8 +1197,14 @@ app.post('/browser/scroll', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    const probe = await execBrowser(
+      ['eval', 'JSON.stringify({y:window.scrollY,vh:window.innerHeight,h:document.documentElement.scrollHeight})'],
+      browserState.cdpUrl || undefined
+    );
+    const scrollInfo: ScrollInfo | null = probe.exitCode === 0 ? parseScrollInfo(probe.stdout) : null;
+
     notifyBrowserAction();
-    return c.json({ success: true });
+    return c.json({ success: true, ...(scrollInfo && { scrollInfo }) });
   } catch (error: any) {
     console.error('[Browser] Error scrolling:', error);
     return c.json({ error: error.message || 'Failed to scroll' }, 500);
@@ -1191,6 +1262,13 @@ app.post('/browser/press', async (c) => {
       return c.json({ error: 'sessionId and key are required' }, 400);
     }
 
+    // agent-browser forwards any string to CDP and reports success even for
+    // non-keys (typing nothing) — reject up front with typing guidance.
+    const keyError = validatePressKey(body.key);
+    if (keyError) {
+      return c.json({ error: keyError, success: false }, 400);
+    }
+
     const validationError = validateBrowserSessionWithRecovery(body.sessionId);
     if (validationError) {
       return c.json({ error: validationError }, 409);
@@ -1206,9 +1284,12 @@ app.post('/browser/press', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    await sleep(body.key.trim() === 'Enter' ? PRESS_ENTER_SETTLE_MS : PRESS_SETTLE_MS);
+    const digest = await observeUrlDigest();
+
     const tabInfo = await tabManager.detectNewTab();
     notifyBrowserAction();
-    return c.json({ success: true, ...(tabInfo && { tabInfo }) });
+    return c.json({ success: true, ...(digest && { digest }), ...(tabInfo && { tabInfo }) });
   } catch (error: any) {
     console.error('[Browser] Error pressing key:', error);
     return c.json({ error: error.message || 'Failed to press key' }, 500);
@@ -1268,14 +1349,32 @@ app.post('/browser/select', async (c) => {
       return c.json({ error: 'Browser is not active' }, 400);
     }
 
+    // Read the element's value before and after: the CLI reports "✓ Done"
+    // even when nothing commits (custom dropdown divs, React-reverted
+    // selects) — the read-back is what makes the result honest.
+    const readValue = async (): Promise<string | null> => {
+      const r = await execBrowser(['get', 'value', body.ref], browserState.cdpUrl || undefined);
+      return r.exitCode === 0 ? r.stdout.trim() : null;
+    };
+
+    const before = await readValue();
+
     const result = await execBrowser(['select', body.ref, body.value], browserState.cdpUrl || undefined);
 
     if (result.exitCode !== 0) {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
+    await new Promise(resolve => setTimeout(resolve, SELECT_COMMIT_SETTLE_MS));
+    const after = await readValue();
+
+    const judgement = judgeSelectCommit(body.value, before, after);
+    if (!judgement.ok) {
+      return c.json({ error: judgement.reason, success: false }, 500);
+    }
+
     notifyBrowserAction();
-    return c.json({ success: true });
+    return c.json({ success: true, committedValue: judgement.committed });
   } catch (error: any) {
     console.error('[Browser] Error selecting:', error);
     return c.json({ error: error.message || 'Failed to select' }, 500);
@@ -1338,14 +1437,104 @@ app.post('/browser/upload', async (c) => {
   }
 });
 
+// POST /browser/type - Type real keystrokes into the focused element (optionally focusing a ref first)
+app.post('/browser/type', async (c) => {
+  try {
+    const body = await c.req.json<{ sessionId: string; text: string; ref?: string }>();
+
+    if (!body.sessionId || typeof body.text !== 'string' || body.text.length === 0) {
+      return c.json({ error: 'sessionId and text are required' }, 400);
+    }
+
+    const validationError = validateBrowserSessionWithRecovery(body.sessionId);
+    if (validationError) {
+      return c.json({ error: validationError }, 409);
+    }
+
+    if (!browserState.active) {
+      return c.json({ error: 'Browser is not active' }, 400);
+    }
+
+    if (body.ref) {
+      const focusResult = await execBrowser(['focus', body.ref], browserState.cdpUrl || undefined);
+      if (focusResult.exitCode !== 0) {
+        return c.json({ error: focusResult.stdout, success: false }, 500);
+      }
+    }
+
+    // `keyboard type` dispatches real key events into whatever has focus —
+    // this is what drives keystroke-listening widgets (Stripe card fields,
+    // OTP boxes, typeaheads) that programmatic fill cannot.
+    const result = await execBrowser(['keyboard', 'type', body.text], browserState.cdpUrl || undefined);
+
+    if (result.exitCode !== 0) {
+      return c.json({ error: result.stdout, success: false }, 500);
+    }
+
+    // When we know the target, read the value back (keyboard type APPENDS to
+    // existing content). Focused-element typing without a ref has no readable
+    // target by definition (e.g. cross-origin payment iframes).
+    let committedValue: string | null = null;
+    if (body.ref) {
+      const read = await execBrowser(['get', 'value', body.ref], browserState.cdpUrl || undefined);
+      if (read.exitCode === 0) committedValue = read.stdout.trim();
+    }
+
+    notifyBrowserAction();
+    return c.json({ success: true, ...(committedValue !== null && { committedValue }) });
+  } catch (error: any) {
+    console.error('[Browser] Error typing:', error);
+    return c.json({ error: error.message || 'Failed to type' }, 500);
+  }
+});
+
+// POST /browser/eval - Run JavaScript in the page (dedicated eval with guardrails)
+app.post('/browser/eval', async (c) => {
+  try {
+    const body = await c.req.json<{ sessionId: string; script: string }>();
+
+    if (!body.sessionId || typeof body.script !== 'string' || body.script.trim() === '') {
+      return c.json({ error: 'sessionId and script are required' }, 400);
+    }
+
+    const validationError = validateBrowserSessionWithRecovery(body.sessionId);
+    if (validationError) {
+      return c.json({ error: validationError }, 409);
+    }
+
+    if (!browserState.active) {
+      return c.json({ error: 'Browser is not active' }, 400);
+    }
+
+    const { script, wrapped } = prepareEvalScript(body.script);
+    const result = await execBrowser(['eval', script], browserState.cdpUrl || undefined);
+
+    if (result.exitCode !== 0) {
+      return c.json({ error: evalErrorHint(result.stdout), success: false }, 500);
+    }
+
+    notifyBrowserAction();
+    return c.json({ success: true, output: finalizeEvalOutput(result.stdout), wrapped });
+  } catch (error: any) {
+    console.error('[Browser] Error running eval:', error);
+    return c.json({ error: error.message || 'Failed to run eval' }, 500);
+  }
+});
+
 // POST /browser/run - Generic catch-all for any agent-browser command
 app.post('/browser/run', async (c) => {
   try {
-    const body = await c.req.json<{ sessionId: string; command: string }>();
+    const body = await c.req.json<{ sessionId: string; command?: string; args?: string[] }>();
 
-    if (!body.sessionId || !body.command) {
-      return c.json({ error: 'sessionId and command are required' }, 400);
+    if (!body.sessionId) {
+      return c.json({ error: 'sessionId is required' }, 400);
     }
+
+    const resolved = resolveRunCommandArgs(body);
+    if (resolved.error !== undefined) {
+      return c.json({ error: resolved.error }, 400);
+    }
+    const commandArgs = resolved.args;
 
     const validationError = validateBrowserSessionWithRecovery(body.sessionId);
     if (validationError) {
@@ -1359,16 +1548,20 @@ app.post('/browser/run', async (c) => {
     // The agent-browser CLI `upload` command does not work reliably in this
     // environment — refuse it and steer the model to `browser_upload`, which
     // routes through the buffer-based path with size verification.
-    if (splitCommandArgs(body.command)[0] === 'upload') {
+    if (commandArgs[0] === 'upload') {
       return c.json({
         error: 'Use the `browser_upload(filePath, selector)` MCP tool for file uploads instead of `browser_run("upload …")`.',
         success: false,
       }, 400);
     }
 
-    const commandArgs = buildRunCommandArgs(body.command);
-    if (commandArgs.length === 0) {
-      return c.json({ error: 'Empty command' }, 400);
+    // Same guard as /browser/press for the raw CLI form: `press` with a
+    // non-key string silently types nothing while reporting success.
+    if (commandArgs[0] === 'press' && commandArgs.length === 2) {
+      const keyError = validatePressKey(commandArgs[1]);
+      if (keyError) {
+        return c.json({ error: keyError, success: false }, 400);
+      }
     }
 
     const result = await execBrowser(commandArgs, browserState.cdpUrl || undefined);
@@ -1377,9 +1570,10 @@ app.post('/browser/run', async (c) => {
       return c.json({ error: result.stdout, success: false }, 500);
     }
 
-    const cmd = body.command.trim().toLowerCase();
+    const verb = commandArgs[0].toLowerCase();
+    const joined = commandArgs.join(' ').toLowerCase();
     let tabInfo = null;
-    if (cmd.startsWith('tab') || cmd.includes('.click(') || cmd.startsWith('click') || cmd.startsWith('dblclick')) {
+    if (verb.startsWith('tab') || verb === 'click' || verb === 'dblclick' || joined.includes('.click(')) {
       tabInfo = await tabManager.detectNewTab();
     }
 

@@ -841,11 +841,17 @@ export function RuntimeTab() {
 
         <div className="space-y-2">
           {Object.entries(customEnvVarsDraft).map(([key, value]) => (
-            <div key={key} className="flex items-center gap-2">
+            <div
+              key={key}
+              className="flex items-center gap-2"
+              data-testid="custom-env-var-row"
+              data-env-var-key={key}
+            >
               <Input
                 value={key}
                 className="font-mono text-sm flex-[2]"
                 disabled
+                data-testid="custom-env-var-key"
               />
               <Input
                 value={value}
@@ -863,11 +869,13 @@ export function RuntimeTab() {
                   })
                 }}
                 disabled={isLoading || updateSettings.isPending}
+                data-testid="custom-env-var-value"
               />
               <Button
                 variant="ghost"
                 size="icon"
                 className="shrink-0"
+                data-testid="custom-env-var-delete"
                 onClick={async () => {
                   const updated = { ...customEnvVarsDraft }
                   delete updated[key]

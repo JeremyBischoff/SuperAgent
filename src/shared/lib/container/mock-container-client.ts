@@ -1776,10 +1776,10 @@ export class MockContainerClient extends EventEmitter implements ContainerClient
     // the injection is cancellable by uuid (cancel_async_message semantics).
     if (this.busySessions.has(sessionId)) {
       // Content keyword lets tests pick the long pickup window: with the slow
-      // scenario's 5s turn, a 5500ms delay deterministically lands pickup
-      // AFTER the turn's result (late-window settle path) no matter when the
-      // message was queued during the turn.
-      const steeringDelayMs = content.includes('pickup after turn') ? 5500 : 1200
+      // scenario's 5s turn, an 8000ms delay deterministically lands pickup
+      // AFTER the turn's result and leaves an observable pending window for the
+      // late-window settle path no matter when the message was queued.
+      const steeringDelayMs = content.includes('pickup after turn') ? 8000 : 1200
       const steeringUuid = uuid ?? randomUUID()
       const timer = setTimeout(() => {
         this.queuedSteeringTimers.get(sessionId)?.delete(steeringUuid)

@@ -38,7 +38,7 @@ export function MarkdownRenderer({ url, filePath }: MarkdownRendererProps) {
           <span>Failed to load file</span>
         </div>
       ) : (
-        <div className="prose prose-sm max-w-none min-w-0 break-words dark:prose-invert">
+        <div className="prose prose-sm max-w-none min-w-0 break-words dark:prose-invert" data-testid="markdown-renderer">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             urlTransform={markdownUrlTransform}
