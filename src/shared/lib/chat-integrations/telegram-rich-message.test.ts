@@ -85,3 +85,27 @@ describe('telegramConfigSchema rich flags', () => {
     expect(r.richMessages).toBeUndefined()
   })
 })
+
+// Representative real agent briefs. Add more from actual sessions over time.
+const GOLDEN_BRIEFS = [
+  '# Benchmark results\n\nI benchmarked the eviction policies. **LRU wins** on hit-rate.\n\n| Policy | Hit rate | p99 |\n|--------|----------|-----|\n| LRU | 94% | 12ms |\n| FIFO | 88% | 9ms |\n\nMemory overhead is ~O(n).\n\n```python\ncache = LRUCache(maxsize=1000)\n```',
+  '## Next steps\n\n- Add metrics\n- Benchmark under load\n- [ ] Open PR\n- [x] Write tests\n\n> Note: clock skew ruled out TTL eviction.',
+  'Mixed: `inline code`, **bold _nested italic_ bold**, ~~strike~~, a [link](https://example.com), and ==highlight==.',
+]
+
+describe('golden corpus: real agent briefs', () => {
+  it('converts every brief without throwing', () => {
+    for (const md of GOLDEN_BRIEFS) {
+      expect(() => markdownToRichMessage(md)).not.toThrow()
+      expect(markdownToRichMessage(md).markdown).toBe(md)
+    }
+  })
+
+  it('keeps each chunk within the rich ceiling', () => {
+    for (const md of GOLDEN_BRIEFS) {
+      for (const chunk of splitForRichLimits(md)) {
+        expect(chunk.length).toBeLessThanOrEqual(RICH_MAX_LENGTH)
+      }
+    }
+  })
+})
