@@ -1,4 +1,4 @@
-import { getModelPricing } from '../services/usage-service'
+import { getModelPricing } from '../services/model-pricing'
 import type { SessionUsage } from '../types/agent'
 
 /** Current context occupancy ≈ what the next message re-reads (last turn's input side). */
