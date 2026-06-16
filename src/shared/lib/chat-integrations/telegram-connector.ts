@@ -10,7 +10,7 @@ import { Bot, type Context as GrammyContext } from 'grammy'
 import { Marked, Renderer } from 'marked'
 import type { UserRequestEvent } from '@shared/lib/tool-definitions/types'
 import { ChatClientConnector, type OutgoingMessage } from './base-connector'
-import { describeUnsupportedRequest, isUnsupportedInChat, splitChatMessage } from './utils'
+import { describeUnsupportedRequest, isUnsupportedInChat } from './utils'
 import { captureException } from '@shared/lib/error-reporting'
 import { markdownToRichMessage, splitForRichLimits, THINKING_RICH_MESSAGE } from './telegram-rich-message'
 import type { InputRichMessage } from './telegram-rich-message-schema'
@@ -27,7 +27,6 @@ export interface TelegramConfig {
 
 // ── Telegram limits ─────────────────────────────────────────────────────
 
-const MAX_MESSAGE_LENGTH = 4096
 const FIRST_POLL_BATCH_DELAY_MS = 500
 const RICH_DRAFT_SENTINEL_PREFIX = 'draft:'
 // Q4 A/B switch: true = stream rich intermediates (group path); false = stream legacy HTML, finalize rich.
