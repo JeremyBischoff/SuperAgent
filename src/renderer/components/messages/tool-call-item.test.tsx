@@ -144,25 +144,6 @@ describe('ToolCallItem', () => {
       await user.click(screen.getByTestId('tool-call-toggle-Bash'))
       expect(screen.queryByText('Input')).not.toBeInTheDocument()
     })
-
-    it('supports controlled expansion state', async () => {
-      const user = userEvent.setup()
-      const onExpandedChange = vi.fn()
-      const tc = createToolCall({ input: { command: 'ls -la' }, result: 'file list' })
-      const { rerender } = render(
-        <ToolCallItem toolCall={tc} expanded={false} onExpandedChange={onExpandedChange} />
-      )
-
-      const toggle = screen.getByTestId('tool-call-toggle-Bash')
-      expect(toggle).toHaveAttribute('aria-expanded', 'false')
-      await user.click(toggle)
-      expect(onExpandedChange).toHaveBeenCalledWith(true)
-      expect(screen.queryByText('Input')).not.toBeInTheDocument()
-
-      rerender(<ToolCallItem toolCall={tc} expanded onExpandedChange={onExpandedChange} />)
-      expect(toggle).toHaveAttribute('aria-expanded', 'true')
-      expect(screen.getByText('Input')).toBeInTheDocument()
-    })
   })
 
   describe('input display', () => {

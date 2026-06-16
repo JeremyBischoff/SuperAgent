@@ -145,23 +145,9 @@ interface MessageItemProps {
   completedSubagents?: Set<string> | null
   onRemoveMessage?: (messageId: string) => void
   onRemoveToolCall?: (toolCallId: string) => void
-  expandedToolCallIds?: Set<string>
-  onToolCallExpandedChange?: (toolCallId: string, expanded: boolean) => void
 }
 
-function MessageItemComponent({
-  message,
-  isStreaming,
-  agentSlug,
-  sessionId,
-  isSessionActive,
-  activeSubagents,
-  completedSubagents,
-  onRemoveMessage,
-  onRemoveToolCall,
-  expandedToolCallIds,
-  onToolCallExpandedChange,
-}: MessageItemProps) {
+function MessageItemComponent({ message, isStreaming, agentSlug, sessionId, isSessionActive, activeSubagents, completedSubagents, onRemoveMessage, onRemoveToolCall }: MessageItemProps) {
   useRenderTracker('MessageItem')
   const isUser = message.type === 'user'
   const isAssistant = message.type === 'assistant'
@@ -327,18 +313,7 @@ function MessageItemComponent({
                         isCompleted={completedSubagents?.has(toolCall.id) ?? false}
                       />
                     ) : (
-                      <ToolCallItem
-                        toolCall={toolCall}
-                        messageCreatedAt={message.createdAt}
-                        agentSlug={agentSlug}
-                        isSessionActive={isSessionActive}
-                        expanded={expandedToolCallIds?.has(toolCall.id)}
-                        onExpandedChange={
-                          onToolCallExpandedChange
-                            ? (expanded) => onToolCallExpandedChange(toolCall.id, expanded)
-                            : undefined
-                        }
-                      />
+                      <ToolCallItem toolCall={toolCall} messageCreatedAt={message.createdAt} agentSlug={agentSlug} isSessionActive={isSessionActive} />
                     )}
                   </MessageErrorBoundary>
                 </div>

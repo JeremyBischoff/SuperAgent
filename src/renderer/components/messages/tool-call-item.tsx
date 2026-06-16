@@ -1,7 +1,7 @@
 
 import { cn } from '@shared/lib/utils/cn'
 import { Check, X, Ban, ChevronDown, ChevronRight, Loader2, Search } from 'lucide-react'
-import { useState, useRef, useMemo, memo, useCallback } from 'react'
+import { useState, useRef, useMemo, memo } from 'react'
 import { getToolRenderer } from './tool-renderers'
 import { parseToolResult } from '@renderer/lib/parse-tool-result'
 import { useElapsedTimer } from '@renderer/hooks/use-elapsed-timer'
@@ -15,8 +15,6 @@ interface ToolCallItemProps {
   messageCreatedAt?: Date | string
   agentSlug?: string
   isSessionActive?: boolean
-  expanded?: boolean
-  onExpandedChange?: (expanded: boolean) => void
 }
 
 interface StreamingToolCallItemProps {
@@ -90,27 +88,8 @@ export function StatusIndicator({ status }: { status: string }) {
   )
 }
 
-function ToolCallItemComponent({
-  toolCall,
-  messageCreatedAt,
-  agentSlug,
-  isSessionActive,
-  expanded: controlledExpanded,
-  onExpandedChange,
-}: ToolCallItemProps) {
-  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(false)
-  const expanded = controlledExpanded ?? uncontrolledExpanded
-  const setExpanded = useCallback(
-    (next: boolean | ((current: boolean) => boolean)) => {
-      const nextValue = typeof next === 'function' ? next(expanded) : next
-      if (onExpandedChange) {
-        onExpandedChange(nextValue)
-      } else {
-        setUncontrolledExpanded(nextValue)
-      }
-    },
-    [expanded, onExpandedChange]
-  )
+function ToolCallItemComponent({ toolCall, messageCreatedAt, agentSlug, isSessionActive }: ToolCallItemProps) {
+  const [expanded, setExpanded] = useState(false)
   const status = getStatus(toolCall, isSessionActive)
   const renderer = getToolRenderer(toolCall.name)
   const isPendingUserInput = status === 'running' && isUserInputTool(toolCall.name)

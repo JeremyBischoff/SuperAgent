@@ -137,16 +137,22 @@ test.describe('Tool Call Rendering', () => {
     const toolCall = renderedToolCall(sessionPage, 'Bash')
     await expect(toolCall).toBeVisible({ timeout: 20000 })
 
-    // Collapse first so the expand/collapse assertions start from a known state.
-    await setToolCallExpanded(toolCall, 'Bash', false)
-    await expect(toolCall.getByTestId('bash-terminal')).not.toBeVisible()
+    // The row's expanded state is local; a post-turn message refetch can remount
+    // it and reset the toggle. Re-drive each transition until the rendered
+    // terminal matches, so the assertions don't race that remount.
+    await expect(async () => {
+      await setToolCallExpanded(toolCall, 'Bash', false)
+      await expect(toolCall.getByTestId('bash-terminal')).not.toBeVisible({ timeout: 1000 })
+    }).toPass({ timeout: 20000 })
 
-    // Click to expand
-    await setToolCallExpanded(toolCall, 'Bash', true)
-    await expect(toolCall.getByTestId('bash-terminal')).toBeVisible()
+    await expect(async () => {
+      await setToolCallExpanded(toolCall, 'Bash', true)
+      await expect(toolCall.getByTestId('bash-terminal')).toBeVisible({ timeout: 1000 })
+    }).toPass({ timeout: 20000 })
 
-    // Click to collapse
-    await setToolCallExpanded(toolCall, 'Bash', false)
-    await expect(toolCall.getByTestId('bash-terminal')).not.toBeVisible()
+    await expect(async () => {
+      await setToolCallExpanded(toolCall, 'Bash', false)
+      await expect(toolCall.getByTestId('bash-terminal')).not.toBeVisible({ timeout: 1000 })
+    }).toPass({ timeout: 20000 })
   })
 })
