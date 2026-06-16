@@ -286,3 +286,28 @@ describe('TelegramConnector streaming (DM, draft)', () => {
     expect((connector as any).activeDrafts.has('999')).toBe(false)
   })
 })
+
+describe('TelegramConnector.showTypingIndicator', () => {
+  it('shows a tg-thinking draft in a DM with draft streaming on', async () => {
+    const connector = new TelegramConnector({ botToken: 'fake:token' })
+    const sendRichMessageDraft = vi.fn().mockResolvedValue(true)
+    const sendChatAction = vi.fn().mockResolvedValue(true)
+    ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction } }
+
+    await connector.showTypingIndicator('999')
+    expect(sendRichMessageDraft).toHaveBeenCalledWith(expect.objectContaining({
+      chat_id: 999,
+      rich_message: { html: '<tg-thinking></tg-thinking>' },
+    }))
+    expect(sendChatAction).not.toHaveBeenCalled()
+  })
+
+  it('uses the typing action in a group', async () => {
+    const connector = new TelegramConnector({ botToken: 'fake:token' })
+    const sendChatAction = vi.fn().mockResolvedValue(true)
+    ;(connector as any).bot = { api: { raw: { sendRichMessageDraft: vi.fn() }, sendChatAction } }
+
+    await connector.showTypingIndicator('-1001')
+    expect(sendChatAction).toHaveBeenCalledWith('-1001', 'typing')
+  })
+})

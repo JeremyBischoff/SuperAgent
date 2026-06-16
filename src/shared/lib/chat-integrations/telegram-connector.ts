@@ -435,6 +435,14 @@ export class TelegramConnector extends ChatClientConnector {
   async showTypingIndicator(chatId: string): Promise<void> {
     if (!this.bot) return
     try {
+      if (this.useRich && this.config.draftStreaming !== false && this.isPrivateChat(chatId)) {
+        await this.bot.api.raw.sendRichMessageDraft({
+          chat_id: Number(chatId),
+          draft_id: this.draftIdFor(chatId),
+          rich_message: THINKING_RICH_MESSAGE,
+        } as never)
+        return
+      }
       await this.bot.api.sendChatAction(chatId, 'typing')
     } catch {
       // Non-critical
