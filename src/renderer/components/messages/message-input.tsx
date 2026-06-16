@@ -55,6 +55,7 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
   const [stalePromptOpen, setStalePromptOpen] = useState(false)
   const [pendingContent, setPendingContent] = useState('')
   const [isSummarizing, setIsSummarizing] = useState(false)
+  const actionActiveRef = useRef(false)
   const [staleError, setStaleError] = useState<string | null>(null)
   const composerOptions = useComposerOptions({ initialEffort, initialModel })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -209,9 +210,11 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
 
   // Stale-session prompt action handlers
   const handleContinueSummary = async () => {
+    actionActiveRef.current = true
     setStaleError(null)
     setIsSummarizing(true)
     const content = pendingContent
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     try {
       const branchPromise = branchSession.mutateAsync({
         agentSlug,
@@ -219,29 +222,35 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
         message: content,
         model: initialModel,
       })
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), SUMMARY_TIMEOUT_MS)
-      )
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('timeout')), SUMMARY_TIMEOUT_MS)
+      })
       const res = await Promise.race([branchPromise, timeoutPromise])
+      if (!actionActiveRef.current) return
       setStalePromptOpen(false)
       setPendingContent('')
       setStaleError(null)
       setView({ kind: 'session', id: res.id })
+      actionActiveRef.current = false
     } catch {
       setStaleError("Couldn't summarize right now")
     } finally {
+      clearTimeout(timeoutId)
       setIsSummarizing(false)
     }
   }
 
   const handleNewTopic = async () => {
+    actionActiveRef.current = true
     const content = pendingContent
     try {
       const res = await createSession.mutateAsync({ agentSlug, message: content })
+      if (!actionActiveRef.current) return
       setStalePromptOpen(false)
       setPendingContent('')
       setStaleError(null)
       setView({ kind: 'session', id: res.id })
+      actionActiveRef.current = false
     } catch {
       setStaleError("Couldn't start a new session right now")
     }
@@ -327,6 +336,7 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
         lastActivityAt={lastActivityAt}
         model={initialModel ?? ''}
         isSummarizing={isSummarizing}
+        isStartingNewTopic={createSession.isPending}
         error={staleError}
         onContinueSummary={handleContinueSummary}
         onNewTopic={handleNewTopic}
@@ -335,6 +345,7 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
         onOpenChange={(open) => {
           setStalePromptOpen(open)
           if (!open) {
+            actionActiveRef.current = false
             // Restore the typed message so the user can edit and resend
             if (pendingContent) composer.setMessage(pendingContent)
             setPendingContent('')

@@ -1,4 +1,5 @@
 import { Loader2 } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -15,6 +16,7 @@ export interface StaleSessionPromptProps {
   lastActivityAt: Date | null
   model: string
   isSummarizing: boolean
+  isStartingNewTopic?: boolean
   error: string | null
   onContinueSummary: () => void
   onNewTopic: () => void
@@ -29,15 +31,6 @@ function formatTokens(tokens: number): string {
   return String(tokens)
 }
 
-function relativeTime(date: Date): string {
-  const diffMs = Date.now() - date.getTime()
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  if (diffHours < 2) return '1 hour ago'
-  if (diffHours < 24) return `${diffHours} hours ago`
-  const diffDays = Math.floor(diffHours / 24)
-  return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`
-}
-
 export function StaleSessionPrompt({
   open,
   agentName,
@@ -45,6 +38,7 @@ export function StaleSessionPrompt({
   lastActivityAt,
   model,
   isSummarizing,
+  isStartingNewTopic = false,
   error,
   onContinueSummary,
   onNewTopic,
@@ -54,7 +48,7 @@ export function StaleSessionPrompt({
 }: StaleSessionPromptProps) {
   const cost = estimateNextMessageCostUsd({ contextTokens, model, idle: true })
 
-  const timePart = lastActivityAt ? `, last used ${relativeTime(lastActivityAt)}` : ''
+  const timePart = lastActivityAt ? `, last used ${formatDistanceToNow(lastActivityAt, { addSuffix: true })}` : ''
   const costPart = cost !== null ? `, about $${cost.toFixed(2)},` : ''
   const headerText =
     `This chat is holding ~${formatTokens(contextTokens)} tokens${timePart}. ` +
@@ -106,7 +100,8 @@ export function StaleSessionPrompt({
           <button
             type="button"
             onClick={onNewTopic}
-            className="flex flex-col rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors"
+            disabled={isStartingNewTopic}
+            className="flex flex-col rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <div className="text-sm font-medium leading-none">
               Start a new topic with {agentName}
