@@ -244,6 +244,7 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
   const handleNewTopic = async () => {
     actionActiveRef.current = true
     setFailedAction(null)
+    setStaleError(null)
     const content = pendingContent
     try {
       const res = await createSession.mutateAsync({ agentSlug, message: content })

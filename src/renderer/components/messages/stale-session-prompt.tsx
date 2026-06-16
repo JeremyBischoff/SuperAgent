@@ -50,6 +50,9 @@ export function StaleSessionPrompt({
   onOpenChange,
 }: StaleSessionPromptProps) {
   const cost = estimateNextMessageCostUsd({ contextTokens, model, idle: true })
+  // While any action is in flight, lock the other two so a second click can't create
+  // a duplicate branched session or send-then-navigate-away mid-summary.
+  const busy = isSummarizing || isStartingNewTopic
 
   const timePart = lastActivityAt ? `, last used ${formatDistanceToNow(lastActivityAt, { addSuffix: true })}` : ''
   const costPart = cost !== null ? `, about $${cost.toFixed(2)},` : ''
@@ -72,7 +75,7 @@ export function StaleSessionPrompt({
           <button
             type="button"
             onClick={summaryFailed ? onRetry : onContinueSummary}
-            disabled={isSummarizing && !summaryFailed}
+            disabled={(isSummarizing && !summaryFailed) || isStartingNewTopic}
             className="flex flex-col rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <div className="flex items-center gap-2 text-sm font-medium leading-none">
@@ -103,7 +106,7 @@ export function StaleSessionPrompt({
           <button
             type="button"
             onClick={onNewTopic}
-            disabled={isStartingNewTopic}
+            disabled={busy}
             className="flex flex-col rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <div className="text-sm font-medium leading-none">
@@ -118,7 +121,8 @@ export function StaleSessionPrompt({
           <button
             type="button"
             onClick={onSendHere}
-            className="flex flex-col rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors"
+            disabled={busy}
+            className="flex flex-col rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <div className="text-sm font-medium leading-none text-muted-foreground">
               Send here anyway
