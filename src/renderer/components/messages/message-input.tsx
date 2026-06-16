@@ -19,10 +19,8 @@ import { useRenderTracker } from '@renderer/lib/perf'
 import type { EffortLevel } from '@shared/lib/container/types'
 import type { SessionUsage } from '@shared/lib/types/agent'
 import { useBranchSession, useCreateSession, useDismissStalePrompt } from '@renderer/hooks/use-sessions'
-import { useSelection } from '@renderer/context/selection-context'
 import { evaluateStalePrompt } from '@shared/lib/stale-session/stale-session-trigger'
 import { currentContextTokens } from '@shared/lib/stale-session/message-cost'
-import { SUMMARY_TIMEOUT_MS } from '@shared/lib/stale-session/stale-session-config'
 import { StaleSessionPrompt } from './stale-session-prompt'
 
 interface MessageInputProps {
@@ -43,9 +41,11 @@ interface MessageInputProps {
   contextUsage?: SessionUsage | null
   stalePromptDismissed?: boolean
   agentName?: string
+  /** Seeds the optimistic copy of the user's message and navigates when a stale-prompt action branches/creates a session. */
+  onSessionCreated?: (sessionId: string, initialMessage: string, messageUuid: string) => void
 }
 
-export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUuidAssigned, onMessageFailed, initialEffort, initialModel, lastActivityAt = null, contextUsage = null, stalePromptDismissed = false, agentName = '' }: MessageInputProps) {
+export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUuidAssigned, onMessageFailed, initialEffort, initialModel, lastActivityAt = null, contextUsage = null, stalePromptDismissed = false, agentName = '', onSessionCreated }: MessageInputProps) {
   useRenderTracker('MessageInput')
   const { canUseAgent, isAuthMode } = useUser()
   const isViewOnly = !canUseAgent(agentSlug)
@@ -81,7 +81,6 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
   const branchSession = useBranchSession()
   const createSession = useCreateSession()
   const dismissStalePrompt = useDismissStalePrompt()
-  const { setView } = useSelection()
 
   // Derive awaiting-input and running state the same way agent-activity-indicator does.
   const isAwaitingInput = isActive && (
@@ -216,29 +215,28 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
     setFailedAction(null)
     setIsSummarizing(true)
     const content = pendingContent
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
     try {
-      const branchPromise = branchSession.mutateAsync({
+      // No client-side timeout: the backend runs summary + container start +
+      // session init sequentially before responding, which legitimately exceeds
+      // any short timer for a large stale session. A real summary failure comes
+      // back as a rejected request (502); the user can cancel via the modal
+      // backdrop if they don't want to wait.
+      const res = await branchSession.mutateAsync({
         agentSlug,
         fromSessionId: sessionId,
         message: content,
         model: initialModel,
       })
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('timeout')), SUMMARY_TIMEOUT_MS)
-      })
-      const res = await Promise.race([branchPromise, timeoutPromise])
       if (!actionActiveRef.current) return
       setStalePromptOpen(false)
       setPendingContent('')
       setStaleError(null)
-      setView({ kind: 'session', id: res.id })
+      onSessionCreated?.(res.id, content, res.initialMessageUuid)
       actionActiveRef.current = false
     } catch {
       setStaleError("Couldn't summarize right now")
       setFailedAction('summary')
     } finally {
-      clearTimeout(timeoutId)
       setIsSummarizing(false)
     }
   }
@@ -253,7 +251,7 @@ export function MessageInput({ sessionId, agentSlug, onMessageSent, onMessageUui
       setStalePromptOpen(false)
       setPendingContent('')
       setStaleError(null)
-      setView({ kind: 'session', id: res.id })
+      onSessionCreated?.(res.id, content, res.initialMessageUuid)
       actionActiveRef.current = false
     } catch {
       setStaleError("Couldn't start a new session right now")

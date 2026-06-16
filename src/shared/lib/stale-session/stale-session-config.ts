@@ -15,9 +15,6 @@ export const SUMMARY_INPUT_BUDGET_TOKENS = 150_000
 /** Max output tokens for the summary generation. */
 export const SUMMARY_MAX_TOKENS = 700
 
-/** Max wait for summary generation before treating it as a failure. */
-export const SUMMARY_TIMEOUT_MS = 15_000
-
 /** Leading sentence of the injected first message when a session is branched.
  *  Used to detect and split the carried-context block for display.
  *  Must stay in sync with buildBranchInitialMessage (the full first line has

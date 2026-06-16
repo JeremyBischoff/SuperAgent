@@ -1,12 +1,12 @@
 import { Loader2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-} from '@renderer/components/ui/alert-dialog'
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@renderer/components/ui/dialog'
 import { estimateNextMessageCostUsd } from '@shared/lib/stale-session/message-cost'
 
 export interface StaleSessionPromptProps {
@@ -58,12 +58,12 @@ export function StaleSessionPrompt({
     `Your next message re-reads all of it${costPart} and that repeats on every message.`
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Large context</AlertDialogTitle>
-          <AlertDialogDescription>{headerText}</AlertDialogDescription>
-        </AlertDialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Large context</DialogTitle>
+          <DialogDescription>{headerText}</DialogDescription>
+        </DialogHeader>
         {error && (
           <p className="text-sm text-destructive">{error}</p>
         )}
@@ -128,7 +128,7 @@ export function StaleSessionPrompt({
             </p>
           </button>
         </div>
-      </AlertDialogContent>
-    </AlertDialog>
+      </DialogContent>
+    </Dialog>
   )
 }

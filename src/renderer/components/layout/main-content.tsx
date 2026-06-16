@@ -515,6 +515,7 @@ export function MainContent() {
                 contextUsage={contextUsage}
                 stalePromptDismissed={session?.stalePromptDismissed ?? false}
                 agentName={agent?.name ?? ''}
+                onSessionCreated={handleSessionCreated}
               />
             </div>
           </FilePreviewProvider>

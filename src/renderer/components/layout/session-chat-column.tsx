@@ -28,6 +28,7 @@ interface SessionChatColumnProps {
   contextUsage?: SessionUsage | null
   stalePromptDismissed?: boolean
   agentName?: string
+  onSessionCreated?: (sessionId: string, initialMessage: string, messageUuid: string) => void
 }
 
 export function SessionChatColumn({
@@ -46,6 +47,7 @@ export function SessionChatColumn({
   contextUsage,
   stalePromptDismissed,
   agentName,
+  onSessionCreated,
 }: SessionChatColumnProps) {
   const { isActive, browserActive } = useMessageStream(sessionId, agentSlug)
   useFileDeliveryWatcher(sessionId, agentSlug)
@@ -99,6 +101,7 @@ export function SessionChatColumn({
               contextUsage={contextUsage}
               stalePromptDismissed={stalePromptDismissed}
               agentName={agentName}
+              onSessionCreated={onSessionCreated}
             />
             <div className="flex justify-between items-center gap-1.5 px-6 py-3">
               {contextPercent != null ? (

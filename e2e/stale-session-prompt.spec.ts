@@ -132,7 +132,7 @@ test.describe('Stale Session Prompt', () => {
     await page.locator('[data-testid="message-input"]').fill('First message')
     await page.locator('[data-testid="send-button"]').click()
 
-    const dialog = page.getByRole('alertdialog')
+    const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
     await expect(dialog).toContainText('Large context')
 
@@ -162,6 +162,92 @@ test.describe('Stale Session Prompt', () => {
     await sessionPage.waitForUserMessageCount(3, 10000)
     // And the stale prompt never re-opened (dismissal persisted).
     await expect(dialog).not.toBeVisible()
+  })
+
+  // -------------------------------------------------------------------------
+  // Scenario 1b — Clicking outside cancels (true cancel, not a dismissal)
+  //
+  // Unlike "Send here anyway", a backdrop click must NOT set the dismissal
+  // flag: it restores the typed draft to the input and re-prompts on the next
+  // send because the session is still stale.
+  // -------------------------------------------------------------------------
+  test('stale session: clicking outside the prompt cancels, restores the draft, and re-prompts on next send', async (
+    { page, request },
+    testInfo,
+  ) => {
+    const sessionPage = new SessionPage(page)
+
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Cancel')
+
+    await page.locator('[data-testid="agent-breadcrumb"]').click()
+    await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
+
+    seedStaleSession(agent.slug, sessionId)
+
+    await openSessionById(page, agent, sessionId)
+    await expect(page.getByText('Context Usage')).toBeVisible({ timeout: 8000 })
+    await sessionPage.waitForInputEnabled(5000)
+
+    // Send: the stale prompt opens
+    await page.locator('[data-testid="message-input"]').fill('Draft to keep')
+    await page.locator('[data-testid="send-button"]').click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+    await expect(dialog).toContainText('Large context')
+
+    // Click the backdrop (top-left corner, outside the centered content)
+    await page.mouse.click(10, 10)
+
+    // Dialog closes, and the typed draft is restored to the input
+    await expect(dialog).not.toBeVisible({ timeout: 5000 })
+    await expect(page.locator('[data-testid="message-input"]')).toHaveValue('Draft to keep')
+
+    // No dismissal flag was persisted (true cancel, not "send here anyway")
+    const resp = await request.get(`/api/agents/${agent.slug}/sessions/${sessionId}`)
+    const s = (await resp.json()) as { stalePromptDismissed?: boolean }
+    expect(s.stalePromptDismissed ?? false).toBe(false)
+
+    // Sending again re-opens the prompt (session is still stale)
+    await page.locator('[data-testid="send-button"]').click()
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+  })
+
+  // -------------------------------------------------------------------------
+  // Scenario 1c — "Start a new topic" delivers the message to a fresh session
+  // and renders it immediately (optimistic copy seeded on navigation).
+  // -------------------------------------------------------------------------
+  test('stale session: "Start a new topic" creates a fresh session and shows the typed message', async (
+    { page, request },
+    testInfo,
+  ) => {
+    const sessionPage = new SessionPage(page)
+
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'NewTopic')
+
+    await page.locator('[data-testid="agent-breadcrumb"]').click()
+    await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
+
+    seedStaleSession(agent.slug, sessionId)
+
+    await openSessionById(page, agent, sessionId)
+    await expect(page.getByText('Context Usage')).toBeVisible({ timeout: 8000 })
+    await sessionPage.waitForInputEnabled(5000)
+
+    await page.locator('[data-testid="message-input"]').fill('A brand new topic')
+    await page.locator('[data-testid="send-button"]').click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+
+    // Start a new topic — creates a fresh session, sends the typed message verbatim
+    await dialog.getByRole('button', { name: /start a new topic/i }).click()
+
+    // Prompt closes and the typed message is rendered in the new session
+    await expect(dialog).not.toBeVisible({ timeout: 5000 })
+    await expect(
+      page.locator('[data-testid="message-list"]').getByText('A brand new topic'),
+    ).toBeVisible({ timeout: 8000 })
   })
 
   // -------------------------------------------------------------------------
@@ -199,7 +285,7 @@ test.describe('Stale Session Prompt', () => {
     await page.locator('[data-testid="message-input"]').fill('Continue this conversation')
     await page.locator('[data-testid="send-button"]').click()
 
-    const dialog = page.getByRole('alertdialog')
+    const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
 
     // Click "Continue from a summary" (first option in the dialog)
@@ -273,7 +359,7 @@ test.describe('Stale Session Prompt', () => {
     await expect(page.locator('[data-testid="message-input"]')).not.toBeVisible()
 
     // No stale prompt dialog is open
-    await expect(page.getByRole('alertdialog')).not.toBeVisible()
+    await expect(page.getByRole('dialog')).not.toBeVisible()
   })
 
   // -------------------------------------------------------------------------
@@ -304,6 +390,6 @@ test.describe('Stale Session Prompt', () => {
     // The message sends straight through (proves the prompt did NOT intercept).
     await sessionPage.waitForUserMessageCount(2, 10000)
     // And no stale prompt dialog ever appeared (neither threshold met).
-    await expect(page.getByRole('alertdialog')).not.toBeVisible()
+    await expect(page.getByRole('dialog')).not.toBeVisible()
   })
 })
