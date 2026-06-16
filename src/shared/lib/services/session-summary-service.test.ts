@@ -33,6 +33,24 @@ describe('buildBranchInitialMessage', () => {
     expect(out.toLowerCase()).toContain('continue')                       // continue-silently framing
   })
 
+  it('parses a JSON reply wrapped in a ```json markdown fence (observed Haiku behavior)', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [{ type: 'text', text: '```json\n{\n  "summary": "Wiring auth with rate limiting on the login route."\n}\n```' }],
+    })
+
+    const out = await buildBranchInitialMessage({
+      agentSlug: 'atlas',
+      fromSessionId: 'sess-1',
+      userMessage: 'continue',
+      transcript: [
+        { role: 'user', text: 'hi' },
+        { role: 'assistant', text: 'done' },
+      ],
+    })
+
+    expect(out).toContain('Wiring auth with rate limiting on the login route')
+  })
+
   it('throws on a non-JSON model response so the caller can fall back', async () => {
     mockCreate.mockResolvedValueOnce({
       content: [{ type: 'text', text: 'sorry I cannot do that' }],

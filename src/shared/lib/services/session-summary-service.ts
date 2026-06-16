@@ -102,11 +102,19 @@ export async function summarize(
     .map((c: { type: string; text?: string }) => (c.type === 'text' ? (c.text ?? '') : ''))
     .join('')
 
-  // JSON.parse errors are caught and rethrown with a clear message; ZodError propagates as-is.
-  // Both error types cause the caller to detect failure and return 502.
+  // Models (Haiku especially) often wrap the JSON in a ```json code fence or add
+  // prose around it despite the "TEXT ONLY as JSON" instruction, so extract the
+  // JSON object (first { to last }) before parsing rather than assuming the whole
+  // reply is clean JSON. JSON.parse / ZodError still propagate so the caller
+  // detects failure and returns 502.
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end <= start) {
+    throw new Error(`Summarizer returned non-JSON response: ${text.slice(0, 120)}`)
+  }
   let parsedJson: unknown
   try {
-    parsedJson = JSON.parse(text)
+    parsedJson = JSON.parse(text.slice(start, end + 1))
   } catch {
     throw new Error(`Summarizer returned non-JSON response: ${text.slice(0, 120)}`)
   }
