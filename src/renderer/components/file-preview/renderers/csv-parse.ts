@@ -175,6 +175,10 @@ function maxLength(rows: string[][], floor: number): number {
   return max
 }
 
+// TODO: candidate to replace with PapaParse — battle-tested on real-world CSV
+// edge cases (BOM, loose quoting, encodings) and supports streaming, which
+// would let us lift the 5MB/1000-row caps for huge files. Swap here behind the
+// ParsedCsv boundary; keep skipEmptyLines off to preserve row-number alignment.
 export function parseCsv(text: string): ParsedCsv {
   const delimiter = detectDelimiter(text)
   // Blank lines are intentionally kept so the table's row numbers line up with
