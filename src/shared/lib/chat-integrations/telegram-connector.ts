@@ -35,8 +35,6 @@ const RICH_DRAFT_SENTINEL_PREFIX = 'draft:'
 // typing action ~5s — so startWorking re-sends on this heartbeat until the
 // response takes over. ~1s stays within Telegram's per-chat send cadence.
 const WORKING_REFRESH_MS = 1000
-// Q4 A/B switch: true = stream rich intermediates (group path); false = stream legacy HTML, finalize rich.
-const STREAM_RICH_INTERMEDIATES = true
 
 // ── Markdown → Telegram HTML ─────────────────────────────────────────────
 
@@ -375,7 +373,7 @@ export class TelegramConnector extends ChatClientConnector {
 
     // Group/channel edit path.
     if (!existingMessageId) {
-      if (this.useRich && STREAM_RICH_INTERMEDIATES) {
+      if (this.useRich) {
         // Via sendRichOrHtml so a rich-send failure falls back to HTML like every
         // other send path, instead of throwing and aborting the stream.
         return this.sendRichOrHtml(chatId, body)
@@ -384,7 +382,7 @@ export class TelegramConnector extends ChatClientConnector {
       return String(sent.message_id)
     }
 
-    if (this.useRich && STREAM_RICH_INTERMEDIATES) {
+    if (this.useRich) {
       await this.editRichOrHtml(chatId, existingMessageId, body)
     } else {
       try {
