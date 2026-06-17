@@ -335,78 +335,44 @@ describe('TelegramConnector streaming (DM, draft)', () => {
 })
 
 describe('TelegramConnector.showTypingIndicator', () => {
-  it('posts a static "Thinking…" message in a DM (not a typewriter draft)', async () => {
+  it('shows the native <tg-thinking> draft in a DM', async () => {
     const connector = new TelegramConnector({ botToken: 'fake:token' })
-    const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 555 })
     const sendRichMessageDraft = vi.fn().mockResolvedValue(true)
-    const editMessageText = vi.fn().mockResolvedValue(true)
     const sendChatAction = vi.fn().mockResolvedValue(true)
-    ;(connector as any).bot = { api: { raw: { sendRichMessage, sendRichMessageDraft, editMessageText }, sendChatAction } }
+    ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction } }
 
     await connector.showTypingIndicator('999')
-    expect(sendRichMessage).toHaveBeenCalledWith(expect.objectContaining({
+    expect(sendRichMessageDraft).toHaveBeenCalledWith(expect.objectContaining({
       chat_id: 999,
-      rich_message: expect.objectContaining({ markdown: expect.stringContaining('Thinking') }),
+      rich_message: { html: '<tg-thinking>✨ Thinking…</tg-thinking>' },
     }))
-    // No draft: a draft would type the word out letter by letter.
-    expect(sendRichMessageDraft).not.toHaveBeenCalled()
+    // A draft (native thinking block), not the group typing action.
     expect(sendChatAction).not.toHaveBeenCalled()
   })
 
-  it('animates "Thinking…" by editing the dots on the same posted message', async () => {
+  it('re-sends the same draft id on each call to keep the indicator alive', async () => {
     const connector = new TelegramConnector({ botToken: 'fake:token' })
-    const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 555 })
-    const editMessageText = vi.fn().mockResolvedValue(true)
-    ;(connector as any).bot = { api: { raw: { sendRichMessage, editMessageText, sendRichMessageDraft: vi.fn() }, sendChatAction: vi.fn() } }
-
-    await connector.showTypingIndicator('999') // first call posts
-    await connector.showTypingIndicator('999') // second call edits in place
-    expect(sendRichMessage).toHaveBeenCalledTimes(1)
-    expect(editMessageText).toHaveBeenCalledTimes(1)
-    const posted = (sendRichMessage.mock.calls[0][0] as any).rich_message.markdown
-    const edited = (editMessageText.mock.calls[0][0] as any).rich_message.markdown
-    expect(posted).toContain('Thinking')
-    expect(edited).toContain('Thinking')
-    expect(posted).not.toBe(edited) // only the dots changed
-    expect((editMessageText.mock.calls[0][0] as any).message_id).toBe(555)
-  })
-
-  it('does not post a duplicate when the first post races (dispatch vs stream_start)', async () => {
-    const connector = new TelegramConnector({ botToken: 'fake:token' })
-    let resolvePost: (v: { message_id: number }) => void = () => {}
-    const sendRichMessage = vi.fn().mockImplementation(
-      () => new Promise((r) => { resolvePost = r }),
-    )
-    const editMessageText = vi.fn().mockResolvedValue(true)
-    ;(connector as any).bot = { api: { raw: { sendRichMessage, editMessageText, sendRichMessageDraft: vi.fn() }, sendChatAction: vi.fn() } }
-
-    // Two near-simultaneous calls before the first post resolves.
-    const p1 = connector.showTypingIndicator('999')
-    const p2 = connector.showTypingIndicator('999')
-    resolvePost({ message_id: 555 })
-    await Promise.all([p1, p2])
-
-    expect(sendRichMessage).toHaveBeenCalledTimes(1) // exactly one bubble posted
-  })
-
-  it('clearThinking deletes the posted "Thinking…" message', async () => {
-    const connector = new TelegramConnector({ botToken: 'fake:token' })
-    const sendRichMessage = vi.fn().mockResolvedValue({ message_id: 555 })
-    const deleteMessage = vi.fn().mockResolvedValue(true)
-    ;(connector as any).bot = { api: { raw: { sendRichMessage, editMessageText: vi.fn(), sendRichMessageDraft: vi.fn() }, deleteMessage, sendChatAction: vi.fn() } }
+    const sendRichMessageDraft = vi.fn().mockResolvedValue(true)
+    ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction: vi.fn() } }
 
     await connector.showTypingIndicator('999')
-    await connector.clearThinking('999')
-    expect(deleteMessage).toHaveBeenCalledWith('999', 555)
+    await connector.showTypingIndicator('999')
+    expect(sendRichMessageDraft).toHaveBeenCalledTimes(2)
+    // Same draft id, so the streaming response (which reuses it) replaces the indicator.
+    const first = (sendRichMessageDraft.mock.calls[0][0] as any).draft_id
+    const second = (sendRichMessageDraft.mock.calls[1][0] as any).draft_id
+    expect(second).toBe(first)
   })
 
   it('uses the typing action in a group', async () => {
     const connector = new TelegramConnector({ botToken: 'fake:token' })
+    const sendRichMessageDraft = vi.fn().mockResolvedValue(true)
     const sendChatAction = vi.fn().mockResolvedValue(true)
-    ;(connector as any).bot = { api: { raw: { sendRichMessageDraft: vi.fn() }, sendChatAction } }
+    ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction } }
 
     await connector.showTypingIndicator('-1001')
     expect(sendChatAction).toHaveBeenCalledWith('-1001', 'typing')
+    expect(sendRichMessageDraft).not.toHaveBeenCalled()
   })
 })
 

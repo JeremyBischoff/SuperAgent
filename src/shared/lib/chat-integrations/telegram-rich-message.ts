@@ -35,18 +35,3 @@ export const HTML_MAX_LENGTH = 4096
 export function splitForHtmlLimits(md: string): string[] {
   return splitChatMessage(md, HTML_MAX_LENGTH)
 }
-
-/**
- * "Thinking…" indicator frames shown before the response streams. The indicator is
- * a real message posted via sendRichMessage; each frame is applied by editing that
- * message in place (editMessageText), so the label stays static and only the dots
- * animate. The message is deleted (clearThinking) when the response takes over.
- * A draft is deliberately NOT used: a draft renders by typing its text out letter
- * by letter, which would animate the whole word instead of just the dots.
- */
-export const THINKING_FRAMES: InputRichMessage[] = [
-  { markdown: '✨ Thinking' },
-  { markdown: '✨ Thinking.' },
-  { markdown: '✨ Thinking..' },
-  { markdown: '✨ Thinking...' },
-]

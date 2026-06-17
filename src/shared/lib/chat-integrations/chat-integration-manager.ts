@@ -1447,24 +1447,25 @@ export async function processSSEEvent(
 }
 
 /**
- * Interval between "Thinking…" dot frames. Each tick edits the posted indicator
- * message to the next frame (✨ Thinking → Thinking. → Thinking.. → …), so only
- * the dots animate. Kept at ~1s to stay within Telegram's per-chat edit cadence.
+ * Interval at which the "Thinking…" indicator is re-sent. Telegram rich-message
+ * drafts are ephemeral (~30s), so each tick re-sends the native <tg-thinking> draft
+ * to keep it alive (and the second send defeats the blank first snapshot). Kept at
+ * ~1s to stay within Telegram's per-chat send cadence.
  */
-export const THINKING_FRAME_MS = 1000
+export const THINKING_REFRESH_MS = 1000
 
 /**
- * Animate the "Thinking…" indicator until the first token streams. Each tick calls
- * the connector's showTypingIndicator, which posts a real indicator message and then
- * edits it to the next frame so only the dots animate; stopThinking ends the timer
- * and tells the connector to delete the message as the response takes over.
+ * Show the "Thinking…" indicator until the first token streams. Each tick calls the
+ * connector's showTypingIndicator, which re-sends the native <tg-thinking> draft to
+ * keep it visible; stopThinking ends the timer and clears the indicator as the
+ * response takes over.
  */
 export function startThinking(managed: ManagedConnector): void {
   stopThinking(managed)
   managed.connector.showTypingIndicator(managed.chatId).catch(() => {})
   managed.thinkingTimer = setInterval(() => {
     managed.connector.showTypingIndicator(managed.chatId).catch(() => {})
-  }, THINKING_FRAME_MS)
+  }, THINKING_REFRESH_MS)
 }
 
 export function stopThinking(managed: ManagedConnector): void {
@@ -1472,8 +1473,9 @@ export function stopThinking(managed: ManagedConnector): void {
     clearInterval(managed.thinkingTimer)
     managed.thinkingTimer = null
   }
-  // Always clear the posted indicator: stream_start shows a one-shot "Thinking…"
-  // with no timer set, which still needs removing when the response takes over.
+  // Tell the connector to clear its "Thinking…" indicator. Telegram's draft is
+  // replaced by the streaming response (shared draft_id), so its clearThinking is a
+  // no-op; the hook remains for connectors that actively remove an indicator.
   managed.connector.clearThinking(managed.chatId).catch(() => {})
 }
 

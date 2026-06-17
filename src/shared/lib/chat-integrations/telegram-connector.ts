@@ -14,7 +14,7 @@ import type { UserRequestEvent } from '@shared/lib/tool-definitions/types'
 import { ChatClientConnector, type OutgoingMessage } from './base-connector'
 import { describeUnsupportedRequest, isUnsupportedInChat } from './utils'
 import { captureException } from '@shared/lib/error-reporting'
-import { markdownToRichMessage, splitForRichLimits, splitForHtmlLimits, THINKING_FRAMES } from './telegram-rich-message'
+import { markdownToRichMessage, splitForRichLimits, splitForHtmlLimits } from './telegram-rich-message'
 import type { InputRichMessage } from './telegram-rich-message-schema'
 
 // ── Config ──────────────────────────────────────────────────────────────
@@ -134,13 +134,6 @@ export class TelegramConnector extends ChatClientConnector {
   // Animated DM draft streaming: per-chat non-zero draft id.
   private nextDraftId = 1
   private activeDrafts: Map<string, number> = new Map()
-  // Per-chat "Thinking…" indicator: the posted message id, the dot-frame cursor,
-  // and an epoch bumped on clearThinking to discard a post that lands after teardown.
-  private thinkingMessageId: Map<string, string> = new Map()
-  private thinkingFrame: Map<string, number> = new Map()
-  private thinkingEpoch: Map<string, number> = new Map()
-  // Chats with a first post in flight, to dedupe a racing concurrent post.
-  private thinkingPosting: Set<string> = new Set()
 
   constructor(private config: TelegramConfig) {
     super()
@@ -315,10 +308,6 @@ export class TelegramConnector extends ChatClientConnector {
     this.callbackDataMap.clear()
     this.pendingQuestions.clear()
     this.activeDrafts.clear()
-    this.thinkingMessageId.clear()
-    this.thinkingFrame.clear()
-    this.thinkingEpoch.clear()
-    this.thinkingPosting.clear()
 
     if (this.bot) {
       await this.bot.stop()
@@ -434,13 +423,6 @@ export class TelegramConnector extends ChatClientConnector {
     return id
   }
 
-  /** Next "Thinking…" animation frame for a chat; cycles THINKING_FRAMES. */
-  private nextThinkingFrame(chatId: string): InputRichMessage {
-    const i = this.thinkingFrame.get(chatId) ?? 0
-    this.thinkingFrame.set(chatId, i + 1)
-    return THINKING_FRAMES[i % THINKING_FRAMES.length]
-  }
-
   private async driveDraftStream(chatId: string, body: string): Promise<string> {
     if (!this.bot) throw new Error('Bot not connected')
     await this.bot.api.raw.sendRichMessageDraft({
@@ -463,57 +445,22 @@ export class TelegramConnector extends ChatClientConnector {
     if (!this.bot) return
     try {
       if (this.useRich && this.config.draftStreaming !== false && this.isPrivateChat(chatId)) {
-        // A POSTED message edited in place, not a draft: a draft types its text out
-        // letter by letter, but we want a static "✨ Thinking" where only the dots
-        // animate. Editing a real message replaces its text instantly.
-        const existing = this.thinkingMessageId.get(chatId)
-        if (existing !== undefined) {
-          await this.bot.api.raw.editMessageText({
-            chat_id: Number(chatId),
-            message_id: Number(existing),
-            rich_message: this.nextThinkingFrame(chatId),
-          })
-          return
-        }
-        // No message yet. Guard against a concurrent first post (the dispatch tick
-        // and the stream_start one-shot can race) creating a duplicate bubble.
-        if (this.thinkingPosting.has(chatId)) return
-        this.thinkingPosting.add(chatId)
-        try {
-          const epoch = this.thinkingEpoch.get(chatId) ?? 0
-          const sent = await this.bot.api.raw.sendRichMessage({
-            chat_id: Number(chatId),
-            rich_message: this.nextThinkingFrame(chatId),
-          })
-          const id = String(sent.message_id)
-          if ((this.thinkingEpoch.get(chatId) ?? 0) !== epoch) {
-            // clearThinking ran while this post was in flight — drop the orphan.
-            await this.bot.api.deleteMessage(chatId, Number(id)).catch(() => {})
-            return
-          }
-          this.thinkingMessageId.set(chatId, id)
-        } finally {
-          this.thinkingPosting.delete(chatId)
-        }
+        // Native Telegram "Thinking…" placeholder (RichBlockThinking / <tg-thinking>).
+        // Draft-only, so DM-only. Static ✨: the animated AIActions custom emoji only
+        // render when the bot's owner has Telegram Premium (otherwise Telegram strips the
+        // entity), so we use a plain sparkle that renders for everyone. The keep-alive
+        // timer re-sends it (drafts expire ~30s) and it shares the streaming draft_id, so
+        // the response replaces it.
+        await this.bot.api.raw.sendRichMessageDraft({
+          chat_id: Number(chatId),
+          draft_id: this.draftIdFor(chatId),
+          rich_message: { html: '<tg-thinking>✨ Thinking…</tg-thinking>' },
+        })
         return
       }
       await this.bot.api.sendChatAction(chatId, 'typing')
     } catch {
-      // Non-critical (e.g. "message is not modified"); the next frame retries.
-    }
-  }
-
-  /** Remove the posted "Thinking…" message as the streamed response takes over. */
-  async clearThinking(chatId: string): Promise<void> {
-    this.thinkingEpoch.set(chatId, (this.thinkingEpoch.get(chatId) ?? 0) + 1)
-    this.thinkingFrame.delete(chatId)
-    const id = this.thinkingMessageId.get(chatId)
-    this.thinkingMessageId.delete(chatId)
-    if (id === undefined || !this.bot) return
-    try {
-      await this.bot.api.deleteMessage(chatId, Number(id))
-    } catch {
-      // Already gone / too old to delete — non-critical.
+      // Non-critical; the keep-alive timer re-sends on the next tick.
     }
   }
 

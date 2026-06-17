@@ -4,7 +4,6 @@ import { telegramConfigSchema } from './config-schema'
 import {
   markdownToRichMessage,
   splitForRichLimits,
-  THINKING_FRAMES,
   RICH_MAX_LENGTH,
 } from './telegram-rich-message'
 
@@ -57,19 +56,6 @@ describe('splitForRichLimits', () => {
     const chunks = splitForRichLimits(big)
     expect(chunks.length).toBeGreaterThan(1)
     expect(chunks.every((c) => c.length <= RICH_MAX_LENGTH)).toBe(true)
-  })
-})
-
-describe('THINKING_FRAMES', () => {
-  it('is a sequence of distinct visible "Thinking…" markdown frames (drafts render diffs, not the first snapshot)', () => {
-    expect(THINKING_FRAMES.length).toBeGreaterThan(1)
-    for (const frame of THINKING_FRAMES) {
-      expect(frame.markdown).toContain('Thinking')
-      expect(frame.html).toBeUndefined()
-    }
-    // Consecutive frames must differ so each draft update renders as an animated diff.
-    const unique = new Set(THINKING_FRAMES.map((f) => f.markdown))
-    expect(unique.size).toBe(THINKING_FRAMES.length)
   })
 })
 
