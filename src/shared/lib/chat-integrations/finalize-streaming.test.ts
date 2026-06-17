@@ -334,34 +334,47 @@ describe('TelegramConnector streaming (DM, draft)', () => {
   })
 })
 
-describe('TelegramConnector.showTypingIndicator', () => {
+describe('TelegramConnector.startWorking / stopWorking', () => {
   it('shows the native <tg-thinking> draft in a DM', async () => {
     const connector = new TelegramConnector({ botToken: 'fake:token' })
     const sendRichMessageDraft = vi.fn().mockResolvedValue(true)
     const sendChatAction = vi.fn().mockResolvedValue(true)
     ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction } }
 
-    await connector.showTypingIndicator('999')
+    await connector.startWorking('999')
     expect(sendRichMessageDraft).toHaveBeenCalledWith(expect.objectContaining({
       chat_id: 999,
       rich_message: { html: '<tg-thinking>✨ Thinking…</tg-thinking>' },
     }))
     // A draft (native thinking block), not the group typing action.
     expect(sendChatAction).not.toHaveBeenCalled()
+    await connector.stopWorking('999') // clear the keep-alive timer
   })
 
-  it('re-sends the same draft id on each call to keep the indicator alive', async () => {
-    const connector = new TelegramConnector({ botToken: 'fake:token' })
-    const sendRichMessageDraft = vi.fn().mockResolvedValue(true)
-    ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction: vi.fn() } }
+  it('keeps the draft alive on a heartbeat and stops re-sending after stopWorking', async () => {
+    vi.useFakeTimers()
+    try {
+      const connector = new TelegramConnector({ botToken: 'fake:token' })
+      const sendRichMessageDraft = vi.fn().mockResolvedValue(true)
+      ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction: vi.fn() } }
 
-    await connector.showTypingIndicator('999')
-    await connector.showTypingIndicator('999')
-    expect(sendRichMessageDraft).toHaveBeenCalledTimes(2)
-    // Same draft id, so the streaming response (which reuses it) replaces the indicator.
-    const first = (sendRichMessageDraft.mock.calls[0][0] as any).draft_id
-    const second = (sendRichMessageDraft.mock.calls[1][0] as any).draft_id
-    expect(second).toBe(first)
+      await connector.startWorking('999')
+      expect(sendRichMessageDraft).toHaveBeenCalledTimes(1) // sent right away
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(sendRichMessageDraft).toHaveBeenCalledTimes(2) // re-sent to keep alive
+
+      // Same draft id, so the streaming response (which reuses it) replaces the indicator.
+      const first = (sendRichMessageDraft.mock.calls[0][0] as any).draft_id
+      const second = (sendRichMessageDraft.mock.calls[1][0] as any).draft_id
+      expect(second).toBe(first)
+
+      await connector.stopWorking('999')
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(sendRichMessageDraft).toHaveBeenCalledTimes(2) // no further sends after stop
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('uses the typing action in a group', async () => {
@@ -370,9 +383,10 @@ describe('TelegramConnector.showTypingIndicator', () => {
     const sendChatAction = vi.fn().mockResolvedValue(true)
     ;(connector as any).bot = { api: { raw: { sendRichMessageDraft }, sendChatAction } }
 
-    await connector.showTypingIndicator('-1001')
+    await connector.startWorking('-1001')
     expect(sendChatAction).toHaveBeenCalledWith('-1001', 'typing')
     expect(sendRichMessageDraft).not.toHaveBeenCalled()
+    await connector.stopWorking('-1001') // clear the keep-alive timer
   })
 })
 

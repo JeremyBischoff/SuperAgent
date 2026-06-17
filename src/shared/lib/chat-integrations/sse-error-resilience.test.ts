@@ -51,7 +51,6 @@ function createManagedConnector(overrides?: Partial<ManagedConnector>): ManagedC
     },
     currentToolInput: '',
     pendingToolMessages: [],
-    thinkingTimer: null,
     ...overrides,
   }
 }

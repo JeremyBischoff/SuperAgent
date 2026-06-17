@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { processSSEEvent, finalizeStreaming, resolvePendingToolMessages, startThinking, stopThinking, THINKING_REFRESH_MS, type ManagedConnector } from './chat-integration-manager'
+import { processSSEEvent, finalizeStreaming, resolvePendingToolMessages, type ManagedConnector } from './chat-integration-manager'
 import { MockChatClientConnector } from './mock-connector'
 import type { ChatIntegration } from '@shared/lib/db/schema'
 
@@ -34,7 +34,6 @@ function createManagedConnector(overrides?: Partial<ManagedConnector>): ManagedC
     },
     currentToolInput: '',
     pendingToolMessages: [],
-    thinkingTimer: null,
     ...overrides,
   }
 }
@@ -56,42 +55,27 @@ async function processEvents(
 
 // ── Tests ───────────────────────────────────────────────────────────────
 
-describe('thinking indicator', () => {
-  beforeEach(() => vi.useFakeTimers())
-  afterEach(() => vi.useRealTimers())
-
-  it('re-sends the indicator immediately and on each interval until stopped', async () => {
+describe('working indicator', () => {
+  it('stops the indicator once, on the first streamed token of a segment', async () => {
     const managed = createManagedConnector()
     const mock = getMock(managed)
-
-    startThinking(managed)
-    expect(mock.typingIndicators.length).toBe(1) // shown right away
-
-    await vi.advanceTimersByTimeAsync(THINKING_REFRESH_MS)
-    expect(mock.typingIndicators.length).toBe(2) // re-sent to keep alive
-
-    await vi.advanceTimersByTimeAsync(THINKING_REFRESH_MS)
-    expect(mock.typingIndicators.length).toBe(3)
-
-    stopThinking(managed)
-    await vi.advanceTimersByTimeAsync(THINKING_REFRESH_MS * 5)
-    expect(mock.typingIndicators.length).toBe(3) // no further sends
-    expect(managed.thinkingTimer).toBeNull()
-  })
-
-  it('stops re-sending once the first token streams', async () => {
-    const managed = createManagedConnector()
-    managed.streamingState.lastUpdateTime = 0
-    const mock = getMock(managed)
-
-    startThinking(managed)
-    expect(mock.typingIndicators.length).toBe(1)
 
     await processSSEEvent(managed, { type: 'stream_delta', text: 'Hello' })
-    expect(managed.thinkingTimer).toBeNull() // first token stopped the timer
+    expect(mock.stoppedWorking).toEqual(['chat-123']) // fired on the thinking→streaming transition
 
-    await vi.advanceTimersByTimeAsync(THINKING_REFRESH_MS * 5)
-    expect(mock.typingIndicators.length).toBe(1) // nothing re-sent during streaming
+    // Later tokens in the same segment must not re-fire stopWorking (no API call per token).
+    await processSSEEvent(managed, { type: 'stream_delta', text: ' world' })
+    expect(mock.stoppedWorking).toEqual(['chat-123'])
+  })
+
+  it('re-shows the indicator at the start of a new segment', async () => {
+    const managed = createManagedConnector()
+    const mock = getMock(managed)
+
+    await processSSEEvent(managed, { type: 'stream_delta', text: 'first segment' })
+    const before = mock.typingIndicators.length
+    await processSSEEvent(managed, { type: 'stream_start' })
+    expect(mock.typingIndicators.length).toBe(before + 1) // startWorking re-shown for the next segment
   })
 })
 
@@ -1010,7 +994,6 @@ describe('no-streaming connector (iMessage-style)', () => {
       },
       currentToolInput: '',
       pendingToolMessages: [],
-      thinkingTimer: null,
     }
   }
 

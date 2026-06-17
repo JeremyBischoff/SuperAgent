@@ -31,6 +31,10 @@ export interface TelegramConfig {
 
 const FIRST_POLL_BATCH_DELAY_MS = 500
 const RICH_DRAFT_SENTINEL_PREFIX = 'draft:'
+// Telegram's "working" indicators are ephemeral — rich drafts expire ~30s, the
+// typing action ~5s — so startWorking re-sends on this heartbeat until the
+// response takes over. ~1s stays within Telegram's per-chat send cadence.
+const WORKING_REFRESH_MS = 1000
 // Q4 A/B switch: true = stream rich intermediates (group path); false = stream legacy HTML, finalize rich.
 const STREAM_RICH_INTERMEDIATES = true
 
@@ -134,6 +138,8 @@ export class TelegramConnector extends ChatClientConnector {
   // Animated DM draft streaming: per-chat non-zero draft id.
   private nextDraftId = 1
   private activeDrafts: Map<string, number> = new Map()
+  // Keep-alive timers re-sending the "working" indicator, one per chat.
+  private workingTimers: Map<string, ReturnType<typeof setInterval>> = new Map()
 
   constructor(private config: TelegramConfig) {
     super()
@@ -308,6 +314,8 @@ export class TelegramConnector extends ChatClientConnector {
     this.callbackDataMap.clear()
     this.pendingQuestions.clear()
     this.activeDrafts.clear()
+    for (const timer of this.workingTimers.values()) clearInterval(timer)
+    this.workingTimers.clear()
 
     if (this.bot) {
       await this.bot.stop()
@@ -441,7 +449,29 @@ export class TelegramConnector extends ChatClientConnector {
     }
   }
 
-  async showTypingIndicator(chatId: string): Promise<void> {
+  async startWorking(chatId: string): Promise<void> {
+    if (!this.bot) return
+    // Send once now, then keep it alive on a heartbeat (drafts/typing self-expire)
+    // until stopWorking. Idempotent: one timer per chat.
+    await this.sendWorkingIndicator(chatId)
+    if (this.workingTimers.has(chatId)) return
+    this.workingTimers.set(chatId, setInterval(() => {
+      void this.sendWorkingIndicator(chatId)
+    }, WORKING_REFRESH_MS))
+  }
+
+  async stopWorking(chatId: string): Promise<void> {
+    const timer = this.workingTimers.get(chatId)
+    if (timer) {
+      clearInterval(timer)
+      this.workingTimers.delete(chatId)
+    }
+    // The streaming response shares the draft_id and replaces the draft in place,
+    // so there is nothing else to tear down.
+  }
+
+  /** Post the "working" indicator once: a native draft in rich DMs, else typing. */
+  private async sendWorkingIndicator(chatId: string): Promise<void> {
     if (!this.bot) return
     try {
       if (this.useRich && this.config.draftStreaming !== false && this.isPrivateChat(chatId)) {
