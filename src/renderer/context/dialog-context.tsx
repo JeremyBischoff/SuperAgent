@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback } from 'react'
 
 interface DialogContextType {
   settingsOpen: boolean
@@ -36,18 +36,8 @@ export function DialogProvider({
     onOpenWizard()
   }, [onOpenWizard, setSettingsOpen])
 
-  // Listen for menu commands from Electron main process
-  useEffect(() => {
-    if (!window.electronAPI) return
-
-    const unsubscribe = window.electronAPI.onOpenSettings?.(() => {
-      setSettingsOpenRaw(true)
-    })
-
-    return () => {
-      unsubscribe?.()
-    }
-  }, [])
+  // Menu command "open-settings" is handled centrally by MenuCommandHandler,
+  // which calls setSettingsOpen — keeping the menu→action mapping in one place.
 
   return (
     <DialogContext.Provider
