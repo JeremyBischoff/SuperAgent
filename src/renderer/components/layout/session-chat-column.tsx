@@ -92,6 +92,9 @@ export function SessionChatColumn({
 
   // Local Ignore (no persistence) + in-flight action state for the popover.
   const [ignored, setIgnored] = useState(false)
+  // True while either stale-session popover is open; suppresses the centered
+  // scroll-to-bottom FAB it would otherwise overlap.
+  const [staleMenuOpen, setStaleMenuOpen] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [staleError, setStaleError] = useState<string | null>(null)
   const [failedAction, setFailedAction] = useState<'summary' | 'newConversation' | null>(null)
@@ -157,6 +160,7 @@ export function SessionChatColumn({
         pendingUserMessages={pendingUserMessages}
         pendingRequestCount={pendingRequestCount}
         onPendingMessageAppeared={onPendingMessageAppeared}
+        suppressScrollToBottom={staleMenuOpen}
         footerClassName="bg-background max-w-[740px] mx-auto w-full"
         footer={
           pendingRequestCount > 0 ? (
@@ -187,6 +191,7 @@ export function SessionChatColumn({
                   summaryError={failedAction === 'summary' ? staleError : null}
                   onRetrySummary={handleContinueSummary}
                   isStartingFresh={createSession.isPending}
+                  onMenuOpenChange={setStaleMenuOpen}
                 />
               )}
               <MessageInput
