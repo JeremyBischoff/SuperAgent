@@ -780,14 +780,9 @@ export function AppSidebar() {
   const updateStatus = useUpdateStatus()
   const updateAvailable = updateStatus.state === 'available' || updateStatus.state === 'downloaded'
 
-  // Electron menu → New Agent
-  useEffect(() => {
-    if (!window.electronAPI?.onOpenCreateAgent) return
-    const unsubscribe = window.electronAPI.onOpenCreateAgent(() => { void createUntitledAgent() })
-    return () => {
-      unsubscribe?.()
-    }
-  }, [createUntitledAgent])
+  // The "New Agent" menu command is handled centrally by MenuCommandHandler
+  // (which calls createUntitledAgent); the sidebar keeps the hook for its own
+  // "+" button below.
   const { clearSelection, selectedAgentSlug } = useSelection()
   const { openSearch } = useSearch()
   const { data: agents, isLoading, error } = useAgents()

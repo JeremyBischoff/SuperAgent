@@ -213,6 +213,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('flush-pending-notification-events')
   },
 
+  // Pull menu commands (Settings / New Agent / navigate-to-agent) queued while
+  // the window was closed. The renderer calls this once on mount so commands
+  // captured before its IPC listeners existed still get dispatched (SUP-264).
+  flushPendingMenuCommands: (): Promise<
+    Array<
+      | { channel: 'navigate-to-agent'; agentSlug: string }
+      | { channel: 'open-settings' }
+      | { channel: 'open-create-agent' }
+    >
+  > => {
+    return ipcRenderer.invoke('flush-pending-menu-commands')
+  },
+
   // Set dock badge count (macOS)
   setBadgeCount: (count: number): Promise<void> => {
     return ipcRenderer.invoke('set-badge-count', count)
@@ -361,6 +374,13 @@ declare global {
         events: Array<{ type: 'click' | 'action'; actionIndex?: number; context?: unknown }>
         navigations: Array<{ agentSlug: string; sessionId: string | null }>
       }>
+      flushPendingMenuCommands: () => Promise<
+        Array<
+          | { channel: 'navigate-to-agent'; agentSlug: string }
+          | { channel: 'open-settings' }
+          | { channel: 'open-create-agent' }
+        >
+      >
       setBadgeCount: (count: number) => Promise<void>
       detectHostBrowser: () => Promise<{ available: boolean; browser: string | null; path: string | null }>
       setNativeTheme: (theme: string) => Promise<void>

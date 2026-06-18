@@ -17,7 +17,7 @@ import { GlobalSettingsPage } from './components/settings/global-settings-page'
 import { ContainerSetupHandler } from './components/settings/container-setup-handler'
 import { SidebarProvider, SidebarInset } from './components/ui/sidebar'
 import { Toaster } from './components/ui/sonner'
-import { TrayNavigationHandler } from './components/tray-navigation-handler'
+import { MenuCommandHandler } from './components/menu-command-handler'
 import { GlobalNotificationHandler } from './components/notifications/global-notification-handler'
 import { OnboardingProvider } from './context/onboarding-context'
 import { GettingStartedWizard } from './components/wizard/getting-started-wizard'
@@ -106,7 +106,8 @@ function AppShell() {
   const { settingsOpen, setSettingsOpen, settingsTab, openWizard } = useDialogs()
 
   return (
-    <TrayNavigationHandler>
+    <>
+      <MenuCommandHandler />
       <GlobalNotificationHandler />
       <ContainerSetupHandler />
       {settingsOpen ? (
@@ -123,7 +124,7 @@ function AppShell() {
           </SidebarInset>
         </SidebarProvider>
       )}
-    </TrayNavigationHandler>
+    </>
   )
 }
 export default function App() {
