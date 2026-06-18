@@ -1,7 +1,8 @@
 /**
- * E2E tests for the stale-session prompt.
+ * E2E tests for the stale-session surface (toast + popovers).
  *
- * Trigger: idle > 6 h  AND  context > 100 k tokens (AND logic).
+ * Trigger: idle > 6 h  AND  context > 100 k tokens (AND logic). Detection is
+ * continuous (not send-gated): the toast surfaces at rest, above the composer.
  *
  * Seeding mechanism (see e2e/helpers/stale-session.ts):
  *  - JSONL entry timestamps are rewritten to 7 h ago →  lastActivityAt is old
@@ -38,9 +39,10 @@ async function getFirstSessionId(
 /**
  * Navigate to a specific session by clicking its sidebar item.
  *
- * The chevron button is a SIBLING of [data-testid="agent-item-*"], not a
- * descendant — it sits inside the wrapping <li> next to the agent button.
- * We use .filter() to scope to the <li> before looking for the chevron.
+ * Session sub-items live inside a Radix CollapsibleContent and are UNMOUNTED
+ * while the agent row is collapsed — clicking one before expanding auto-waits
+ * for an element that never attaches and hangs until the test times out. Wait
+ * for the (collapsed-state) Expand chevron to render before clicking it.
  */
 async function openSessionById(
   page: Page,
@@ -57,13 +59,6 @@ async function openSessionById(
     )
     .first()
 
-  // Session sub-items live inside a Radix CollapsibleContent and are UNMOUNTED
-  // while the agent row is collapsed — clicking one before expanding auto-waits
-  // for an element that never attaches and hangs until the test times out.
-  // Wait for the (collapsed-state) Expand chevron to actually render before
-  // clicking it: isVisible() samples once and never retries, so a slow cold-start
-  // render after reload would report false, skip the expand, and leave the
-  // session-item unmounted.
   const expandChevron = agentLi.locator('button[aria-label="Expand"]').first()
   await expandChevron.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {})
   if (await expandChevron.isVisible().catch(() => false)) {
@@ -103,231 +98,196 @@ async function setupWithSession(
   return { agent, sessionId }
 }
 
+/**
+ * Seed the session stale, return to agent home (so navigating back forces a
+ * fresh useSession fetch with the seeded data), then open it at rest and wait
+ * for the seeded context to land in the UI.
+ */
+async function openStaleAtRest(
+  page: Page,
+  sessionPage: SessionPage,
+  agent: TestAgent,
+  sessionId: string,
+): Promise<void> {
+  await page.locator('[data-testid="agent-breadcrumb"]').click()
+  await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
+
+  seedStaleSession(agent.slug, sessionId)
+
+  // "Context Usage" renders only once useSession has refetched with the seeded
+  // lastUsage, so it doubles as a settle point before asserting on the toast.
+  await openSessionById(page, agent, sessionId)
+  await expect(page.getByText('Context Usage')).toBeVisible({ timeout: 20000 })
+  await sessionPage.waitForInputEnabled(15000)
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe('Stale Session Prompt', () => {
+test.describe('Stale Session Surface', () => {
   // -------------------------------------------------------------------------
-  // Scenario 1 — "Send here anyway" sends the message and dismissal persists
+  // Scenario 1 — the toast surfaces at rest on an idle + large conversation
   // -------------------------------------------------------------------------
-  test('stale session: "Send here anyway" delivers the message and dismissal persists', async (
+  test('stale session: the toast appears at rest, no send required', async (
     { page, request },
     testInfo,
   ) => {
     const sessionPage = new SessionPage(page)
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Toast')
 
-    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'SendHere')
+    await openStaleAtRest(page, sessionPage, agent, sessionId)
 
-    // Go back to agent home so navigating to the session triggers a fresh useSession fetch
-    await page.locator('[data-testid="agent-breadcrumb"]').click()
-    await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
-
-    // Seed: idle > 6 h AND context > 100 k tokens
-    seedStaleSession(agent.slug, sessionId)
-
-    // Navigate to the session — useSession background-refetches with seeded data.
-    // "Context Usage" is only rendered when contextPercent != null (i.e. when
-    // contextUsage is non-null), which means useSession has completed its refetch
-    // with the seeded lastUsage and React has re-rendered.  Wait for it before
-    // submitting to avoid a race between cached (unseeded) state and fresh data.
-    await openSessionById(page, agent, sessionId)
-    await expect(page.getByText('Context Usage')).toBeVisible({ timeout: 20000 })
-    await sessionPage.waitForInputEnabled(15000)
-
-    // --- First send: stale prompt must open ---
-    await page.locator('[data-testid="message-input"]').fill('First message')
-    await page.locator('[data-testid="send-button"]').click()
-
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 15000 })
-    await expect(dialog).toContainText('Large context')
-
-    // Click "Send here anyway"
-    await dialog.getByRole('button', { name: /send here anyway/i }).click()
-
-    // Dialog closes and the message lands in the same session
-    await expect(dialog).not.toBeVisible({ timeout: 15000 })
-    await sessionPage.waitForUserMessageCount(2, 25000)   // "Hello" + "First message"
-
-    // Wait for the mock response and for the dismiss PATCH to be reflected
-    await sessionPage.waitForResponse(30000)
-    await sessionPage.waitForInputEnabled(15000)
-
-    // Poll the API to confirm stalePromptDismissed was persisted before second send
-    await expect.poll(async () => {
-      const resp = await request.get(`/api/agents/${agent.slug}/sessions/${sessionId}`)
-      const s = (await resp.json()) as { stalePromptDismissed?: boolean }
-      return s.stalePromptDismissed
-    }, { timeout: 5000 }).toBe(true)
-
-    // --- Second send: stale prompt must NOT re-open (dismissal persisted) ---
-    await page.locator('[data-testid="message-input"]').fill('Second message')
-    await page.locator('[data-testid="send-button"]').click()
-
-    // The second message sends straight through (proves the prompt did NOT intercept).
-    await sessionPage.waitForUserMessageCount(3, 25000)
-    // And the stale prompt never re-opened (dismissal persisted).
-    await expect(dialog).not.toBeVisible()
+    const toast = page.locator('[data-testid="stale-toast"]')
+    await expect(toast).toBeVisible({ timeout: 20000 })
+    await expect(toast).toContainText('Continue chatting here?')
   })
 
   // -------------------------------------------------------------------------
-  // Scenario 1b — Clicking outside cancels (true cancel, not a dismissal)
-  //
-  // Unlike "Send here anyway", a backdrop click must NOT set the dismissal
-  // flag: it restores the typed draft to the input and re-prompts on the next
-  // send because the session is still stale.
+  // Scenario 2 — Ignore hides the toast (local state, no persistence)
   // -------------------------------------------------------------------------
-  test('stale session: clicking outside the prompt cancels, restores the draft, and re-prompts on next send', async (
-    { page, request },
-    testInfo,
-  ) => {
+  test('stale session: Ignore hides the toast', async ({ page, request }, testInfo) => {
     const sessionPage = new SessionPage(page)
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Ignore')
 
-    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Cancel')
+    await openStaleAtRest(page, sessionPage, agent, sessionId)
 
-    await page.locator('[data-testid="agent-breadcrumb"]').click()
-    await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
+    const toast = page.locator('[data-testid="stale-toast"]')
+    await expect(toast).toBeVisible({ timeout: 20000 })
 
-    seedStaleSession(agent.slug, sessionId)
-
-    await openSessionById(page, agent, sessionId)
-    await expect(page.getByText('Context Usage')).toBeVisible({ timeout: 20000 })
-    await sessionPage.waitForInputEnabled(15000)
-
-    // Send: the stale prompt opens
-    await page.locator('[data-testid="message-input"]').fill('Draft to keep')
-    await page.locator('[data-testid="send-button"]').click()
-
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 15000 })
-    await expect(dialog).toContainText('Large context')
-
-    // Click the backdrop (top-left corner, outside the centered content)
-    await page.mouse.click(10, 10)
-
-    // Dialog closes, and the typed draft is restored to the input
-    await expect(dialog).not.toBeVisible({ timeout: 15000 })
-    await expect(page.locator('[data-testid="message-input"]')).toHaveValue('Draft to keep')
-
-    // No dismissal flag was persisted (true cancel, not "send here anyway")
-    const resp = await request.get(`/api/agents/${agent.slug}/sessions/${sessionId}`)
-    const s = (await resp.json()) as { stalePromptDismissed?: boolean }
-    expect(s.stalePromptDismissed ?? false).toBe(false)
-
-    // Sending again re-opens the prompt (session is still stale)
-    await page.locator('[data-testid="send-button"]').click()
-    await expect(dialog).toBeVisible({ timeout: 15000 })
+    await page.locator('[data-testid="stale-toast-ignore"]').click()
+    await expect(toast).not.toBeVisible({ timeout: 15000 })
   })
 
   // -------------------------------------------------------------------------
-  // Scenario 1c — "Start a new topic" delivers the message to a fresh session
-  // and renders it immediately (optimistic copy seeded on navigation).
+  // Scenario 3 — the New chat popover shows the two action rows
   // -------------------------------------------------------------------------
-  test('stale session: "Start a new topic" creates a fresh session and shows the typed message', async (
+  test('stale session: New chat popover shows Start with Summary and Start fresh', async (
     { page, request },
     testInfo,
   ) => {
     const sessionPage = new SessionPage(page)
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'NewChat')
 
-    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'NewTopic')
+    await openStaleAtRest(page, sessionPage, agent, sessionId)
+    await expect(page.locator('[data-testid="stale-toast"]')).toBeVisible({ timeout: 20000 })
 
-    await page.locator('[data-testid="agent-breadcrumb"]').click()
-    await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
+    await page.locator('[data-testid="stale-new-chat-trigger"]').click()
 
-    seedStaleSession(agent.slug, sessionId)
+    const summaryRow = page.locator('[data-testid="stale-new-chat-summary"]')
+    const freshRow = page.locator('[data-testid="stale-new-chat-fresh"]')
+    await expect(summaryRow).toBeVisible({ timeout: 15000 })
+    await expect(freshRow).toBeVisible()
+    await expect(summaryRow).toContainText('Start with Summary')
+    await expect(freshRow).toContainText('Start fresh')
+  })
 
-    await openSessionById(page, agent, sessionId)
-    await expect(page.getByText('Context Usage')).toBeVisible({ timeout: 20000 })
-    await sessionPage.waitForInputEnabled(15000)
+  // -------------------------------------------------------------------------
+  // Scenario 4 — the Learn more popover shows the two teaching points
+  // -------------------------------------------------------------------------
+  test('stale session: Learn more popover shows the two teaching points', async (
+    { page, request },
+    testInfo,
+  ) => {
+    const sessionPage = new SessionPage(page)
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'LearnMore')
 
-    await page.locator('[data-testid="message-input"]').fill('A brand new topic')
-    await page.locator('[data-testid="send-button"]').click()
+    await openStaleAtRest(page, sessionPage, agent, sessionId)
+    await expect(page.locator('[data-testid="stale-toast"]')).toBeVisible({ timeout: 20000 })
 
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 15000 })
+    await page.locator('[data-testid="stale-learn-more-trigger"]').click()
 
-    // Start a new topic — creates a fresh session, sends the typed message verbatim
-    await dialog.getByRole('button', { name: /start a new topic/i }).click()
+    await expect(page.getByText('Why start a new chat?')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('Agents can have many chats.')).toBeVisible()
+    await expect(page.getByText('Long chats get heavy.')).toBeVisible()
+  })
 
-    // Prompt closes and the typed message is rendered in the new session
-    await expect(dialog).not.toBeVisible({ timeout: 15000 })
+  // -------------------------------------------------------------------------
+  // Scenario 5 — "Start fresh" creates a fresh conversation, carrying the draft
+  // -------------------------------------------------------------------------
+  test('stale session: Start fresh creates a fresh conversation and shows the typed message', async (
+    { page, request },
+    testInfo,
+  ) => {
+    const sessionPage = new SessionPage(page)
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Fresh')
+
+    await openStaleAtRest(page, sessionPage, agent, sessionId)
+    await expect(page.locator('[data-testid="stale-toast"]')).toBeVisible({ timeout: 20000 })
+
+    // The draft is carried verbatim into the fresh conversation.
+    await page.locator('[data-testid="message-input"]').fill('A brand new conversation')
+
+    await page.locator('[data-testid="stale-new-chat-trigger"]').click()
+    await page.locator('[data-testid="stale-new-chat-fresh"]').click()
+
     await expect(
-      page.locator('[data-testid="message-list"]').getByText('A brand new topic'),
+      page.locator('[data-testid="message-list"]').getByText('A brand new conversation'),
     ).toBeVisible({ timeout: 15000 })
   })
 
   // -------------------------------------------------------------------------
-  // Scenario 2 — "Continue from a summary"
+  // Scenario 6 — "Start with Summary"
   //
-  // NOTE: getConfiguredLlmClient() throws ("LLM API key not configured") in
-  // E2E_MOCK mode because no API key is set.  The branch endpoint therefore
-  // returns 502 and the frontend surfaces "Couldn't summarize right now".
-  //
-  // Full assertion (navigation to new session + carried-context card) is
-  // deferred to unit/integration tests in session-summary-service — those can
-  // stub getConfiguredLlmClient() and verify the complete happy path.
-  //
-  // This test asserts the strongest observable E2E behaviour: the summarising
-  // loading state appears, the error is surfaced within the modal, and the
-  // dialog stays open so the user can retry or dismiss.
+  // getConfiguredLlmClient() throws ("LLM API key not configured") in E2E_MOCK
+  // mode, so the branch endpoint returns 502 and the popover surfaces the error
+  // + a Retry in place. The full happy path (navigation + carried-context card)
+  // is covered by session-summary-service unit tests that stub the LLM client.
   // -------------------------------------------------------------------------
-  test('stale session: "Continue from a summary" enters summarising state then shows error (LLM unconfigured in E2E)', async (
+  test('stale session: Start with Summary shows the summarizing state then an inline error + retry', async (
     { page, request },
     testInfo,
   ) => {
     const sessionPage = new SessionPage(page)
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Summary')
 
-    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Branch')
+    await openStaleAtRest(page, sessionPage, agent, sessionId)
+    await expect(page.locator('[data-testid="stale-toast"]')).toBeVisible({ timeout: 20000 })
 
-    await page.locator('[data-testid="agent-breadcrumb"]').click()
-    await expect(page.locator('[data-testid="home-message-input"]')).toBeVisible()
+    await page.locator('[data-testid="stale-new-chat-trigger"]').click()
+    await page.locator('[data-testid="stale-new-chat-summary"]').click()
 
-    seedStaleSession(agent.slug, sessionId)
-    await openSessionById(page, agent, sessionId)
-    // Same race-guard as scenario 1: wait for seeded lastUsage to appear in UI
-    await expect(page.getByText('Context Usage')).toBeVisible({ timeout: 20000 })
-    await sessionPage.waitForInputEnabled(15000)
-
-    await page.locator('[data-testid="message-input"]').fill('Continue this conversation')
-    await page.locator('[data-testid="send-button"]').click()
-
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible({ timeout: 15000 })
-
-    // Click "Continue from a summary" (first option in the dialog)
-    await dialog.getByRole('button', { name: /continue from a summary/i }).click()
-
-    // The summarising spinner is transient — it flips to the error as soon as the
-    // 502 lands, so under CI timing it may already be gone before we poll. Accept
-    // "spinner OR error" to prove the action fired without racing its disappearance.
+    // The spinner is transient — it flips to the error as soon as the 502 lands,
+    // so accept "summarizing OR error" to prove the action fired without racing
+    // its disappearance.
     await expect(
-      dialog.getByText(/carrying over context/i).or(dialog.getByText(/couldn't summarize right now/i)),
+      page
+        .locator('[data-testid="stale-new-chat-summarizing"]')
+        .or(page.getByText(/couldn't summarize right now/i)),
     ).toBeVisible({ timeout: 15000 })
 
-    // Error appears because the LLM is not configured in E2E mock mode
-    await expect(dialog.getByText(/couldn't summarize right now/i)).toBeVisible({ timeout: 15000 })
-
-    // Button now reads "Retry summary" and dialog stays open for the user to retry or close
-    await expect(dialog.getByRole('button', { name: /retry summary/i })).toBeVisible()
-    await expect(dialog).toBeVisible()
+    // Error + Retry are surfaced inside the popover, where the click happened.
+    await expect(page.getByText(/couldn't summarize right now/i)).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('[data-testid="stale-new-chat-retry"]')).toBeVisible()
   })
 
   // -------------------------------------------------------------------------
-  // Scenario 3 — Awaiting-input suppression
-  //
-  // evaluateStalePrompt checks isAwaitingInput as a safety net. At the UI level
-  // the SessionChatColumn replaces the MessageInput with the PendingRequestStack
-  // entirely when pendingRequestCount > 0, so the stale prompt submit path is
-  // not reachable for the user at all.
-  //
-  // This test asserts the observable UI behaviour: when a session has a pending
-  // input request, the message input is hidden and no stale prompt can fire.
-  //
-  // The isAwaitingInput branch inside evaluateStalePrompt is exercised at unit
-  // level in stale-session-trigger.test.ts.
+  // Scenario 7 — a plain send is never intercepted (detection is not send-gated)
   // -------------------------------------------------------------------------
-  test('awaiting-input session: message input is hidden and stale prompt cannot fire', async (
+  test('stale session: a plain send lands in the same conversation and is not intercepted', async (
+    { page, request },
+    testInfo,
+  ) => {
+    const sessionPage = new SessionPage(page)
+    const { agent, sessionId } = await setupWithSession(page, request, testInfo, 'Send')
+
+    await openStaleAtRest(page, sessionPage, agent, sessionId)
+    await expect(page.locator('[data-testid="stale-toast"]')).toBeVisible({ timeout: 20000 })
+
+    // Sending goes straight through to the current conversation — no gate, no modal.
+    await sessionPage.sendMessage('Send into this one')
+    await sessionPage.waitForUserMessageCount(2, 25000) // "Hello" + "Send into this one"
+  })
+
+  // -------------------------------------------------------------------------
+  // Scenario 8 — Awaiting-input suppression
+  //
+  // When a session has a pending input request the message input is replaced by
+  // the PendingRequestStack, so the toast slot is not in play and no toast fires.
+  // The isAwaitingInput branch is exercised at unit level in
+  // stale-session-trigger.test.ts.
+  // -------------------------------------------------------------------------
+  test('awaiting-input session: message input is hidden and no toast fires', async (
     { page, request },
     testInfo,
   ) => {
@@ -348,38 +308,29 @@ test.describe('Stale Session Prompt', () => {
 
     const sessionId = await getFirstSessionId(request, agent.slug)
 
-    // Seed stale state on top of the awaiting-input session.
-    // After this, the session satisfies idle > 6 h AND context > 100 k tokens,
-    // but isAwaitingInput = true in the stream suppresses the stale prompt.
+    // Seed stale state on top of the awaiting-input session: it now satisfies
+    // idle > 6 h AND context > 100 k tokens, but isAwaitingInput suppresses it.
     seedStaleSession(agent.slug, sessionId)
 
     // Reload — SSE reconnects and the server replays pending input requests.
-    // Navigate directly to the session via the sidebar (no openAgentHome step:
-    // landing on "home" view doesn't auto-expand the session list, so
-    // openSessionById would never find the session-item without first expanding).
     await page.reload()
     await appPage.waitForAgentsLoaded()
     await openSessionById(page, agent, sessionId)
 
-    // The pending secret request is shown (attached to the DOM)
     await expect(
       page.locator('[data-testid="secret-request"]').first(),
     ).toBeAttached({ timeout: 20000 })
 
     // The message input is NOT rendered (pending request stack takes its slot)
     await expect(page.locator('[data-testid="message-input"]')).not.toBeVisible()
-
-    // No stale prompt dialog is open
-    await expect(page.getByRole('dialog')).not.toBeVisible()
+    // And no stale toast is shown.
+    await expect(page.locator('[data-testid="stale-toast"]')).not.toBeVisible()
   })
 
   // -------------------------------------------------------------------------
-  // Scenario 4 — Fresh small session: no prompt
+  // Scenario 9 — Fresh small session: no toast
   // -------------------------------------------------------------------------
-  test('fresh small session: sending a message does not open the stale prompt', async (
-    { page, request },
-    testInfo,
-  ) => {
+  test('fresh small session: no toast appears', async ({ page, request }, testInfo) => {
     const appPage = new AppPage(page)
     const sessionPage = new SessionPage(page)
     const agentName = `Stale Fresh ${testInfo.workerIndex}-${testInfo.repeatEachIndex}-${Date.now()}`
@@ -398,9 +349,8 @@ test.describe('Stale Session Prompt', () => {
     // Immediately send a second message — neither threshold is met
     await sessionPage.sendMessage('Second message right away')
 
-    // The message sends straight through (proves the prompt did NOT intercept).
     await sessionPage.waitForUserMessageCount(2, 25000)
-    // And no stale prompt dialog ever appeared (neither threshold met).
-    await expect(page.getByRole('dialog')).not.toBeVisible()
+    // No stale toast ever appeared (neither threshold met).
+    await expect(page.locator('[data-testid="stale-toast"]')).not.toBeVisible()
   })
 })
