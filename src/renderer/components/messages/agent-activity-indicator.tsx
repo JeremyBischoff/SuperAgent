@@ -273,7 +273,7 @@ export function AgentActivityIndicator({ sessionId, agentSlug }: AgentActivityIn
             once the agent flips back to "Working". Clipped to ~4 lines and bottom-aligned
             (justify-end + overflow-hidden) so the latest streamed text stays visible. */}
         {isThinking && thinkingText && (
-          <div className="mt-2 flex max-h-20 flex-col justify-end overflow-hidden rounded bg-muted p-2">
+          <div className="mt-2 flex max-h-20 flex-col justify-end overflow-hidden rounded bg-muted p-2 overflow-y-scroll">
             <pre className="whitespace-pre-wrap text-xs text-muted-foreground select-text">
               {thinkingText}
             </pre>
