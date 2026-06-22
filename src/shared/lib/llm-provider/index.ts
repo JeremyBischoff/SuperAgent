@@ -9,6 +9,8 @@ export type { ModelDefinition } from './model-catalog-schema'
 export {
   getProviderCatalog,
   getModelDefinition,
+  getModelContextWindow,
+  getModelPromptHints,
   hasVersionSegment,
   resolveModelForProvider,
 } from './model-catalog'

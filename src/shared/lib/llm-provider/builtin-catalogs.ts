@@ -1,13 +1,14 @@
 import type { EffortLevel } from '../container/types'
 import type { ModelDefinition } from './model-catalog-schema'
+import { GPT_TOOL_USE_PROMPT_HINTS } from './model-prompt-hints'
 import { pricingFor } from './model-pricing-lookup'
 
 /**
  * Built-in model catalogs shipped in code, one shape per provider.
  *
- * Each provider's getBuiltinCatalog() returns one of these. Anthropic,
- * OpenRouter, and Platform all speak the bare Claude ids, so they share
- * CLAUDE_BARE_CATALOG; Bedrock uses region-prefixed ids but the same families.
+ * Each provider's getBuiltinCatalog() returns one of these. Anthropic uses
+ * CLAUDE_BARE_CATALOG; OpenRouter and Platform extend it with non-Claude models
+ * (different ids/pricing per upstream); Bedrock uses region-prefixed Claude ids.
  *
  * `isLatest` marks the id a bare family alias resolves to. Effort support is
  * per model: Opus/Fable accept all five levels, Sonnet/Haiku the lower three.
@@ -154,6 +155,9 @@ const OPENROUTER_EXTRA_MODELS: ModelDefinition[] = [
     supportsWebSearch: false,
     // Baked from OpenRouter's live model list (per-Mtok USD), fetched 2026-06-18.
     pricing: { inputPerMtok: 2.5, outputPerMtok: 15 },
+    // OpenAI API context window (developers.openai.com/api/docs/models/gpt-5.4).
+    contextWindow: 1_050_000,
+    promptHints: GPT_TOOL_USE_PROMPT_HINTS,
   },
   {
     id: 'openai/gpt-5.5',
@@ -169,6 +173,9 @@ const OPENROUTER_EXTRA_MODELS: ModelDefinition[] = [
     // Non-Claude ids aren't in model-pricing.json; baked from OpenRouter's live
     // model list (per-Mtok USD), fetched 2026-06-18. Refresh if OpenRouter repricing.
     pricing: { inputPerMtok: 5, outputPerMtok: 30 },
+    // OpenAI API context window (developers.openai.com/api/docs/models/gpt-5.5).
+    contextWindow: 1_050_000,
+    promptHints: GPT_TOOL_USE_PROMPT_HINTS,
   },
   {
     id: 'z-ai/glm-5.2',
@@ -188,4 +195,47 @@ const OPENROUTER_EXTRA_MODELS: ModelDefinition[] = [
 export const OPENROUTER_CATALOG: ModelDefinition[] = [
   ...CLAUDE_BARE_CATALOG,
   ...OPENROUTER_EXTRA_MODELS,
+]
+
+/**
+ * Non-Claude models the Platform proxy can serve. Unlike OpenRouter these use
+ * BARE ids (`gpt-5.5`): the proxy's routing/pricing all key off bare ids, so a
+ * vendor-prefixed slug would miss every match.
+ */
+const PLATFORM_EXTRA_MODELS: ModelDefinition[] = [
+  {
+    id: 'gpt-5.4',
+    label: 'GPT-5.4',
+    blurb: 'OpenAI, served via Platform',
+    family: 'gpt',
+    icon: 'openai',
+    supportedEfforts: NON_CLAUDE_EFFORTS,
+    // Platform serves gpt over the OpenAI Responses wire, which maps the agent's
+    // web_search server tool to the native web_search tool — so search works.
+    supportsWebSearch: true,
+    pricing: { inputPerMtok: 2.5, outputPerMtok: 15 },
+    // OpenAI API context window (developers.openai.com/api/docs/models/gpt-5.4).
+    contextWindow: 1_050_000,
+    promptHints: GPT_TOOL_USE_PROMPT_HINTS,
+  },
+  {
+    id: 'gpt-5.5',
+    label: 'GPT-5.5',
+    blurb: 'OpenAI flagship, served via Platform',
+    family: 'gpt',
+    isLatest: true,
+    icon: 'openai',
+    supportedEfforts: NON_CLAUDE_EFFORTS,
+    supportsWebSearch: true,
+    pricing: { inputPerMtok: 5, outputPerMtok: 30 },
+    // OpenAI API context window (developers.openai.com/api/docs/models/gpt-5.5).
+    contextWindow: 1_050_000,
+    promptHints: GPT_TOOL_USE_PROMPT_HINTS,
+  },
+]
+
+/** Platform — bare Claude models plus the GPT models the proxy serves. */
+export const PLATFORM_CATALOG: ModelDefinition[] = [
+  ...CLAUDE_BARE_CATALOG,
+  ...PLATFORM_EXTRA_MODELS,
 ]

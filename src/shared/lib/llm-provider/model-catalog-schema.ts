@@ -36,6 +36,8 @@ export const modelDefinitionSchema = z.object({
    * non-Claude models routed via OpenRouter so the picker can warn.
    */
   supportsWebSearch: z.boolean().optional(),
+  /** Extra system-prompt guidance needed by model families with weaker tool priors. */
+  promptHints: z.array(z.string().min(1)).optional(),
   /**
    * Optional display pricing (per-million-token). Built-ins seed this from
    * model-pricing.json; actual cost accounting still keys off that file.
@@ -46,6 +48,10 @@ export const modelDefinitionSchema = z.object({
       outputPerMtok: z.number().nonnegative(),
     })
     .optional(),
+  // Static context window (tokens) for non-Claude models. The SDK reports a
+  // generic 200K default for these, so the host prefers this over the SDK value
+  // (see handleResultUsage). Claude entries omit it and use the SDK's real window.
+  contextWindow: z.number().int().positive().optional(),
 })
 
 export type ModelDefinition = z.infer<typeof modelDefinitionSchema>

@@ -40,6 +40,26 @@ describe('modelDefinitionSchema', () => {
     ).toThrow()
   })
 
+  it('accepts an optional positive-int contextWindow and omits cleanly', () => {
+    expect(modelDefinitionSchema.parse({ ...base, contextWindow: 1_050_000 })).toMatchObject({
+      contextWindow: 1_050_000,
+    })
+    expect(modelDefinitionSchema.parse(base).contextWindow).toBeUndefined()
+  })
+
+  it('rejects a non-positive or non-integer contextWindow', () => {
+    expect(() => modelDefinitionSchema.parse({ ...base, contextWindow: 0 })).toThrow()
+    expect(() => modelDefinitionSchema.parse({ ...base, contextWindow: -1 })).toThrow()
+    expect(() => modelDefinitionSchema.parse({ ...base, contextWindow: 1.5 })).toThrow()
+  })
+
+  it('accepts non-empty prompt hints and rejects empty hints', () => {
+    expect(modelDefinitionSchema.parse({ ...base, promptHints: ['Use exact tool names.'] })).toMatchObject({
+      promptHints: ['Use exact tool names.'],
+    })
+    expect(() => modelDefinitionSchema.parse({ ...base, promptHints: [''] })).toThrow()
+  })
+
   it('validates a catalog array', () => {
     expect(modelCatalogSchema.parse([base])).toHaveLength(1)
   })
