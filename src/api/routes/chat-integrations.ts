@@ -6,6 +6,7 @@
  */
 
 import { Hono } from 'hono'
+import { z } from 'zod'
 import {
   getChatIntegration,
   createChatIntegration,
@@ -14,6 +15,14 @@ import {
   deleteChatIntegration,
   DuplicateBotTokenError,
 } from '@shared/lib/services/chat-integration-service'
+import {
+  getChatAccessById,
+  listChatAccess,
+  approveChatAccess,
+  denyChatAccess,
+  revokeChatAccess,
+} from '@shared/lib/services/chat-integration-access-service'
+import type { ChatAccessStatus } from '@shared/lib/services/chat-integration-access-service'
 import { listChatIntegrationSessions, archiveChatIntegrationSession, getChatIntegrationSessionById, deleteChatIntegrationSessionsByIntegration } from '@shared/lib/services/chat-integration-session-service'
 import { chatIntegrationManager } from '@shared/lib/chat-integrations/chat-integration-manager'
 import { validateChatIntegrationConfig, CHAT_PROVIDERS, IMESSAGE_GATEWAY_URL, imessageSetupSchema, type ChatProvider } from '@shared/lib/chat-integrations/config-schema'
@@ -119,6 +128,9 @@ chatIntegrationsRouter.post('/:id', AgentUser(), async (c) => {
     const agentSlug = c.req.param('id')
     const body = await c.req.json()
     const { provider, name, config, showToolCalls, sessionTimeout, model, effort } = body
+    // requireApproval is intentionally NOT accepted here: making a bot public is
+    // owner-only and must go through PATCH /:integrationId/require-approval. New
+    // integrations default to requireApproval=true (private).
 
     if (!provider || !config) {
       return c.json({ error: 'Missing required fields: provider, config' }, 400)
@@ -289,6 +301,31 @@ chatIntegrationsRouter.patch('/:integrationId', IntegrationAgentRole('user'), as
   }
 })
 
+// PATCH /api/chat-integrations/:integrationId/require-approval - Toggle the allowlist (owner-only)
+// Separate from the general PATCH so the security-sensitive "make public" flip requires
+// the owner role, and so turning approval ON can reconcile already-running sessions.
+chatIntegrationsRouter.patch('/:integrationId/require-approval', IntegrationAgentRole('owner'), async (c) => {
+  try {
+    const id = c.req.param('integrationId')
+    const { requireApproval } = await c.req.json()
+    if (!z.boolean().safeParse(requireApproval).success) {
+      return c.json({ error: 'requireApproval must be a boolean' }, 400)
+    }
+    updateChatIntegration(id, { requireApproval })
+    // Secure-by-default: enabling approval must gate already-running sessions whose
+    // chat is not explicitly allowed (previously-public conversations).
+    if (requireApproval === true) {
+      await chatIntegrationManager.reconcileAccess(id)
+    }
+    const updated = getChatIntegration(id)
+    logAuditEvent({ userId: getCurrentUserId(c), object: 'chat_integration', objectId: id, action: 'updated', details: { requireApproval } })
+    return c.json(updated)
+  } catch (error) {
+    captureException(error, { tags: { ...SENTRY_TAGS, operation: 'set-require-approval' }, extra: { integrationId: c.req.param('integrationId') } })
+    return c.json({ error: 'Failed to update require approval' }, 500)
+  }
+})
+
 // DELETE /api/chat-integrations/:integrationId - Delete an integration
 chatIntegrationsRouter.delete('/:integrationId', IntegrationAgentRole('user'), async (c) => {
   try {
@@ -394,5 +431,55 @@ chatIntegrationsRouter.delete('/:integrationId/sessions/:sessionId', Integration
     return c.json({ error: 'Failed to clear session' }, 500)
   }
 })
+
+// ── Access management routes ────────────────────────────────────────────
+
+const accessStatusSchema = z.enum(['pending', 'allowed', 'denied'])
+
+// GET /api/chat-integrations/:integrationId/access - List access entries (optionally filtered by status)
+// Owner-only: entries expose requester identity + message previews, shown only to owners in the UI.
+chatIntegrationsRouter.get('/:integrationId/access', IntegrationAgentRole('owner'), async (c) => {
+  try {
+    const integrationId = c.req.param('integrationId')
+    const raw = c.req.query('status')
+    let status: ChatAccessStatus | undefined
+    if (raw !== undefined) {
+      const parsed = accessStatusSchema.safeParse(raw)
+      if (!parsed.success) return c.json({ error: 'Invalid status' }, 400)
+      status = parsed.data
+    }
+    return c.json(listChatAccess(integrationId, status))
+  } catch (error) {
+    captureException(error, { tags: { ...SENTRY_TAGS, operation: 'list-access' } })
+    return c.json({ error: 'Failed to list access' }, 500)
+  }
+})
+
+// POST /api/chat-integrations/:integrationId/access/:accessId/{approve,deny,revoke}
+const accessActions = { approve: approveChatAccess, deny: denyChatAccess, revoke: revokeChatAccess } as const
+for (const verb of ['approve', 'deny', 'revoke'] as const) {
+  chatIntegrationsRouter.post(`/:integrationId/access/:accessId/${verb}`, IntegrationAgentRole('owner'), async (c) => {
+    try {
+      const integrationId = c.req.param('integrationId')
+      const accessId = c.req.param('accessId')
+      const row = getChatAccessById(accessId)
+      // BOLA guard: scope the access row to the authorized integration.
+      // IntegrationAgentRole authorizes :integrationId only; the access row is
+      // loaded by primary key, so we must verify it belongs to that integration.
+      // Return 404 so foreign access IDs are not enumerable (SUP-229 pattern).
+      if (!row || row.integrationId !== integrationId) return c.json({ error: 'Access entry not found' }, 404)
+      const ok = accessActions[verb](accessId, getCurrentUserId(c))
+      if (ok) {
+        logAuditEvent({ userId: getCurrentUserId(c), object: 'chat_integration', objectId: integrationId, action: 'updated', details: { access: verb, accessId } })
+        if (verb === 'approve') void chatIntegrationManager.notifyChatApproved(integrationId, row.externalChatId)
+        if (verb === 'revoke' || verb === 'deny') await chatIntegrationManager.tearDownChatSession(integrationId, row.externalChatId)
+      }
+      return c.json({ ok })
+    } catch (error) {
+      captureException(error, { tags: { ...SENTRY_TAGS, operation: `access-${verb}` } })
+      return c.json({ error: `Failed to ${verb}` }, 500)
+    }
+  })
+}
 
 export default chatIntegrationsRouter

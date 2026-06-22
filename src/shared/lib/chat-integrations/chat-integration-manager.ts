@@ -28,6 +28,7 @@ import {
   updateChatIntegrationSessionName,
   archiveChatIntegrationSession,
   touchChatIntegrationSession,
+  listChatIntegrationSessions,
   listActiveChatIntegrationSessions,
   resolveActiveSession,
   getLastDisplayName,
@@ -39,6 +40,12 @@ import type { ChatIntegration } from '@shared/lib/db/schema'
 import { messagePersister } from '@shared/lib/container/message-persister'
 import { runWithOptionalUser } from '@shared/lib/platform-attribution'
 import { captureException, addErrorBreadcrumb } from '@shared/lib/error-reporting'
+import {
+  decideInboundAccess,
+  isChatAllowed,
+  getChatAccess,
+  markNoticeSent,
+} from '@shared/lib/services/chat-integration-access-service'
 
 // ── Sentry helpers ─────────────────────────────────────────────────────
 
@@ -281,6 +288,7 @@ class ChatIntegrationManager {
   async ensureSession(integrationId: string, chatId: string): Promise<string> {
     const integration = getChatIntegration(integrationId)
     if (!integration) throw new Error(`Chat integration ${integrationId} not found`)
+    if (!isChatAllowed(integrationId, chatId)) throw new Error(`Chat ${chatId} is not allowed for integration ${integrationId}`)
 
     const existing = resolveActiveSession(
       integrationId, chatId, integration.sessionTimeout,
@@ -367,8 +375,8 @@ class ChatIntegrationManager {
       this.enqueueMessage(integration.id, msg)
     })
 
-    conn.interactiveUnsubscribe = connector.onInteractiveResponse((toolUseId, response) => {
-      this.handleInteractiveResponse(integration.id, toolUseId, response).catch((err) => {
+    conn.interactiveUnsubscribe = connector.onInteractiveResponse((toolUseId, response, chatId) => {
+      this.handleInteractiveResponse(integration.id, toolUseId, response, chatId).catch((err) => {
         console.error(`[ChatIntegrationManager] Error handling interactive response for ${integration.id}:`, err)
         reportError(err, 'interactive-response', { integrationId: integration.id, provider: integration.provider, toolUseId })
       })
@@ -381,6 +389,10 @@ class ChatIntegrationManager {
       this.emitNotification(integration, 'error', error.message)
     })
 
+    // Intentionally provider-agnostic and NOT access-gated: Telegram excludes typing hints
+    // from allowed_updates today, so this never fires in practice. If a future provider (or
+    // Telegram config change) emits typing hints, add an isChatAllowed check here before
+    // pre-warming to avoid leaking container resources for ungated chats.
     conn.typingHintUnsubscribe = connector.onTypingHint(() => {
       this.preWarmContainer(integration.agentSlug)
     })
@@ -397,11 +409,13 @@ class ChatIntegrationManager {
     breadcrumb('Integration connected', { integrationId: integration.id, provider: integration.provider })
     this.emitNotification(integration, 'connected')
 
-    // Restore SSE subscriptions for ACTIVE chat sessions only. Archived/cleared/
-    // timed-out sessions must not be re-subscribed, or stale agent output could
-    // be forwarded back to the external chat (SUP-233).
+    // Restore SSE subscriptions for ACTIVE, allowed chat sessions only. Archived/
+    // cleared/timed-out sessions must not be re-subscribed, or stale agent output
+    // could be forwarded back to the external chat (SUP-233); unapproved chats are
+    // skipped by the access check below.
     const existingSessions = listActiveChatIntegrationSessions(integration.id)
     for (const session of existingSessions) {
+      if (!isChatAllowed(integration.id, session.externalChatId)) continue
       this.subscribeChatSession(integration.id, session.externalChatId, session.sessionId)
     }
   }
@@ -611,6 +625,42 @@ class ChatIntegrationManager {
     const chatId = message.chatId
     if (!chatId) return
 
+    // Access gate — enforce owner approval BEFORE any token spend (and before
+    // /clear or /start), so a non-allowed chat can neither command nor cost.
+    const decision = decideInboundAccess({
+      integrationId,
+      externalChatId: chatId,
+      chatType: message.chatType,
+      userId: message.userId,
+      userName: message.userName,
+      chatName: message.chatName,
+      preview: message.text,
+    })
+    if (decision.action === 'blocked') {
+      if (decision.sendNotice) {
+        const access = getChatAccess(integrationId, chatId)
+        if (access) {
+          try {
+            await conn.connector.sendMessage(chatId, { text: 'This bot needs the owner to approve this conversation before it can respond.' })
+            markNoticeSent(access.id)
+          } catch (err) {
+            reportError(err, 'access-notice', { integrationId, chatId }, 'warning')
+          }
+        }
+      }
+      return
+    }
+
+    // Handle /start — a freshly bootstrapped/allowed chat gets a greeting without
+    // spending on the agent. (Pending chats never reach here — the gate blocked them.)
+    // Telegram-only: /start is the Telegram onboarding convention and part of the
+    // allowlist bootstrap UX. Other providers forward "/start" to the agent as a
+    // normal message (their pre-allowlist behavior).
+    if (integration.provider === 'telegram' && message.text.trim().toLowerCase() === '/start') {
+      await conn.connector.sendMessage(chatId, { text: "You're connected. Send a message to start." }).catch(() => {})
+      return
+    }
+
     // Handle /clear command — reset the session for this chat
     if (message.text.trim().toLowerCase() === '/clear') {
       await this.clearChatSession(integrationId, chatId, conn.connector)
@@ -629,6 +679,9 @@ class ChatIntegrationManager {
       try { updateChatIntegrationStatus(integrationId, 'error', 'Agent no longer exists') } catch { /* best-effort */ }
       return
     }
+
+    // Revoke can land mid-flight (during the awaits above). Re-check before spending.
+    if (!isChatAllowed(integrationId, chatId)) return
 
     // Ensure container is running
     let client: Awaited<ReturnType<typeof containerManager.ensureRunning>>
@@ -669,6 +722,9 @@ class ChatIntegrationManager {
             text: `Could not download file(s): ${names}. Your text message will still be sent.\n\nIf this is a Slack bot, ensure the \`files:read\` scope is added and the app is reinstalled.`,
           })
         }
+
+        // Revoke can land mid-flight (during the awaits above). Re-check before spending.
+        if (!isChatAllowed(integrationId, chatId)) return
 
         await this.startNewChatSession(integration, client, chatId, message, messageText)
         return // initialMessage already sent via createSession
@@ -720,6 +776,9 @@ class ChatIntegrationManager {
         })
       }
 
+      // Revoke can land mid-flight (during the awaits above). Re-check before spending.
+      if (!isChatAllowed(integrationId, chatId)) return
+
       await client.sendMessage(sessionId, messageText)
       messagePersister.markSessionActive(sessionId, integration.agentSlug)
       const now = Date.now()
@@ -745,6 +804,8 @@ class ChatIntegrationManager {
           if (!messageText) {
             messageText = (await this.buildMessageContent(integration, message)).text
           }
+          // Revoke can land mid-flight (during the awaits above). Re-check before spending.
+          if (!isChatAllowed(integrationId, chatId)) return
           await this.startNewChatSession(integration, client, chatId, message, messageText)
           return
         } catch (healErr) {
@@ -889,6 +950,46 @@ class ChatIntegrationManager {
         this.stopSession(managed)
         this.chatSessions.delete(key)
         break
+      }
+    }
+  }
+
+  /**
+   * Send the "you're approved" notice to an external chat.
+   * Best-effort: exceptions are captured but do NOT roll back the approval.
+   */
+  async notifyChatApproved(integrationId: string, externalChatId: string): Promise<void> {
+    const conn = this.connections.get(integrationId)
+    if (!conn) return
+    try {
+      await conn.connector.sendMessage(externalChatId, { text: "You're approved. Send a message to start." })
+    } catch (e) {
+      captureException(e, { tags: { component: COMPONENT, operation: 'approve-notice' }, level: 'warning' })
+    }
+  }
+
+  /**
+   * Tear down the managed chat session for a revoked external chat:
+   * unsubscribes SSE delivery and archives the DB session row.
+   */
+  async tearDownChatSession(integrationId: string, externalChatId: string): Promise<void> {
+    const session = getChatIntegrationSession(integrationId, externalChatId)
+    if (!session) return
+    this.teardownManagedSession(integrationId, externalChatId)
+    archiveChatIntegrationSession(session.id)
+  }
+
+  /**
+   * Reconcile running sessions against current access (called when approval is
+   * enabled). Tears down any active session whose chat is no longer allowed, so
+   * a flip to require-approval immediately gates previously-public conversations.
+   */
+  async reconcileAccess(integrationId: string): Promise<void> {
+    const sessions = listChatIntegrationSessions(integrationId)
+    for (const session of sessions) {
+      if (session.archivedAt) continue
+      if (!isChatAllowed(integrationId, session.externalChatId)) {
+        await this.tearDownChatSession(integrationId, session.externalChatId)
       }
     }
   }
@@ -1202,6 +1303,11 @@ class ChatIntegrationManager {
     const session = this.chatSessions.get(key)
     if (!session) return
 
+    // Fail closed: never forward agent output to a chat that is no longer allowed.
+    // Teardown normally unsubscribes on revoke/deny, but this guards the window
+    // where an event is already in flight when access is revoked.
+    if (!isChatAllowed(integrationId, chatId)) return
+
     const showToolCalls = getChatIntegration(integrationId)?.showToolCalls ?? false
     await processSSEEvent(session, event, showToolCalls)
   }
@@ -1212,7 +1318,10 @@ class ChatIntegrationManager {
     integrationId: string,
     toolUseId: string,
     response: unknown,
+    chatId?: string,
   ): Promise<void> {
+    if (!isChatAllowed(integrationId, chatId ?? '')) return // revoked/stale keyboard, or missing identity → fail closed
+
     // Handle proxy review decisions (tool approval requests)
     if (toolUseId.startsWith('review:')) {
       const parts = toolUseId.split(':')

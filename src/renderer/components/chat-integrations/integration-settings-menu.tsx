@@ -3,25 +3,30 @@ import { Pause, Pencil, Trash2 } from 'lucide-react'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { Switch } from '@renderer/components/ui/switch'
-import { useUpdateChatIntegration } from '@renderer/hooks/use-chat-integrations'
+import { useUpdateChatIntegration, useSetRequireApproval } from '@renderer/hooks/use-chat-integrations'
 import { parseChatIntegrationConfig, type SlackConfig } from '@shared/lib/chat-integrations/config-schema'
 import { SettingsModelSelect } from '@renderer/components/settings/settings-model-select'
 import type { EffortLevel } from '@shared/lib/container/types'
 import type { ChatIntegration } from '@shared/lib/db/schema'
 
-function ToggleRow({ label, checked, onCheckedChange, disabled }: {
+function ToggleRow({ label, helperText, checked, onCheckedChange, disabled }: {
   label: string
+  helperText?: string
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   disabled?: boolean
 }) {
   return (
     <div className="flex w-full items-center justify-between px-2 py-1.5">
-      <span className="text-xs">{label}</span>
+      <div className={helperText ? 'flex flex-col gap-0.5' : undefined}>
+        <span className="text-xs">{label}</span>
+        {helperText && <span className="text-xs text-muted-foreground/70">{helperText}</span>}
+      </div>
       <Switch
         className="scale-75 origin-right"
         checked={checked}
         disabled={disabled}
+        aria-label={label}
         onClick={(e) => e.stopPropagation()}
         onCheckedChange={onCheckedChange}
       />
@@ -71,6 +76,8 @@ interface IntegrationSettingsMenuProps {
   integration: ChatIntegration
   onRename: () => void
   onDelete: () => void
+  /** Owner-only: gates the "require approval / make public" toggle. */
+  canManageApproval: boolean
 }
 
 export function IntegrationModelEffort({ integration }: { integration: ChatIntegration }) {
@@ -90,8 +97,9 @@ export function IntegrationModelEffort({ integration }: { integration: ChatInteg
   )
 }
 
-export function IntegrationSettingsMenu({ integration, onRename, onDelete }: IntegrationSettingsMenuProps) {
+export function IntegrationSettingsMenu({ integration, onRename, onDelete, canManageApproval }: IntegrationSettingsMenuProps) {
   const updateIntegration = useUpdateChatIntegration()
+  const setRequireApproval = useSetRequireApproval()
   const isPaused = integration.status === 'paused'
 
   return (
@@ -134,6 +142,21 @@ export function IntegrationSettingsMenu({ integration, onRename, onDelete }: Int
           updateIntegration.mutate({ id: integration.id, showToolCalls: checked })
         }
       />
+      {canManageApproval && integration.provider === 'telegram' && (
+        <ToggleRow
+          label="Require approval for new conversations"
+          helperText={
+            setRequireApproval.isError
+              ? 'Could not update. Try again.'
+              : 'Off makes this a public bot; anyone can message it.'
+          }
+          checked={!!integration.requireApproval}
+          disabled={setRequireApproval.isPending}
+          onCheckedChange={(checked) =>
+            setRequireApproval.mutate({ id: integration.id, requireApproval: checked })
+          }
+        />
+      )}
       <SessionTimeoutInput
         id={`timeout-${integration.id}`}
         value={integration.sessionTimeout ?? null}

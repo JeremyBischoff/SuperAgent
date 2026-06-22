@@ -381,6 +381,32 @@ describe('chat-integration-service', () => {
       expect(getChatIntegration(id)?.sessionTimeout).toBeNull()
     })
   })
+
+  describe('requireApproval (secure-by-default invariant)', () => {
+    // The allowlist only protects if new integrations default to gated. Assert
+    // the persisted row, not the call args: an omitted flag must land as `true`.
+    it('persists requireApproval=true when the flag is omitted', () => {
+      const id = createChatIntegration({
+        agentSlug: 'agent-a',
+        provider: 'telegram',
+        config: { botToken: 'tok-omitted' },
+      })
+      expect(getChatIntegration(id)?.requireApproval).toBe(true)
+    })
+
+    it('ignores any caller-supplied requireApproval at create and stays private', () => {
+      // The field is intentionally not in CreateChatIntegrationParams; a caller
+      // smuggling it in (e.g. via an untyped request body) must NOT create a
+      // public bot — making a bot public is owner-only via PATCH.
+      const id = createChatIntegration({
+        agentSlug: 'agent-a',
+        provider: 'telegram',
+        config: { botToken: 'tok-override-ignored' },
+        requireApproval: false,
+      } as Parameters<typeof createChatIntegration>[0] & { requireApproval: boolean })
+      expect(getChatIntegration(id)?.requireApproval).toBe(true)
+    })
+  })
 })
 
 describe('DuplicateBotTokenError', () => {

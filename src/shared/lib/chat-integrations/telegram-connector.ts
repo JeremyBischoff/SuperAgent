@@ -120,7 +120,7 @@ export class TelegramConnector extends ChatClientConnector {
   private startupError: Error | null = null
 
   // First-poll batching: accumulate messages before sending them all at once
-  private pendingFirstPollMessages: Map<string, { texts: string[]; timer: ReturnType<typeof setTimeout> | null }> = new Map()
+  private pendingFirstPollMessages: Map<string, { texts: string[]; timer: ReturnType<typeof setTimeout> | null; userName?: string; chatName?: string; chatType?: 'private' | 'group' | 'supergroup' }> = new Map()
 
   // Track callback_query toolUseId mappings (Telegram callback_data is limited to 64 bytes)
   private callbackDataMap: Map<string, { toolUseId: string; value: unknown; ts: number }> = new Map()
@@ -161,6 +161,8 @@ export class TelegramConnector extends ChatClientConnector {
       const photos = ctx.message.photo
       if (!photos || photos.length === 0) return
 
+      const chatType = ctx.chat.type
+
       // Use the largest photo version (last in array)
       const largest = photos[photos.length - 1]
       const chatId = String(ctx.chat.id)
@@ -177,8 +179,9 @@ export class TelegramConnector extends ChatClientConnector {
         text: ctx.message.caption || '',
         chatId,
         userId: String(ctx.from?.id || ''),
+        chatType: chatType,
         userName,
-        chatName: (ctx.chat as any).title || userName || undefined,
+        chatName: ('title' in ctx.chat ? ctx.chat.title : undefined) || userName || undefined,
         files: [{
           name: 'photo.jpg',
           url,
@@ -191,6 +194,8 @@ export class TelegramConnector extends ChatClientConnector {
     // Handle document uploads (for file request resolution)
     this.bot.on('message:document', async (ctx) => {
       const doc = ctx.message.document
+      const chatType = ctx.chat.type
+
       const chatId = String(ctx.chat.id)
       let url = ''
       try {
@@ -205,8 +210,9 @@ export class TelegramConnector extends ChatClientConnector {
         text: ctx.message.caption || '',
         chatId,
         userId: String(ctx.from?.id || ''),
+        chatType: chatType,
         userName,
-        chatName: (ctx.chat as any).title || userName || undefined,
+        chatName: ('title' in ctx.chat ? ctx.chat.title : undefined) || userName || undefined,
         files: [{
           name: doc.file_name || 'file',
           url,
@@ -570,12 +576,12 @@ export class TelegramConnector extends ChatClientConnector {
           question: '_all',
           answer: '_all',
           answers: pending.answers,
-        })
+        }, chatId)
         this.pendingQuestions.delete(mapping.toolUseId)
       }
     } else {
       // Single question — emit immediately
-      this.emitInteractiveResponse(mapping.toolUseId, mapping.value)
+      this.emitInteractiveResponse(mapping.toolUseId, mapping.value, chatId)
     }
   }
 
@@ -585,11 +591,8 @@ export class TelegramConnector extends ChatClientConnector {
     const text = ctx.message?.text
     if (!text || !ctx.chat) return
 
-    // Handle /start command — greet the user instead of forwarding to the agent
-    if (text === '/start') {
-      ctx.reply('Hello! Send me a message and I\'ll forward it to your agent.').catch(() => {})
-      return
-    }
+    const chatType = ctx.chat.type
+    if (chatType === 'channel') return // out of scope v1; no chat row
 
     const chatId = String(ctx.chat.id)
     const fromId = String(ctx.from?.id || '')
@@ -597,14 +600,14 @@ export class TelegramConnector extends ChatClientConnector {
     const userName = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(' ')
       || ctx.from?.username
       || undefined
-    // For groups/channels use the chat title; for DMs use the user's name
-    const chatName = (ctx.chat as any).title || userName || undefined
+    // For groups use the chat title; for DMs use the user's name
+    const chatName = ('title' in ctx.chat ? ctx.chat.title : undefined) || userName || undefined
 
     if (!this.hasCompletedFirstPoll) {
       // Buffer messages during first poll
       let pending = this.pendingFirstPollMessages.get(chatId)
       if (!pending) {
-        pending = { texts: [], timer: null }
+        pending = { texts: [], timer: null, userName, chatName, chatType }
         this.pendingFirstPollMessages.set(chatId, pending)
       }
       pending.texts.push(text)
@@ -622,6 +625,7 @@ export class TelegramConnector extends ChatClientConnector {
       text,
       chatId,
       userId: fromId,
+      chatType: chatType,
       userName,
       chatName,
       timestamp: new Date((ctx.message?.date || 0) * 1000),
@@ -638,6 +642,9 @@ export class TelegramConnector extends ChatClientConnector {
       text: combined,
       chatId,
       userId,
+      chatType: pending.chatType,
+      userName: pending.userName,
+      chatName: pending.chatName,
       timestamp: new Date(),
     })
     this.pendingFirstPollMessages.delete(chatId)

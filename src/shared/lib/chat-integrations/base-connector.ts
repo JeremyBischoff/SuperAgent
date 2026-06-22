@@ -18,6 +18,7 @@ export interface IncomingMessage {
   text: string
   chatId: string               // Telegram chat_id or Slack channel_id
   userId: string               // Telegram user_id or Slack user_id
+  chatType?: 'private' | 'group' | 'supergroup'  // Telegram chat type (undefined for non-Telegram connectors)
   userName?: string            // Display name of the user (for session naming)
   chatName?: string            // Display name of the chat/channel (for session naming)
   files?: { name: string; url: string; mimeType?: string }[]
@@ -31,7 +32,7 @@ export interface OutgoingMessage {
 }
 
 export type MessageHandler = (message: IncomingMessage) => void
-export type InteractiveResponseHandler = (toolUseId: string, response: unknown) => void
+export type InteractiveResponseHandler = (toolUseId: string, response: unknown, chatId?: string) => void
 export type ErrorHandler = (error: Error) => void
 export type TypingHintHandler = (chatId: string) => void
 
@@ -143,10 +144,10 @@ export abstract class ChatClientConnector {
     }
   }
 
-  protected emitInteractiveResponse(toolUseId: string, response: unknown): void {
+  protected emitInteractiveResponse(toolUseId: string, response: unknown, chatId?: string): void {
     for (const handler of this.interactiveResponseHandlers) {
       try {
-        handler(toolUseId, response)
+        handler(toolUseId, response, chatId)
       } catch (err) {
         console.error('[ChatConnector] Error in interactive response handler:', err)
         captureException(err, { tags: { component: 'chat-integration', operation: 'emit-interactive-response' }, extra: { provider: this.provider, toolUseId } })
