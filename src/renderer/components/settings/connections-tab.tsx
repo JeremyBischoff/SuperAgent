@@ -23,7 +23,12 @@ export function ConnectionsTab() {
   const { data: accountsData, isLoading: isLoadingAccounts } = useConnectedAccounts()
   const { data: mcpsData, isLoading: isLoadingMcps } = useRemoteMcps()
   const { data: triggerCounts } = useTriggerCountsPerAccount()
-  const { reconnect: oauthReconnect, pendingAccountId } = useOAuthReconnect()
+  const {
+    reconnect: oauthReconnect,
+    pendingAccountId,
+    canCancelPendingReconnect,
+    cancelReconnect,
+  } = useOAuthReconnect()
 
   // The open connection detail lives in the URL (`/settings/connections?detail=…`)
   // so it's deep-linkable + reload-durable + back/forward-able — parity with the
@@ -85,6 +90,11 @@ export function ConnectionsTab() {
         onReconnect={
           row.type === 'oauth' && row.accountStatus && row.accountStatus !== 'active' && row.toolkit
             ? () => oauthReconnect(row.id, row.toolkit!)
+            : undefined
+        }
+        onCancelReconnect={
+          pendingAccountId === row.id && canCancelPendingReconnect
+            ? cancelReconnect
             : undefined
         }
         reconnecting={pendingAccountId === row.id}
