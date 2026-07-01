@@ -19,6 +19,7 @@ import {
 } from '@shared/lib/services/agent-service'
 import { containerManager } from '@shared/lib/container/container-manager'
 import { parseRuntimeOptions } from '@shared/lib/container/runtime-options'
+import { isBlockingUserInputToolName } from '@shared/lib/tool-definitions/user-input-tools'
 import { listWebhookTriggers, listActiveWebhookTriggers, listCancelledWebhookTriggers } from '@shared/lib/services/webhook-trigger-service'
 import { listChatIntegrations, listChatIntegrationsByAgents } from '@shared/lib/services/chat-integration-service'
 import { trackServerEvent } from '@shared/lib/analytics/server-analytics'
@@ -247,6 +248,22 @@ async function enrichAgentsWithSummary(agents: ApiAgent[]): Promise<ApiAgent[]> 
       }
     }))
   )
+}
+
+function hasUnresolvedBlockingInputRequest(items: TransformedItem[]): boolean {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    if (item.type === 'user' && !item.queued) return false
+    if (item.type !== 'assistant') continue
+
+    for (const toolCall of item.toolCalls) {
+      if (toolCall.result === undefined && isBlockingUserInputToolName(toolCall.name)) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 /**
@@ -1327,18 +1344,35 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
     })
     const sessionId = containerSession.id
 
-    // Record author for initial message after we know the sessionId
-    if (isAuthMode()) {
-      const userId = getCurrentUserId(c)
-      await db.insert(messageAuthor).values({
-        id: initialMessageUuid,
-        sessionId,
-        agentSlug: slug,
-        userId,
-      })
-    }
+    // Attach lifecycle state and the stream before slower metadata/DB work. The
+    // first turn can start emitting shortly after createSession returns, and a
+    // blocking input emitted during that window must not be missed or reset.
+    let lifecycleStarted = false
+    let sessionRegistered = false
+    try {
+      messagePersister.markSessionActive(sessionId, slug)
+      lifecycleStarted = true
+      await messagePersister.subscribeToSession(sessionId, client, sessionId, slug)
 
-    await registerSession(slug, sessionId, 'New Session')
+      // Record author for initial message after we know the sessionId
+      if (isAuthMode()) {
+        const userId = getCurrentUserId(c)
+        await db.insert(messageAuthor).values({
+          id: initialMessageUuid,
+          sessionId,
+          agentSlug: slug,
+          userId,
+        })
+      }
+
+      await registerSession(slug, sessionId, 'New Session')
+      sessionRegistered = true
+    } catch (error) {
+      if (lifecycleStarted && !sessionRegistered) {
+        messagePersister.unsubscribeFromSession(sessionId)
+      }
+      throw error
+    }
     // Persist only what the user explicitly chose. The server-side fallback is
     // applied at session creation but should not masquerade as a user choice in
     // metadata — otherwise a later change to the global default wouldn't be
@@ -1350,13 +1384,11 @@ agents.post('/:id/sessions', AgentUser(), async (c) => {
     if (Object.keys(initialMetadata).length > 0) {
       updateSessionMetadata(slug, sessionId, initialMetadata).catch(console.error)
     }
-    await messagePersister.subscribeToSession(sessionId, client, sessionId, slug)
     // Store slash commands from container's init event (captured during session creation)
     if (containerSession.slashCommands && containerSession.slashCommands.length > 0) {
       messagePersister.setSlashCommands(sessionId, containerSession.slashCommands)
       updateSessionMetadata(slug, sessionId, { slashCommands: containerSession.slashCommands }).catch(console.error)
     }
-    messagePersister.markSessionActive(sessionId, slug)
 
     generateAndUpdateSessionNameAsync(
       slug,
@@ -1403,6 +1435,16 @@ agents.get('/:id/sessions/:sessionId/messages', AgentRead(), async (c) => {
 
     // Discover subagent IDs for interrupted Task tool calls that have no result
     await resolveInterruptedSubagents(transformed, agentSlug, sessionId)
+
+    if (
+      messagePersister.isSessionActive(sessionId) &&
+      hasUnresolvedBlockingInputRequest(transformed)
+    ) {
+      // If the request-specific stream event was missed, persisted messages are
+      // the fallback source of truth. A stale transcript can briefly re-assert
+      // awaiting input, but the next stream result/idle event clears it.
+      messagePersister.recoverSessionAwaitingInput(sessionId, agentSlug)
+    }
 
     // In auth mode, annotate user messages with sender info
     if (isAuthMode()) {

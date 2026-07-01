@@ -6,6 +6,7 @@ import type { SessionUsage } from '@shared/lib/types/agent'
 import type { SlashCommandInfo } from '@shared/lib/container/types'
 import type { ApiMessage, ApiMessageOrBoundary } from '@shared/lib/types/api'
 import type { WorkflowAgentNode } from '@shared/lib/workflows/workflow-schemas'
+import { isBlockingUserInputToolName } from '@shared/lib/tool-definitions/user-input-tools'
 
 interface SecretRequest {
   toolUseId: string
@@ -751,6 +752,12 @@ function getOrCreateEventSource(
             const updated = tools.map((t, i) => i === idx ? { ...t, ready: true } : t)
             streamStates.set(sessionId, { ...current, streamingToolUses: updated })
           }
+        }
+        if (isBlockingUserInputToolName(data.toolName)) {
+          // The request-specific SSE event can be missed under load while the
+          // streaming fallback still renders the card. Keep status sidebars in sync.
+          queryClient.invalidateQueries({ queryKey: ['sessions'] })
+          queryClient.invalidateQueries({ queryKey: ['agents'] })
         }
       }
       else if (data.type === 'stream_end') {

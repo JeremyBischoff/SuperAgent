@@ -7,6 +7,7 @@ import type { RequestConnectedAccountInput } from '@shared/lib/tool-definitions/
 import type { RequestRemoteMcpInput } from '@shared/lib/tool-definitions/request-remote-mcp'
 import type { RequestBrowserInputInput } from '@shared/lib/tool-definitions/request-browser-input'
 import type { RequestScriptRunInput } from '@shared/lib/tool-definitions/request-script-run'
+import { isBlockingUserInputToolName } from '@shared/lib/tool-definitions/user-input-tools'
 import {
   createScheduledTask,
   listPendingScheduledTasks,
@@ -707,6 +708,17 @@ class MessagePersister {
         })
       }
     }
+  }
+
+  // Recover awaiting-input state from persisted messages when the one-shot
+  // request stream event was missed but the unresolved tool call is visible.
+  recoverSessionAwaitingInput(sessionId: string, agentSlug?: string): void {
+    const state = this.streamingStates.get(sessionId)
+    if (!state?.isActive) return
+    if (agentSlug && !state.agentSlug) {
+      state.agentSlug = agentSlug
+    }
+    this.markSessionAwaitingInput(sessionId)
   }
 
   // Promote an automated session (cron/webhook/chat) to a regular session so it
@@ -2018,11 +2030,7 @@ class MessagePersister {
           // Note: computer-use AND request_script_run tools are handled by their own
           // handlers which only mark awaiting input when user approval is actually
           // needed (not when auto-executed against a cached permission grant).
-          if (
-            state.currentToolUse.name === 'AskUserQuestion' ||
-            (state.currentToolUse.name.startsWith('mcp__user-input__request_') &&
-              state.currentToolUse.name !== 'mcp__user-input__request_script_run')
-          ) {
+          if (isBlockingUserInputToolName(state.currentToolUse.name)) {
             this.markSessionAwaitingInput(sessionId)
           }
 
