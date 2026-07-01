@@ -113,9 +113,17 @@ interface StreamingState {
 // Lazy import to break circular dependency: container-manager -> message-persister
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _containerManagerModule: any = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _containerManagerImport: Promise<any> | null = null
 async function getContainerManager() {
   if (!_containerManagerModule) {
-    _containerManagerModule = await import('./container-manager')
+    // Cache the in-flight import promise, not just the resolved module: concurrent
+    // callers (e.g. a fire-and-forget tool handler resolving while cancelAwaitingInput
+    // rejects) would otherwise each see a null module and start their own
+    // import('./container-manager'), racing redundant dynamic imports of a module
+    // that sits on the container-manager <-> message-persister circular edge.
+    if (!_containerManagerImport) _containerManagerImport = import('./container-manager')
+    _containerManagerModule = await _containerManagerImport
   }
   return _containerManagerModule.containerManager
 }
@@ -399,6 +407,54 @@ class MessagePersister {
           agentSlug: state.agentSlug,
         })
       }
+    }
+  }
+
+  // When a new message arrives while the session is awaiting user input, cancel the
+  // pending request(s) so the message starts a fresh turn instead of deadlocking behind
+  // the blocked tool.
+  //
+  // We interrupt FIRST — aborting the parked query outright — then cleanup-reject each
+  // pending request. Order matters: rejecting first returns a tool result and RESUMES the
+  // turn, letting the model emit a filler reply ("Go ahead …") that the user's forwarded
+  // message then anchors to (it reads as a reply to the filler, not to the original ask).
+  // Aborting at the parked point means the model never receives a tool result and never
+  // speaks. The abort also unwinds a subagent's parked Task, so every awaiting type —
+  // top-level (question / secret / file / connected_account / remote_mcp) and subagent
+  // (browser_input / script_run / computer_use) — takes this one path. After the abort the
+  // reject is pure cleanup: its reason is never read by the model.
+  //
+  // No-op when the session is not awaiting input. (This guard also makes rapid double-messages
+  // idempotent when sends are serialized — the chat path serializes per chat via messageQueues;
+  // the app send route does not, so two truly concurrent sends there can both pass it.)
+  // Interrupt/reject failures are swallowed: a best-effort cancel must never block the message.
+  async cancelAwaitingInput(sessionId: string, agentSlug: string): Promise<void> {
+    if (!this.isSessionAwaitingInput(sessionId)) return
+
+    // Snapshot the pending tool ids from BOTH maps before interrupting. pendingInputRequests holds
+    // the broadcast types (cleared by markSessionInterrupted's session_idle); computer_use lives in
+    // its own pendingComputerUseRequests map, which that broadcast does NOT clear.
+    const inputRequestIds = this.getPendingInputRequests(sessionId).map((r) => r.toolUseId)
+    const computerUseIds = this.getPendingComputerUseRequests(sessionId).map((r) => r.toolUseId)
+
+    // Interrupt FIRST: abort the parked query so it can never resume into a filler reply.
+    await this.interruptContainerSession(agentSlug, sessionId).catch(
+      (e) => console.error(`[MessagePersister] cancelAwaitingInput interrupt failed for ${sessionId}:`, e),
+    )
+    await this.markSessionInterrupted(sessionId)
+
+    // Clear the host-side computer_use bookkeeping explicitly — session_idle only clears
+    // pendingInputRequests, so a leftover entry would replay a phantom approval card on reconnect.
+    const state = this.streamingStates.get(sessionId)
+    for (const id of computerUseIds) state?.pendingComputerUseRequests.delete(id)
+
+    // Cleanup-reject each pending request on the CONTAINER: the query is already aborted, so the
+    // reason is never read by the model — this just clears the container-side pending entry so a
+    // late resolve/tap can't land on an abandoned request.
+    for (const toolUseId of [...inputRequestIds, ...computerUseIds]) {
+      await this.rejectContainerInput(agentSlug, toolUseId, 'Superseded: the user sent a new message.').catch(
+        (e) => console.error(`[MessagePersister] cancelAwaitingInput reject failed for ${toolUseId}:`, e),
+      )
     }
   }
 
@@ -2517,6 +2573,20 @@ ${continuation}`
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
+    })
+  }
+
+  /**
+   * Interrupt the running query in the container (abort + resume) by POSTing the same
+   * `/sessions/:id/interrupt` endpoint the explicit interrupt route hits. Uses `client.fetch`
+   * (not the `client.interruptSession` helper that route calls) to stay on the proxy-routed path
+   * the rest of MessagePersister's container calls use, e.g. `rejectContainerInput`.
+   */
+  private async interruptContainerSession(agentSlug: string, sessionId: string): Promise<void> {
+    const cm = await getContainerManager()
+    const client = cm.getClient(agentSlug)
+    await client.fetch(`/sessions/${encodeURIComponent(sessionId)}/interrupt`, {
+      method: 'POST',
     })
   }
 

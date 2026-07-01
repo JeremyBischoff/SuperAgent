@@ -100,6 +100,23 @@ export abstract class ChatClientConnector {
    */
   abstract sendUserRequestCard(chatId: string, event: UserRequestEvent): Promise<string>
 
+  /**
+   * Resolve an open single-question AskUserQuestion card with a free-typed message as the
+   * "Other" answer. Returns true only if a live card matching `toolUseId` is open for this chat,
+   * so the manager consumes the message only on a real resolve. Default: not supported (false).
+   */
+  async answerOpenQuestionWithText(_chatId: string, _toolUseId: string, _text: string): Promise<boolean> {
+    return false
+  }
+
+  /**
+   * Dismiss every open request card for this chat: strip its inline keyboard and forget its
+   * callbacks, so a card abandoned by a cancelling message doesn't keep showing live buttons.
+   * Called on the cancel path when a new message starts a fresh turn. Default no-op for
+   * connectors without interactive cards.
+   */
+  async dismissOpenCards(_chatId: string): Promise<void> {}
+
   /** Whether the connection is healthy right now. */
   abstract isConnected(): boolean
 

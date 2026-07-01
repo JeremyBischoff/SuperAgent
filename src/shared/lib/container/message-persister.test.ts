@@ -2406,6 +2406,125 @@ describe('MessagePersister', () => {
     it('returns false for unknown session IDs', () => {
       expect(messagePersister.isSessionAwaitingInput('nonexistent-session')).toBe(false)
     })
+
+    // ------------------------------------------------------------------
+    // cancelAwaitingInput: when a new message arrives while the session is
+    // awaiting input, cancel the pending request(s) so the message isn't
+    // queued behind a blocked tool (the deadlock). EVERY cancel interrupts
+    // first — aborting the parked query so it can't resume into a filler
+    // reply — then cleanup-rejects each pending id (the reason is never read
+    // by the model, since the turn was already aborted).
+    // ------------------------------------------------------------------
+    describe('cancelAwaitingInput', () => {
+      const rejectCallFor = (toolUseId: string) =>
+        mockContainerClientFetch.mock.calls.find((c) => c[0] === `/inputs/${toolUseId}/reject`)
+      const interruptCall = () =>
+        mockContainerClientFetch.mock.calls.find((c) => c[0] === `/sessions/${SESSION_ID}/interrupt`)
+
+      it('interrupts a top-level AskUserQuestion BEFORE cleanup-rejecting it (aborted turn cannot resume into a filler reply)', async () => {
+        messagePersister.markSessionActive(SESSION_ID, AGENT_SLUG)
+        simulateToolUse('AskUserQuestion', 'q-1', {
+          questions: [{ question: 'Pick DB', header: 'DB', options: [], multiSelect: false }],
+        })
+        expect(messagePersister.isSessionAwaitingInput(SESSION_ID)).toBe(true)
+        mockContainerClientFetch.mockClear()
+
+        await messagePersister.cancelAwaitingInput(SESSION_ID, AGENT_SLUG)
+
+        const calls = mockContainerClientFetch.mock.calls
+        const interruptIdx = calls.findIndex((c) => c[0] === `/sessions/${SESSION_ID}/interrupt`)
+        const rejectIdx = calls.findIndex((c) => c[0] === `/inputs/q-1/reject`)
+        // Top-level now interrupts too, and the interrupt must land BEFORE the reject:
+        // rejecting first would resume the parked turn and let the model emit a filler
+        // ("Go ahead") that the next message then anchors to.
+        expect(interruptIdx).toBeGreaterThanOrEqual(0)
+        expect(rejectIdx).toBeGreaterThan(interruptIdx)
+        // markSessionInterrupted ran, clearing the awaiting state.
+        expect(messagePersister.isSessionAwaitingInput(SESSION_ID)).toBe(false)
+      })
+
+      it('rejects AND interrupts for a subagent browser_input request', async () => {
+        messagePersister.markSessionActive(SESSION_ID, AGENT_SLUG)
+        simulateToolUse('mcp__user-input__request_browser_input', 'bi-1', {
+          message: 'Please log in',
+          requirements: ['Enter credentials'],
+        })
+        expect(messagePersister.isSessionAwaitingInput(SESSION_ID)).toBe(true)
+        mockContainerClientFetch.mockClear()
+
+        await messagePersister.cancelAwaitingInput(SESSION_ID, AGENT_SLUG)
+
+        expect(rejectCallFor('bi-1')).toBeDefined()
+        expect(interruptCall()).toBeDefined()
+        // The interrupt path marks the session interrupted (awaiting cleared).
+        expect(messagePersister.isSessionAwaitingInput(SESSION_ID)).toBe(false)
+      })
+
+      it('sweeps pendingComputerUseRequests (the separate map) and interrupts', async () => {
+        vi.stubEnv('E2E_MOCK', 'true') // skip the host platform gate so the request goes pending
+        try {
+          messagePersister.markSessionActive(SESSION_ID, AGENT_SLUG)
+          simulateToolUse('mcp__computer-use__computer_click', 'cu-1', { ref: 'win:1' })
+          expect(messagePersister.isSessionAwaitingInput(SESSION_ID)).toBe(true)
+          expect(messagePersister.getPendingComputerUseRequests(SESSION_ID)).toHaveLength(1)
+          mockContainerClientFetch.mockClear()
+
+          await messagePersister.cancelAwaitingInput(SESSION_ID, AGENT_SLUG)
+
+          expect(rejectCallFor('cu-1')).toBeDefined()
+          expect(interruptCall()).toBeDefined()
+          // Host-side computer_use bookkeeping is cleared too (session_idle only clears
+          // pendingInputRequests), so a reconnect can't replay a phantom approval card.
+          expect(messagePersister.getPendingComputerUseRequests(SESSION_ID)).toHaveLength(0)
+        } finally {
+          vi.unstubAllEnvs()
+        }
+      })
+
+      it('rejects every pending request when several are open', async () => {
+        messagePersister.markSessionActive(SESSION_ID, AGENT_SLUG)
+        simulateToolUse('mcp__user-input__request_secret', 's-1', { secretName: 'KEY1' })
+        simulateToolUse('mcp__user-input__request_file', 'f-1', { description: 'CSV' })
+        mockContainerClientFetch.mockClear()
+
+        await messagePersister.cancelAwaitingInput(SESSION_ID, AGENT_SLUG)
+
+        expect(rejectCallFor('s-1')).toBeDefined()
+        expect(rejectCallFor('f-1')).toBeDefined()
+      })
+
+      it('is a no-op when the session is not awaiting input', async () => {
+        messagePersister.markSessionActive(SESSION_ID, AGENT_SLUG)
+        mockContainerClientFetch.mockClear()
+
+        await messagePersister.cancelAwaitingInput(SESSION_ID, AGENT_SLUG)
+
+        expect(mockContainerClientFetch).not.toHaveBeenCalled()
+      })
+
+      it('swallows reject/interrupt failures so a best-effort cancel never throws', async () => {
+        messagePersister.markSessionActive(SESSION_ID, AGENT_SLUG)
+        simulateToolUse('mcp__user-input__request_browser_input', 'bi-err', {
+          message: 'Please log in',
+          requirements: ['Enter credentials'],
+        })
+        expect(messagePersister.isSessionAwaitingInput(SESSION_ID)).toBe(true)
+        mockContainerClientFetch.mockClear()
+        mockContainerClientFetch.mockRejectedValue(new Error('container unreachable'))
+        try {
+          // Must resolve, not reject — a failed cancel must never block the incoming message.
+          await expect(messagePersister.cancelAwaitingInput(SESSION_ID, AGENT_SLUG)).resolves.toBeUndefined()
+          // Both container calls were attempted (and rejected): the interrupt + the cleanup reject.
+          expect(rejectCallFor('bi-err')).toBeDefined()
+          expect(interruptCall()).toBeDefined()
+          // The interrupt fetch rejected, but markSessionInterrupted runs right after the swallowed
+          // interrupt, so the cancel still clears the awaiting state.
+          expect(messagePersister.isSessionAwaitingInput(SESSION_ID)).toBe(false)
+        } finally {
+          mockContainerClientFetch.mockImplementation(() => Promise.resolve({ ok: true }))
+        }
+      })
+    })
   })
 
   // ============================================================================
