@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-07-03T02:03:39.084517+00:00",
+  "generatedAt": "2026-07-03T02:03:40.782734+00:00",
   "host": "JeremysWorkMBP.localdomain",
   "repos": [
     {
@@ -49,7 +49,7 @@
           "detached": false,
           "bare": false,
           "locked": false,
-          "head": "c164bb4b22105e0adfb81e2396ebef048908160c",
+          "head": "dd4c3e8798402ce5163b6dedc6297d04275e4b8a",
           "branch": "feat/chat-integration-ui-overhaul",
           "dirty": true,
           "dirtyCount": 518,
@@ -244,10 +244,10 @@
           "ahead": 0,
           "behind": 0,
           "gone": false,
-          "sha": "c164bb4b22105e0adfb81e2396ebef048908160c",
-          "lastCommitDate": "2026-07-02 19:03:38 -0700",
+          "sha": "dd4c3e8798402ce5163b6dedc6297d04275e4b8a",
+          "lastCommitDate": "2026-07-02 19:03:39 -0700",
           "lastCommitAuthor": "Jeremy Bischoff",
-          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T02:03:37.299390+00:00",
+          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T02:03:39.084517+00:00",
           "checkedOutIn": "/Users/jeremybischoff/Desktop/SuperAgent/.claude/worktrees/feat+chat-integration-ui-overhaul"
         },
         {
