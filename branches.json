@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-07-03T00:59:36.756140+00:00",
+  "generatedAt": "2026-07-03T00:59:38.471303+00:00",
   "host": "JeremysWorkMBP.localdomain",
   "repos": [
     {
@@ -16,7 +16,7 @@
           "head": "848a36ed7f89aee153e0f4d2d5ca2b92c5482535",
           "branch": "main",
           "dirty": true,
-          "dirtyCount": 473,
+          "dirtyCount": 475,
           "ahead": null,
           "behind": null
         },
@@ -25,10 +25,10 @@
           "detached": false,
           "bare": false,
           "locked": false,
-          "head": "61c9ea376708d41f9c080df09ae63dba8ddddf3b",
+          "head": "434bb0196c7291af5bdcaa9cd606afa8644d0ddd",
           "branch": "bench/web-fetch-eval",
           "dirty": true,
-          "dirtyCount": 423,
+          "dirtyCount": 462,
           "ahead": null,
           "behind": null
         },
@@ -40,7 +40,7 @@
           "head": "53135cba81b29c8c42e4cd30b29b69ca699b0b9d",
           "branch": "bench/web-search-eval",
           "dirty": true,
-          "dirtyCount": 419,
+          "dirtyCount": 438,
           "ahead": null,
           "behind": null
         },
@@ -52,7 +52,7 @@
           "head": "28a4ba46252f07e8685d9014e11392b063b8d2df",
           "branch": "feat/chat-integration-ui-overhaul",
           "dirty": true,
-          "dirtyCount": 515,
+          "dirtyCount": 517,
           "ahead": null,
           "behind": null
         },
@@ -64,7 +64,7 @@
           "head": "4bedae4ae5c082752c0ec54f344241c319c25ef6",
           "branch": "feat/chat-memory-consolidation",
           "dirty": true,
-          "dirtyCount": 399,
+          "dirtyCount": 401,
           "ahead": null,
           "behind": null
         },
@@ -76,7 +76,7 @@
           "head": "8d93eadacd333acd2c172a6792c14fe60c90579c",
           "branch": "feat/chat-turn-control",
           "dirty": true,
-          "dirtyCount": 334,
+          "dirtyCount": 336,
           "ahead": null,
           "behind": null
         },
@@ -88,7 +88,7 @@
           "head": "13ebad71cffab5442e64f4e77173ccdb7b07435e",
           "branch": "feat/session-forking",
           "dirty": true,
-          "dirtyCount": 196,
+          "dirtyCount": 198,
           "ahead": null,
           "behind": null
         },
@@ -220,10 +220,10 @@
           "ahead": 0,
           "behind": 0,
           "gone": false,
-          "sha": "33310b47ad46ede026afa1b0cdd2135ce568b17d",
-          "lastCommitDate": "2026-07-02 17:59:36 -0700",
+          "sha": "434bb0196c7291af5bdcaa9cd606afa8644d0ddd",
+          "lastCommitDate": "2026-07-02 17:59:37 -0700",
           "lastCommitAuthor": "Jeremy Bischoff",
-          "lastCommitSubject": "feat(benchmark): same-moment reference capturer (raw GET + rendered DOM + readability, quality classification)",
+          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T00:59:36.756140+00:00",
           "checkedOutIn": "/Users/jeremybischoff/Desktop/SuperAgent/.claude/worktrees/bench+web-fetch-eval"
         },
         {
