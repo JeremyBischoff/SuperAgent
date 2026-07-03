@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-07-03T00:53:46.886927+00:00",
+  "generatedAt": "2026-07-03T00:53:48.653748+00:00",
   "host": "JeremysWorkMBP.localdomain",
   "repos": [
     {
@@ -25,7 +25,7 @@
           "detached": false,
           "bare": false,
           "locked": false,
-          "head": "c8a14edec185b28660f586c5142d15881e52e712",
+          "head": "affcdf7776627d1820b8fcc6ab46050145e0db22",
           "branch": "bench/web-fetch-eval",
           "dirty": true,
           "dirtyCount": 423,
@@ -220,10 +220,10 @@
           "ahead": 0,
           "behind": 0,
           "gone": false,
-          "sha": "c8a14edec185b28660f586c5142d15881e52e712",
-          "lastCommitDate": "2026-07-02 17:53:45 -0700",
+          "sha": "affcdf7776627d1820b8fcc6ab46050145e0db22",
+          "lastCommitDate": "2026-07-02 17:53:47 -0700",
           "lastCommitAuthor": "Jeremy Bischoff",
-          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T00:53:45.166799+00:00",
+          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T00:53:46.886927+00:00",
           "checkedOutIn": "/Users/jeremybischoff/Desktop/SuperAgent/.claude/worktrees/bench+web-fetch-eval"
         },
         {
