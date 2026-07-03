@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-07-03T02:31:51.633815+00:00",
+  "generatedAt": "2026-07-03T02:31:55.278157+00:00",
   "host": "Jeremys-Work-MacBook-Pro.local",
   "repos": [
     {
@@ -25,7 +25,7 @@
           "detached": false,
           "bare": false,
           "locked": false,
-          "head": "a7c26e41eea0d58e0b4e21b954e6ed3f9ab9bad5",
+          "head": "91f27e705967d545f9a4166f3a351e1674e4d7a7",
           "branch": "bench/web-fetch-eval",
           "dirty": true,
           "dirtyCount": 472,
@@ -220,10 +220,10 @@
           "ahead": 0,
           "behind": 0,
           "gone": false,
-          "sha": "a7c26e41eea0d58e0b4e21b954e6ed3f9ab9bad5",
-          "lastCommitDate": "2026-07-02 19:31:50 -0700",
+          "sha": "91f27e705967d545f9a4166f3a351e1674e4d7a7",
+          "lastCommitDate": "2026-07-02 19:31:54 -0700",
           "lastCommitAuthor": "Jeremy Bischoff",
-          "lastCommitSubject": "sync: Jeremys-Work-MacBook-Pro.local 2026-07-03T02:31:49.769248+00:00",
+          "lastCommitSubject": "sync: Jeremys-Work-MacBook-Pro.local 2026-07-03T02:31:53.464520+00:00",
           "checkedOutIn": "/Users/jeremybischoff/Desktop/SuperAgent/.claude/worktrees/bench+web-fetch-eval"
         },
         {
