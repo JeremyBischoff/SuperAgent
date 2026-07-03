@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "generatedAt": "2026-07-03T02:04:04.886778+00:00",
-  "host": "JeremysWorkMBP.localdomain",
+  "generatedAt": "2026-07-03T02:27:50.548851+00:00",
+  "host": "Jeremys-Work-MacBook-Pro.local",
   "repos": [
     {
       "repo": "JeremyBischoff/SuperAgent",
@@ -25,10 +25,10 @@
           "detached": false,
           "bare": false,
           "locked": false,
-          "head": "26c6266ced1d8d64167362d9c7d16e4485436641",
+          "head": "0c90a7a23336abdf78b53b2842a161b04c9d628f",
           "branch": "bench/web-fetch-eval",
           "dirty": true,
-          "dirtyCount": 470,
+          "dirtyCount": 472,
           "ahead": null,
           "behind": null
         },
@@ -49,7 +49,7 @@
           "detached": false,
           "bare": false,
           "locked": false,
-          "head": "042ab941cbf85a6fdaaf4fad51cd780a0352186f",
+          "head": "52fc19c1204702a5d625585d2e98f7905b2aaaad",
           "branch": "feat/chat-integration-ui-overhaul",
           "dirty": true,
           "dirtyCount": 518,
@@ -220,10 +220,10 @@
           "ahead": 0,
           "behind": 0,
           "gone": false,
-          "sha": "26c6266ced1d8d64167362d9c7d16e4485436641",
-          "lastCommitDate": "2026-07-02 19:01:44 -0700",
+          "sha": "0c90a7a23336abdf78b53b2842a161b04c9d628f",
+          "lastCommitDate": "2026-07-02 19:27:49 -0700",
           "lastCommitAuthor": "Jeremy Bischoff",
-          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T02:01:43.333103+00:00",
+          "lastCommitSubject": "sync: Jeremys-Work-MacBook-Pro.local 2026-07-03T02:27:47.318707+00:00",
           "checkedOutIn": "/Users/jeremybischoff/Desktop/SuperAgent/.claude/worktrees/bench+web-fetch-eval"
         },
         {
@@ -244,10 +244,10 @@
           "ahead": 0,
           "behind": 0,
           "gone": false,
-          "sha": "042ab941cbf85a6fdaaf4fad51cd780a0352186f",
-          "lastCommitDate": "2026-07-02 19:04:03 -0700",
+          "sha": "52fc19c1204702a5d625585d2e98f7905b2aaaad",
+          "lastCommitDate": "2026-07-02 19:05:33 -0700",
           "lastCommitAuthor": "Jeremy Bischoff",
-          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T02:04:02.841773+00:00",
+          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T02:04:06.682824+00:00",
           "checkedOutIn": "/Users/jeremybischoff/Desktop/SuperAgent/.claude/worktrees/feat+chat-integration-ui-overhaul"
         },
         {
