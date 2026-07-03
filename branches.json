@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-07-03T00:59:35.002530+00:00",
+  "generatedAt": "2026-07-03T00:59:36.756140+00:00",
   "host": "JeremysWorkMBP.localdomain",
   "repos": [
     {
@@ -25,7 +25,7 @@
           "detached": false,
           "bare": false,
           "locked": false,
-          "head": "26f3279fb4a381fc91ddcf92ce0f1426d16ce29d",
+          "head": "61c9ea376708d41f9c080df09ae63dba8ddddf3b",
           "branch": "bench/web-fetch-eval",
           "dirty": true,
           "dirtyCount": 423,
@@ -100,7 +100,7 @@
           "head": "2829c0b052accd0e730d80b5dd12e49eab6616aa",
           "branch": "feat/slack-channel-context",
           "dirty": true,
-          "dirtyCount": 212,
+          "dirtyCount": 214,
           "ahead": null,
           "behind": null
         },
@@ -112,7 +112,7 @@
           "head": "45eb90d35dabdb0dec13283dca1db30c70806d30",
           "branch": "feat/stale-session-prompt",
           "dirty": true,
-          "dirtyCount": 123,
+          "dirtyCount": 125,
           "ahead": null,
           "behind": null
         },
@@ -124,7 +124,7 @@
           "head": "93742fdcd5c526d1488674ee5d8cac894eef6577",
           "branch": "feat/stale-session-prompt-core",
           "dirty": true,
-          "dirtyCount": 384,
+          "dirtyCount": 386,
           "ahead": null,
           "behind": null
         },
@@ -136,7 +136,7 @@
           "head": "064d8224f66e054e858d9415e354e661730d847b",
           "branch": "feat/telegram-dashboards",
           "dirty": true,
-          "dirtyCount": 267,
+          "dirtyCount": 269,
           "ahead": null,
           "behind": null
         },
@@ -148,7 +148,7 @@
           "head": "b575214572ea3108f86391e284874832c69d7a2e",
           "branch": "feat/web-fetch-seam",
           "dirty": true,
-          "dirtyCount": 428,
+          "dirtyCount": 430,
           "ahead": null,
           "behind": null
         },
@@ -160,7 +160,7 @@
           "head": "69b9dffb08a17071270de01462813a260a683961",
           "branch": "feat/web-search-fetch-providers",
           "dirty": true,
-          "dirtyCount": 414,
+          "dirtyCount": 416,
           "ahead": null,
           "behind": null
         },
@@ -172,7 +172,7 @@
           "head": "9ecf5ec32f1bdab0a19027606305985da54c774a",
           "branch": "feat/web-search-vendors",
           "dirty": true,
-          "dirtyCount": 423,
+          "dirtyCount": 425,
           "ahead": null,
           "behind": null
         },
@@ -184,7 +184,7 @@
           "head": "6ddd1947cf00d14a3adbc85b1bb2e8b9c07b1460",
           "branch": "fix/subagent-input-request-surfacing",
           "dirty": true,
-          "dirtyCount": 390,
+          "dirtyCount": 392,
           "ahead": null,
           "behind": null
         },
@@ -196,7 +196,7 @@
           "head": "fcc021db25dcccc8785ff1b0b0deb84b929aea98",
           "branch": "worktree-refactor+chat-integration-working-thinking",
           "dirty": true,
-          "dirtyCount": 160,
+          "dirtyCount": 162,
           "ahead": null,
           "behind": null
         },
@@ -208,7 +208,7 @@
           "head": "e390099fd2e13a8b2bdae0630f7fe5ee83223196",
           "branch": "refactor/shared-request-item-actions",
           "dirty": true,
-          "dirtyCount": 93,
+          "dirtyCount": 95,
           "ahead": null,
           "behind": null
         }
@@ -220,10 +220,10 @@
           "ahead": 0,
           "behind": 0,
           "gone": false,
-          "sha": "26f3279fb4a381fc91ddcf92ce0f1426d16ce29d",
-          "lastCommitDate": "2026-07-02 17:59:33 -0700",
+          "sha": "33310b47ad46ede026afa1b0cdd2135ce568b17d",
+          "lastCommitDate": "2026-07-02 17:59:36 -0700",
           "lastCommitAuthor": "Jeremy Bischoff",
-          "lastCommitSubject": "sync: JeremysWorkMBP.localdomain 2026-07-03T00:59:33.281938+00:00",
+          "lastCommitSubject": "feat(benchmark): same-moment reference capturer (raw GET + rendered DOM + readability, quality classification)",
           "checkedOutIn": "/Users/jeremybischoff/Desktop/SuperAgent/.claude/worktrees/bench+web-fetch-eval"
         },
         {
