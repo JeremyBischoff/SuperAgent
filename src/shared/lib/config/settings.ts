@@ -185,8 +185,8 @@ export interface AnalyticsTarget {
 
 export type { LlmProviderId } from '../llm-provider/base-llm-provider'
 import type { LlmProviderId } from '../llm-provider/base-llm-provider'
-export type { WebSearchProviderId } from '../web-provider/types'
-import type { WebSearchProviderId } from '../web-provider/types'
+export type { WebProviderId } from '../web-provider/types'
+import type { WebProviderId } from '../web-provider/types'
 
 export interface PlatformAuthSettings {
   token: string
@@ -208,7 +208,7 @@ export interface AppSettings {
   container: ContainerSettings
   apiKeys?: ApiKeySettings
   llmProvider?: LlmProviderId
-  webSearchProvider?: WebSearchProviderId // default 'native' (no host vendor; Anthropic server-side tools)
+  webProvider?: WebProviderId // default 'native' (no host vendor; Claude's built-in web tools). One stored vendor backs both search + fetch.
   webAllowedSites?: string[] // operator allow list; empty = allow all (host-side must-enforce, §8)
   webBlockedSites?: string[] // operator deny list; wins over allow
   app?: AppPreferences
@@ -268,7 +268,7 @@ export interface GlobalSettingsResponse {
   llmProvider: LlmProviderId
   llmProviderStatus: LlmProviderInfo[]
   modelCatalog?: ModelCatalogSettings
-  webSearchProvider: WebSearchProviderId
+  webProvider: WebProviderId
   apiKeyStatus: {
     anthropic: ApiKeyStatus
     openrouter: ApiKeyStatus
@@ -428,7 +428,12 @@ function mergeLoadedSettings(loaded: Record<string, any>): AppSettings {
     },
     apiKeys: loaded.apiKeys,
     llmProvider: loaded.llmProvider,
-    webSearchProvider: loaded.webSearchProvider,
+    // Recover a pre-collapse selection: webSearchProvider shipped (v0.4.5-0.4.7) and the single
+    // UI select wrote both old fields to the same value, so the legacy webSearchProvider is the
+    // user's choice. Read-fallback (not a boot-time migration) keeps this merge pure; the next
+    // PUT /settings persists it under webProvider and the stale key lingers harmlessly. An invalid
+    // stored value falls back to native at the factory's isVendorId narrow.
+    webProvider: loaded.webProvider ?? loaded.webSearchProvider,
     webAllowedSites: loaded.webAllowedSites,
     webBlockedSites: loaded.webBlockedSites,
     models: (() => {
