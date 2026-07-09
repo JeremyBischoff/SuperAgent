@@ -245,6 +245,17 @@ function notifyPlatformServiceAuthChanged(connected: boolean): void {
       console.log(`[platform-auth] platform-service notified of auth change (connected=${connected})`)
     })
     .catch((error) => captureException(error, { tags: { area: 'platform-auth', op: 'notify-service' } }))
+  // The desktop notifications subscription follows platform connectivity:
+  // start on connect (self-gates on auth mode), tear down on disconnect.
+  void import('../scheduler/platform-notifications-manager')
+    .then((mod) =>
+      connected
+        ? mod.platformNotificationsManager.start()
+        : mod.platformNotificationsManager.stop(),
+    )
+    .catch((error) =>
+      captureException(error, { tags: { area: 'platform-auth', op: 'notify-notifications' } }),
+    )
 }
 
 function getEnvManagedStatus(): PlatformAuthStatus | null {
