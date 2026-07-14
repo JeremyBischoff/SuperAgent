@@ -32,11 +32,26 @@ vi.mock('@shared/lib/services/scheduled-task-service', () => ({
 const mockGetSessionsByScheduledTask = vi.fn()
 const mockRegisterSession = vi.fn()
 const mockUpdateSessionMetadata = vi.fn()
+const mockGetSessionMetadata = vi.fn((..._args: unknown[]) => Promise.resolve({ name: 'Sleeping session' }))
 
 vi.mock('@shared/lib/services/session-service', () => ({
   getSessionsByScheduledTask: (...args: unknown[]) => mockGetSessionsByScheduledTask(...args),
   registerSession: (...args: unknown[]) => mockRegisterSession(...args),
   updateSessionMetadata: (...args: unknown[]) => mockUpdateSessionMetadata(...args),
+  getSessionMetadata: (...args: unknown[]) => mockGetSessionMetadata(...args),
+}))
+
+vi.mock('@shared/lib/services/agent-service', () => ({
+  agentExists: () => Promise.resolve(true),
+}))
+
+const mockTriggerScheduledSessionResumed = vi.fn((..._args: unknown[]) => Promise.resolve())
+
+vi.mock('@shared/lib/notifications/notification-manager', () => ({
+  notificationManager: {
+    triggerScheduledSessionResumed: (...args: unknown[]) =>
+      mockTriggerScheduledSessionResumed(...args),
+  },
 }))
 
 const mockGetSecretEnvVars = vi.fn()
@@ -58,6 +73,11 @@ const mockMessagePersister = vi.hoisted(() => ({
   isSessionActive: vi.fn(),
   subscribeToSession: vi.fn(),
   markSessionActive: vi.fn(),
+  markSessionIdle: vi.fn(),
+  isSubscribed: vi.fn(() => false),
+  cancelAwaitingInput: vi.fn(() => Promise.resolve()),
+  broadcastGlobal: vi.fn(),
+  broadcastSessionUpdate: vi.fn(),
 }))
 
 vi.mock('@shared/lib/container/message-persister', () => ({
@@ -258,6 +278,91 @@ describe('scheduled-tasks route', () => {
     expect(mockRegisterSession).toHaveBeenCalledWith('agent-one', 'container-session-1', 'Scheduled Task (Run Now)')
     expect(mockMarkTaskExecuted).toHaveBeenCalledWith('task-1', 'container-session-1')
     expect(mockRecordManualExecution).not.toHaveBeenCalled()
+  })
+
+  describe('session wakes (resume tasks)', () => {
+    function createWakeTask(overrides: Record<string, unknown> = {}) {
+      return createTask({
+        scheduleType: 'at',
+        scheduleExpression: 'at tomorrow 9am',
+        isRecurring: false,
+        name: null,
+        prompt: 'Check whether Dana replied',
+        resumeSessionId: 'sleeping-session-1',
+        createdBySessionId: 'sleeping-session-1',
+        nextExecutionAt: new Date('2027-01-01T09:00:00.000Z'),
+        createdAt: new Date('2026-12-30T09:00:00.000Z'),
+        timezone: null,
+        ...overrides,
+      })
+    }
+
+    it('run-now resumes the target session instead of creating a new one', async () => {
+      task = createWakeTask()
+      const mockSendMessage = vi.fn()
+      mockEnsureRunning.mockResolvedValue({
+        createSession: mockCreateSession,
+        sendMessage: mockSendMessage,
+      })
+
+      const res = await app.request('http://localhost/api/scheduled-tasks/task-1/run-now', {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      expect(body.sessionId).toBe('sleeping-session-1')
+
+      expect(mockCreateSession).not.toHaveBeenCalled()
+      expect(mockRegisterSession).not.toHaveBeenCalled()
+
+      expect(mockSendMessage).toHaveBeenCalledTimes(1)
+      const [sessionId, content, , options] = mockSendMessage.mock.calls[0]
+      expect(sessionId).toBe('sleeping-session-1')
+      expect(content.startsWith('[SYSTEM] ')).toBe(true)
+      expect(content).toContain('Check whether Dana replied')
+      expect(options).toEqual({ shouldQuery: true })
+
+      expect(mockUpdateSessionMetadata).toHaveBeenCalledWith(
+        'agent-one',
+        'sleeping-session-1',
+        expect.objectContaining({
+          lastWake: expect.objectContaining({ taskId: 'task-1' }),
+        })
+      )
+      expect(mockMarkTaskExecuted).toHaveBeenCalledWith('task-1', 'sleeping-session-1')
+      expect(mockMessagePersister.broadcastGlobal).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'session_updated', sessionId: 'sleeping-session-1' })
+      )
+    })
+
+    it('cancelling a wake broadcasts session_updated so badges clear', async () => {
+      task = createWakeTask()
+      mockCancelScheduledTask.mockResolvedValue(true)
+
+      const res = await app.request('http://localhost/api/scheduled-tasks/task-1', {
+        method: 'DELETE',
+      })
+
+      expect(res.status).toBe(204)
+      expect(mockMessagePersister.broadcastGlobal).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'session_updated', sessionId: 'sleeping-session-1' })
+      )
+    })
+
+    it('cancelling a regular task does not broadcast session_updated', async () => {
+      task = createTask()
+      mockCancelScheduledTask.mockResolvedValue(true)
+
+      const res = await app.request('http://localhost/api/scheduled-tasks/task-1', {
+        method: 'DELETE',
+      })
+
+      expect(res.status).toBe(204)
+      expect(mockMessagePersister.broadcastGlobal).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'session_updated' })
+      )
+    })
   })
 
   describe('run-now model and effort resolution', () => {

@@ -161,6 +161,9 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
   lastSessionId: text('last_session_id'),
   createdBySessionId: text('created_by_session_id'),
   createdByUserId: text('created_by_user_id'), // For ACL purposes in auth mode
+  // When set, this task is a session "wake": firing resumes the referenced
+  // existing session (sendMessage into it) instead of creating a new one.
+  resumeSessionId: text('resume_session_id'),
 
   // Timezone (IANA identifier, e.g. 'America/New_York')
   timezone: text('timezone'),
@@ -173,7 +176,15 @@ export const scheduledTasks = sqliteTable('scheduled_tasks', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   cancelledAt: integer('cancelled_at', { mode: 'timestamp_ms' }),
   pausedAt: integer('paused_at', { mode: 'timestamp_ms' }),
-})
+}, (table) => ({
+  // One pending wake per session, enforced at the storage layer: the
+  // replace-on-create logic in createSessionWake runs in a transaction, and
+  // this partial index makes any interleaving that slips past it a hard
+  // constraint error instead of a silent duplicate wake.
+  pendingWakePerSession: uniqueIndex('scheduled_tasks_pending_wake_unique')
+    .on(table.resumeSessionId)
+    .where(sql`status = 'pending' AND resume_session_id IS NOT NULL`),
+}))
 
 // Notifications - user notifications for session events
 export const notifications = sqliteTable('notifications', {

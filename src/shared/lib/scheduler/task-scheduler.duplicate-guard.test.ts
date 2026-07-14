@@ -8,6 +8,7 @@ const mockUpdateNextExecution = vi.fn()
 
 vi.mock('@shared/lib/services/scheduled-task-service', () => ({
   getDueTasks: (...args: unknown[]) => mockGetDueTasks(...args),
+  getScheduledTask: vi.fn(() => Promise.resolve(null)),
   markTaskExecuted: (...args: unknown[]) => mockMarkTaskExecuted(...args),
   markTaskFailed: (...args: unknown[]) => mockMarkTaskFailed(...args),
   updateNextExecution: (...args: unknown[]) => mockUpdateNextExecution(...args),
@@ -54,6 +55,7 @@ const mockRegisterSession = vi.fn()
 const mockUpdateSessionMetadata = vi.fn()
 
 vi.mock('@shared/lib/services/session-service', () => ({
+  getSessionMetadata: vi.fn(() => Promise.resolve(null)),
   getSessionForScheduledExecution: (...args: unknown[]) =>
     mockGetSessionForScheduledExecution(...args),
   registerSession: (...args: unknown[]) => mockRegisterSession(...args),
@@ -117,6 +119,7 @@ function createTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
     timezone: 'America/Los_Angeles',
     model: null,
     effort: null,
+    resumeSessionId: null,
     createdAt: new Date('2026-06-26T16:00:00.000Z'),
     cancelledAt: null,
     pausedAt: null,

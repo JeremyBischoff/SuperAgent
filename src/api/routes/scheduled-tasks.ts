@@ -38,6 +38,7 @@ import { RuntimeOptionsSchema } from '@shared/lib/container/runtime-options'
 import type { EffortLevel } from '@shared/lib/container/types'
 import { getCurrentUserId } from '@shared/lib/auth/config'
 import { logAuditEvent } from '@shared/lib/services/audit-log-service'
+import { deliverSessionWake } from '@shared/lib/scheduler/wake-delivery'
 import { Authenticated, EntityAgentRole } from '../middleware/auth'
 
 const scheduledTasksRouter = new Hono()
@@ -89,6 +90,16 @@ scheduledTasksRouter.delete('/:taskId', TaskAgentRole('user'), async (c) => {
     }
 
     logAuditEvent({ userId: getCurrentUserId(c), object: 'task', objectId: task!.id, action: 'deleted' })
+
+    // Cancelling a session wake changes that session's list/badge state.
+    if (task!.resumeSessionId) {
+      messagePersister.broadcastGlobal({
+        type: 'session_updated',
+        sessionId: task!.resumeSessionId,
+        agentSlug: task!.agentSlug,
+      })
+      messagePersister.broadcastSessionUpdate(task!.resumeSessionId)
+    }
 
     return c.body(null, 204)
   } catch (error) {
@@ -267,6 +278,29 @@ scheduledTasksRouter.post('/:taskId/run-now', TaskAgentRole('user'), async (c) =
   try {
     const task = c.get('scheduledTask' as never) as Awaited<ReturnType<typeof getScheduledTask>>
     if (!task || (task.status !== 'pending' && task.status !== 'paused')) {
+      return c.json({ error: 'Task is not pending' }, 400)
+    }
+
+    // Session wake ("Wake now"): resume the target session instead of creating
+    // a new one. deliverSessionWake is the same claimed path the scheduler
+    // uses, so a poll firing at the same instant can never double-deliver.
+    if (task.resumeSessionId) {
+      const result = await deliverSessionWake(task, 'manual')
+
+      if (result.outcome === 'delivered' || result.outcome === 'reconciled') {
+        const updated = await getScheduledTask(task.id)
+        return c.json({ sessionId: result.sessionId, agentSlug: task.agentSlug, task: updated }, 201)
+      }
+      if (result.outcome === 'in-flight') {
+        return c.json({ error: 'This wake is already being delivered' }, 409)
+      }
+      if (result.outcome === 'session-missing') {
+        return c.json({ error: 'The session this wake resumes no longer exists' }, 404)
+      }
+      if (result.outcome === 'agent-missing') {
+        return c.json({ error: 'Agent no longer exists' }, 404)
+      }
+      // not-pending: a concurrent delivery just finished, or the wake was cancelled
       return c.json({ error: 'Task is not pending' }, 400)
     }
 
