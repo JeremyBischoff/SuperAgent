@@ -16,7 +16,7 @@ import {
 const RUNTIME_INFO: Record<string, { name: string; description: string; installUrl: string }> = {
   'apple-container': {
     name: 'macOS Container',
-    description: 'Native container runtime built into macOS. Fast and lightweight with no extra software needed.',
+    description: 'Apple\'s container runtime for macOS. Gamut can install it for you (administrator password required).',
     installUrl: 'https://github.com/apple/container',
   },
   docker: {
@@ -198,7 +198,7 @@ export function DockerSetupStep({ onCanProceedChange }: DockerSetupStepProps) {
                         </span>
                         Starting up...
                       </p>
-                    ) : runtime.installed && runtime.canStart ? (
+                    ) : runtime.canStart ? (
                       <Button
                         size="sm"
                         variant="outline"
@@ -211,7 +211,7 @@ export function DockerSetupStep({ onCanProceedChange }: DockerSetupStepProps) {
                         ) : (
                           <Power className="!h-3 !w-3" />
                         )}
-                        Start {runtime.info.name}
+                        {runtime.installed ? `Start ${runtime.info.name}` : `Install ${runtime.info.name}`}
                       </Button>
                     ) : runtime.info.installUrl ? (
                       <Button

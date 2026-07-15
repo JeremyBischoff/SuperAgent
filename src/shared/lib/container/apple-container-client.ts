@@ -1,14 +1,30 @@
 import { execSync } from 'child_process'
-import { BaseContainerClient, checkCommandAvailable, execWithPath, CONTAINER_INTERNAL_PORT } from './base-container-client'
+import { createHash } from 'crypto'
+import { createReadStream, createWriteStream } from 'fs'
+import { mkdtemp, rm } from 'fs/promises'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
+import { BaseContainerClient, checkCommandAvailable, execWithPath, CONTAINER_INTERNAL_PORT, shellEscape } from './base-container-client'
 import type { ContainerConfig, ContainerInfo, ContainerStats } from './types'
+import { isAdminPrivilegeCancelError, runWithAdminPrivileges } from '@shared/lib/run-with-admin-privileges'
 
-/** Cached macOS major version (null = not yet checked, undefined = not macOS) */
+/** Pinned signed installer (bump deliberately; do not follow releases/latest). */
+const APPLE_CONTAINER_VERSION = '1.1.0'
+
+/** GitHub release asset digest for container-${VERSION}-installer-signed.pkg at pin time. */
+export const APPLE_CONTAINER_PKG_SHA256 =
+  '0ca1c42a2269c2557efb1d82b1b38ac553e6a3a3da1b1179c439bcee1e7d6714'
+
+const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000
+
+/** Cached macOS major version (null = not macOS / failed, undefined = not yet checked) */
 let cachedMacOSMajorVersion: number | null | undefined = undefined
 
-/**
- * Get the macOS major version number, or null if not on macOS.
- * Result is cached for the lifetime of the process.
- */
+/** Mutex: concurrent ensureAppleContainerReady callers share one in-flight promise. */
+let appleReadyPromise: Promise<void> | null = null
+
 function getMacOSMajorVersion(): number | null {
   if (cachedMacOSMajorVersion !== undefined) {
     return cachedMacOSMajorVersion
@@ -27,9 +43,40 @@ function getMacOSMajorVersion(): number | null {
   }
 }
 
+async function hashFileSha256(filePath: string): Promise<string> {
+  const hash = createHash('sha256')
+  await pipeline(createReadStream(filePath), hash)
+  return hash.digest('hex')
+}
+
+async function downloadToFile(url: string, destPath: string): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+  } catch (error) {
+    const name = error instanceof Error ? error.name : ''
+    if (name === 'AbortError' || name === 'TimeoutError') {
+      throw new Error(`Timed out downloading Apple Container installer after ${DOWNLOAD_TIMEOUT_MS / 1000}s. Try again.`)
+    }
+    throw error
+  }
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to download Apple Container installer (HTTP ${response.status}).`)
+  }
+  // Node fetch body is a web ReadableStream; bridge to Node for pipeline.
+  const nodeStream = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
+  await pipeline(nodeStream, createWriteStream(destPath))
+}
+
+/** IO seam for unit tests (install path only). */
+export const appleContainerProvisionIO = {
+  downloadToFile,
+  hashFileSha256,
+}
+
 /**
  * Apple Container implementation of ContainerClient.
- * Uses the `container` CLI available on macOS 26+.
+ * Uses the `container` CLI available on macOS 26+ Apple silicon.
  */
 export class AppleContainerClient extends BaseContainerClient {
   static readonly runnerName = 'apple-container'
@@ -39,9 +86,10 @@ export class AppleContainerClient extends BaseContainerClient {
   }
 
   /**
-   * Apple Container is only eligible on macOS 26+.
+   * Eligible only on Apple silicon running macOS 26+.
    */
   static isEligible(): boolean {
+    if (process.arch !== 'arm64') return false
     const version = getMacOSMajorVersion()
     return version !== null && version >= 26
   }
@@ -186,4 +234,88 @@ export class AppleContainerClient extends BaseContainerClient {
       return false
     }
   }
+}
+
+async function installAppleContainerPkg(): Promise<void> {
+  const url =
+    `https://github.com/apple/container/releases/download/${APPLE_CONTAINER_VERSION}` +
+    `/container-${APPLE_CONTAINER_VERSION}-installer-signed.pkg`
+  const tmpDir = await mkdtemp(join(tmpdir(), 'superagent-apple-container-'))
+  const pkgPath = join(tmpDir, `container-${APPLE_CONTAINER_VERSION}-installer-signed.pkg`)
+
+  try {
+    console.log(`[AppleContainer] Downloading signed installer ${APPLE_CONTAINER_VERSION}...`)
+    await appleContainerProvisionIO.downloadToFile(url, pkgPath)
+
+    const actualSha = await appleContainerProvisionIO.hashFileSha256(pkgPath)
+    if (actualSha.toLowerCase() !== APPLE_CONTAINER_PKG_SHA256.toLowerCase()) {
+      throw new Error(
+        'Downloaded Apple Container installer failed integrity check. The file was discarded; try again.',
+      )
+    }
+
+    try {
+      await runWithAdminPrivileges(`installer -pkg ${shellEscape(pkgPath)} -target /`)
+    } catch (error) {
+      if (isAdminPrivilegeCancelError(error)) {
+        throw new Error(
+          'Administrator password prompt was cancelled. macOS Container was not installed.',
+        )
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to install Apple Container: ${message}`)
+    }
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+async function ensureAppleContainerReadyImpl(): Promise<void> {
+  if (!AppleContainerClient.isEligible()) {
+    throw new Error('macOS Container requires macOS 26 or later on Apple silicon.')
+  }
+
+  const installed = await AppleContainerClient.isAvailable()
+  if (!installed) {
+    await installAppleContainerPkg()
+  }
+
+  try {
+    await execWithPath('container system start --enable-kernel-install')
+  } catch (error: any) {
+    if (!error?.message?.includes('already running')) {
+      throw new Error(
+        `Failed to start Apple Container runtime: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
+  const running = await AppleContainerClient.isRunning()
+  if (!running) {
+    throw new Error('Apple Container runtime did not become ready after start.')
+  }
+}
+
+/**
+ * Ensure the Apple Container CLI is installed (first install only when missing)
+ * and the system is started. Called by startRunner('apple-container') on explicit
+ * Start/Install click. Serialized: concurrent calls share the same in-flight promise.
+ */
+export async function ensureAppleContainerReady(): Promise<void> {
+  if (appleReadyPromise) {
+    return appleReadyPromise
+  }
+  appleReadyPromise = ensureAppleContainerReadyImpl()
+  try {
+    await appleReadyPromise
+  } finally {
+    appleReadyPromise = null
+  }
+}
+
+export function resetAppleContainerClientForTests(): void {
+  cachedMacOSMajorVersion = undefined
+  appleReadyPromise = null
+  appleContainerProvisionIO.downloadToFile = downloadToFile
+  appleContainerProvisionIO.hashFileSha256 = hashFileSha256
 }

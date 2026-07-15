@@ -201,7 +201,9 @@ export function useStartRunner() {
 
       return data
     },
-    onSuccess: () => {
+    // Re-read settings after success or failure so availability badges match
+    // the server (start-runner refreshes availability on both paths).
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
     },
   })

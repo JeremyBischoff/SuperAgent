@@ -808,6 +808,21 @@ class ContainerManager {
     })
   }
 
+  /**
+   * Clear a CHECKING banner after a failed start/install and broadcast.
+   * Skips if an image pull is in progress (same guard as resetReadiness).
+   */
+  markRuntimeUnavailable(message: string): void {
+    if (this._readiness.status === 'PULLING_IMAGE') {
+      return
+    }
+    this.setReadiness({
+      status: 'RUNTIME_UNAVAILABLE',
+      message,
+      pullProgress: null,
+    })
+  }
+
   /** Update readiness state and broadcast change via SSE. */
   private setReadiness(readiness: RuntimeReadiness): void {
     this._readiness = readiness

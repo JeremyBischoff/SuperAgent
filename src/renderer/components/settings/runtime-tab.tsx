@@ -169,10 +169,10 @@ export function RuntimeTab() {
     return settings.runnerAvailability.every((r) => !r.available)
   }, [settings?.runnerAvailability])
 
-  // Check if any runner is installed but not running
+  // Check if any runner can be started or first-installed via startRunner
   const hasStartableRunner = useMemo(() => {
     if (!settings?.runnerAvailability) return false
-    return settings.runnerAvailability.some((r) => r.installed && !r.running && r.canStart)
+    return settings.runnerAvailability.some((r) => !r.running && r.canStart)
   }, [settings?.runnerAvailability])
 
   // Derive runner list from server-reported availability (only shows eligible runners)
@@ -374,7 +374,7 @@ export function RuntimeTab() {
             {hasStartableRunner && (
               <div className="flex gap-2 mt-2">
                 {settings?.runnerAvailability
-                  ?.filter((r) => r.installed && !r.running && r.canStart)
+                  ?.filter((r) => !r.running && r.canStart)
                   .map((r) => (
                     <Button
                       key={r.runner}
@@ -388,7 +388,8 @@ export function RuntimeTab() {
                       ) : (
                         <Play className="h-4 w-4 mr-2" />
                       )}
-                      Start {r.runner.charAt(0).toUpperCase() + r.runner.slice(1)}
+                      {r.installed ? 'Start' : 'Install'}{' '}
+                      {RUNNER_LABELS[r.runner] || r.runner.charAt(0).toUpperCase() + r.runner.slice(1)}
                     </Button>
                   ))}
               </div>
@@ -477,16 +478,19 @@ export function RuntimeTab() {
               })}
             </SelectContent>
           </Select>
-          {/* Show start button if selected runner is installed but not running */}
-          {runnerAvailabilityMap.get(containerRunner)?.installed &&
-            !runnerAvailabilityMap.get(containerRunner)?.running &&
+          {/* Show start/install when selected runner canStart (incl. apple first-install) */}
+          {!runnerAvailabilityMap.get(containerRunner)?.running &&
             runnerAvailabilityMap.get(containerRunner)?.canStart && (
             <Button
               variant="outline"
               size="icon"
               onClick={() => handleStartRunner(containerRunner)}
               disabled={startRunner.isPending}
-              title={`Start ${containerRunner}`}
+              title={
+                runnerAvailabilityMap.get(containerRunner)?.installed
+                  ? `Start ${containerRunner}`
+                  : `Install ${containerRunner}`
+              }
             >
               {startRunner.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

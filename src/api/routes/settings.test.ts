@@ -71,6 +71,8 @@ const mockGetRunningAgentIds = vi.fn()
 const mockClearClients = vi.fn()
 const mockEnsureImageReady = vi.fn()
 const mockGetReadiness = vi.fn()
+const mockResetReadiness = vi.fn()
+const mockMarkRuntimeUnavailable = vi.fn()
 
 vi.mock('@shared/lib/container/container-manager', () => ({
   containerManager: {
@@ -79,6 +81,8 @@ vi.mock('@shared/lib/container/container-manager', () => ({
     clearClients: (...args: unknown[]) => mockClearClients(...args),
     ensureImageReady: (...args: unknown[]) => mockEnsureImageReady(...args),
     getReadiness: (...args: unknown[]) => mockGetReadiness(...args),
+    resetReadiness: (...args: unknown[]) => mockResetReadiness(...args),
+    markRuntimeUnavailable: (...args: unknown[]) => mockMarkRuntimeUnavailable(...args),
     stopAll: vi.fn(),
   },
 }))
@@ -1866,6 +1870,46 @@ describe('settings route', () => {
         expect(body.webProvider).toBe('exa')
         expect(body.webProviderIsDefault).toBe(false)
       })
+    })
+  })
+
+  // =========================================================================
+  // POST /start-runner failure honesty
+  // =========================================================================
+  describe('POST /start-runner', () => {
+    it('on failure clears CHECKING and returns refreshed runnerAvailability', async () => {
+      const availability = [
+        {
+          runner: 'docker',
+          installed: true,
+          running: false,
+          available: false,
+          canStart: true,
+          supportsCustomAgentImage: true,
+        },
+      ]
+      mockStartRunner.mockResolvedValue({
+        success: false,
+        message: 'Failed to start Docker Desktop. Is it installed?',
+      })
+      mockRefreshRunnerAvailability.mockResolvedValue(availability)
+
+      const res = await app.request('http://localhost/api/settings/start-runner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runner: 'docker' }),
+      })
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.success).toBe(false)
+      expect(body.message).toMatch(/Docker/i)
+      expect(body.runnerAvailability).toEqual(availability)
+      expect(mockResetReadiness).toHaveBeenCalled()
+      expect(mockMarkRuntimeUnavailable).toHaveBeenCalledWith(
+        'Failed to start Docker Desktop. Is it installed?',
+      )
+      expect(mockRefreshRunnerAvailability).toHaveBeenCalled()
     })
   })
 })

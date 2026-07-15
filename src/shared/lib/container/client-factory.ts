@@ -2,7 +2,7 @@ import type { ContainerClient, ContainerConfig, ImagePullProgress } from './type
 import { captureException, addErrorBreadcrumb } from '@shared/lib/error-reporting'
 import { DockerContainerClient } from './docker-container-client'
 import { PodmanContainerClient } from './podman-container-client'
-import { AppleContainerClient } from './apple-container-client'
+import { AppleContainerClient, ensureAppleContainerReady } from './apple-container-client'
 import { LimaContainerClient, getNerdctlWrapperPath, ensureLimaReady, stopLimaVm } from './lima-container-client'
 import { WSL2ContainerClient, getWSL2NerdctlWrapperPath, ensureWSL2Ready, stopWSL2Distro, killWSL2PullProcesses } from './wsl2-container-client'
 import { PlatformK8sRuntimeClient } from './platform-k8s-runtime'
@@ -40,7 +40,10 @@ export interface RunnerAvailability {
   running: boolean
   /** Overall availability (installed AND running) */
   available: boolean
-  /** If installed but not running, can we attempt to start it? */
+  /**
+   * Whether the UI can offer Start/Install via startRunner.
+   * True when the runtime can be started, or (for apple-container) first-installed.
+   */
   canStart: boolean
   /** Whether settings.container.agentImage is honored by this runner. */
   supportsCustomAgentImage: boolean
@@ -176,17 +179,17 @@ export async function startRunner(runner: ContainerRunner): Promise<StartRunnerR
 
   if (runner === 'apple-container') {
     try {
-      await execWithPath('container system start')
-      return { success: true, message: 'Apple Container runtime is starting...' }
+      await ensureAppleContainerReady()
+      return { success: true, message: 'Apple Container runtime is running.' }
     } catch (error: any) {
-      if (error.message?.includes('already running')) {
-        return { success: true, message: 'Apple Container runtime is already running.' }
-      }
       captureException(error, {
         tags: { component: 'runtime', operation: 'start-apple-container' },
         extra: { platform: os },
       })
-      return { success: false, message: `Failed to start Apple Container runtime: ${error.message}` }
+      return {
+        success: false,
+        message: error?.message || 'Failed to start Apple Container runtime.',
+      }
     }
   }
 
@@ -318,12 +321,13 @@ async function checkRunnerDetailedAvailability(runner: ContainerRunner): Promise
   const installed = await entry.isAvailable()
 
   if (!installed) {
+    // apple-container only: Start/Install provisions (other runners keep installUrl fallthrough).
     return {
       runner,
       installed: false,
       running: false,
       available: false,
-      canStart: false,
+      canStart: runner === 'apple-container',
       supportsCustomAgentImage,
     }
   }

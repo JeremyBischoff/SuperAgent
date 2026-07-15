@@ -665,7 +665,11 @@ settings.post('/start-runner', async (c) => {
       })
     }
 
-    return c.json(result, 400)
+    // Failure: clear CHECKING and return fresh availability (install may have
+    // succeeded even when start failed — UI must not keep "Not installed").
+    const runnerAvailability = await refreshRunnerAvailability()
+    containerManager.markRuntimeUnavailable(result.message)
+    return c.json({ ...result, runnerAvailability }, 400)
   } catch (error) {
     console.error('Failed to start runner:', error)
     return c.json({ error: 'Failed to start runner' }, 500)
