@@ -208,8 +208,6 @@ export function useStartRunner() {
 
       return data
     },
-    // Re-read settings after success or failure so availability badges match
-    // the server (start-runner refreshes availability on both paths).
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
     },
@@ -223,8 +221,7 @@ export function useStartRunner() {
       readinessStatus === 'CHECKING' ||
       readinessStatus === 'PULLING_IMAGE')
 
-  // Each surface owns its own mutation instance — drop a stale cancel/fail once
-  // that runner is available (e.g. success happened in the setup dialog).
+  // Drop stale cancel/fail once that runner is available (other surface may have succeeded).
   const displayError =
     activeRunner &&
     settings?.runnerAvailability?.some((r) => r.runner === activeRunner && r.available)

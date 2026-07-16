@@ -657,7 +657,6 @@ settings.post('/start-runner', async (c) => {
     )
 
     if (result.success) {
-      // Make the started/installed runner the configured one (dropdown was snapping back).
       if (!containerManager.hasRunningAgents() && getSettings().container.containerRunner !== runner) {
         mutateSettings((s) => {
           s.container.containerRunner = runner
@@ -680,7 +679,7 @@ settings.post('/start-runner', async (c) => {
       })
     }
 
-    // Failure: clear CHECKING first so a hung availability probe cannot wedge the UI.
+    // Clear CHECKING before refresh so a hung probe cannot wedge the UI.
     containerManager.markRuntimeUnavailable(result.message)
     let runnerAvailability: Awaited<ReturnType<typeof refreshRunnerAvailability>> = []
     try {

@@ -10,24 +10,15 @@ import { BaseContainerClient, checkCommandAvailable, execWithPath, CONTAINER_INT
 import type { ContainerConfig, ContainerInfo, ContainerStats, ImagePullProgress } from './types'
 import { isAdminPrivilegeCancelError, runWithAdminPrivileges } from '@shared/lib/run-with-admin-privileges'
 
-/** Progress for install/start. Reuses ImagePullProgress so readiness UI can share the bar. */
 export type AppleContainerProvisionProgress = Pick<ImagePullProgress, 'status' | 'percent'>
 
-/** Pinned signed installer (bump deliberately; do not follow releases/latest). */
-const APPLE_CONTAINER_VERSION = '1.1.0'
-
-/** GitHub release asset digest for container-${VERSION}-installer-signed.pkg at pin time. */
+const APPLE_CONTAINER_VERSION = '1.1.0' // pin; do not follow releases/latest
 export const APPLE_CONTAINER_PKG_SHA256 =
   '0ca1c42a2269c2557efb1d82b1b38ac553e6a3a3da1b1179c439bcee1e7d6714'
-
 const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000
 
-/** Cached macOS major version (null = not macOS / failed, undefined = not yet checked) */
-let cachedMacOSMajorVersion: number | null | undefined = undefined
-
-/** Mutex: concurrent ensureAppleContainerReady callers share one in-flight promise. */
+let cachedMacOSMajorVersion: number | null | undefined = undefined // null failures not cached
 let appleReadyPromise: Promise<void> | null = null
-/** Whether the in-flight ensure allows first-install (for join rules). */
 let appleReadyAllowsInstall = false
 
 function getMacOSMajorVersion(): number | null {
@@ -41,7 +32,6 @@ function getMacOSMajorVersion(): number | null {
   try {
     const output = execSync('sw_vers -productVersion', { timeout: 5000 }).toString().trim()
     const major = parseInt(output.split('.')[0], 10)
-    // Don't cache probe failures — refresh can retry eligibility.
     if (!Number.isFinite(major)) return null
     cachedMacOSMajorVersion = major
     return major
@@ -77,7 +67,6 @@ async function downloadToFile(
   const contentLength = Number(response.headers.get('content-length'))
   const total = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null
   let downloaded = 0
-  // Node fetch body is a web ReadableStream; bridge to Node for pipeline.
   const nodeStream = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
   const progress = new Transform({
     transform(chunk, _encoding, callback) {
@@ -89,7 +78,6 @@ async function downloadToFile(
   await pipeline(nodeStream, progress, createWriteStream(destPath))
 }
 
-/** IO seam for unit tests (install path only). */
 export const appleContainerProvisionIO = {
   downloadToFile,
   hashFileSha256,
@@ -106,9 +94,7 @@ export class AppleContainerClient extends BaseContainerClient {
     super(config)
   }
 
-  /**
-   * Eligible only on Apple silicon running macOS 26+.
-   */
+  /** Apple silicon + macOS 26+. */
   static isEligible(): boolean {
     if (process.arch !== 'arm64') return false
     const version = getMacOSMajorVersion()
@@ -314,8 +300,7 @@ async function installAppleContainerPkg(
       )
     }
 
-    // Elevate: copy to root tmp, re-hash, then install (closes same-UID TOCTOU
-    // between the Node verify above and privileged installer open).
+    // Elevate: copy + re-hash under root before installer (closes same-UID TOCTOU).
     reportProgress(onProgress, 'Installing - enter your password if prompted...', null)
     const elevateScript = [
       'set -e',
@@ -378,17 +363,12 @@ async function ensureAppleContainerReadyImpl(
   }
 }
 
-/**
- * Ensure the Apple Container CLI is installed (only when allowInstall) and the
- * system is started. Install requires an explicit Start/Install click path.
- * Serialized: concurrent callers share one in-flight promise when compatible.
- */
+/** Install (if allowInstall) + start. Serialized; install-capable calls don't join non-install. */
 export async function ensureAppleContainerReady(
   onProgress?: (progress: AppleContainerProvisionProgress) => void,
   options?: { allowInstall?: boolean },
 ): Promise<void> {
   const allowInstall = options?.allowInstall === true
-  // Join in-flight only if it already allows install, or we don't need install.
   if (appleReadyPromise && (appleReadyAllowsInstall || !allowInstall)) {
     return appleReadyPromise
   }
@@ -396,7 +376,7 @@ export async function ensureAppleContainerReady(
     try {
       await appleReadyPromise
     } catch {
-      // Prior non-install attempt failed; fall through to start our own.
+      // Prior non-install failed; start our own.
     }
   }
   appleReadyAllowsInstall = allowInstall

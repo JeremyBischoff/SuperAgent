@@ -104,7 +104,6 @@ export let SUPPORTED_RUNNERS: ContainerRunner[] = ALL_RUNNERS
   .map((r) => r.name)
 
 function recomputeSupportedRunners(): void {
-  // Probe failures are not cached; re-filter so Apple can appear after a transient sw_vers miss.
   SUPPORTED_RUNNERS = ALL_RUNNERS.filter((r) => r.isEligible()).map((r) => r.name)
 }
 

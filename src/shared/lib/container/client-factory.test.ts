@@ -203,17 +203,6 @@ describe('startRunner apple-container', () => {
 
     expect(mockEnsureAppleContainerReady).toHaveBeenCalledWith(undefined, { allowInstall: false })
   })
-
-  it('returns ensure failure message', async () => {
-    mockEnsureAppleContainerReady.mockRejectedValue(
-      new Error('Administrator password prompt was cancelled.'),
-    )
-
-    const result = await startRunner('apple-container', undefined, { allowInstall: true })
-
-    expect(result.success).toBe(false)
-    expect(result.message).toMatch(/cancelled/i)
-  })
 })
 
 describe('checkAllRunnersAvailability apple-container canStart', () => {

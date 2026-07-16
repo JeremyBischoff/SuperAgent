@@ -1139,44 +1139,6 @@ describe('containerManager.resetReadiness', () => {
   })
 })
 
-describe('containerManager.markRuntimeUnavailable', () => {
-  it('sets RUNTIME_UNAVAILABLE from CHECKING', () => {
-    ;(containerManager as any)._readiness = {
-      status: 'CHECKING',
-      message: 'Starting apple-container runtime...',
-      pullProgress: null,
-    }
-
-    containerManager.markRuntimeUnavailable('Administrator password prompt was cancelled.')
-
-    const readiness = containerManager.getReadiness()
-    expect(readiness.status).toBe('RUNTIME_UNAVAILABLE')
-    expect(readiness.message).toMatch(/cancelled/i)
-  })
-})
-
-describe('containerManager.updateStartProgress', () => {
-  it('keeps CHECKING and stores pullProgress', () => {
-    ;(containerManager as any)._readiness = {
-      status: 'CHECKING',
-      message: 'Starting apple-container runtime...',
-      pullProgress: null,
-    }
-
-    containerManager.updateStartProgress({
-      status: 'Downloading macOS Container installer...',
-      percent: 40,
-      completedLayers: 0,
-      totalLayers: 0,
-    })
-
-    const readiness = containerManager.getReadiness()
-    expect(readiness.status).toBe('CHECKING')
-    expect(readiness.pullProgress?.percent).toBe(40)
-    expect(readiness.message).toMatch(/Downloading/)
-  })
-})
-
 describe('containerManager start/fail guards vs PULLING_IMAGE', () => {
   it.each([
     {

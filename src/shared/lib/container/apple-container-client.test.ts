@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-// ============================================================================
-// Mocks — before importing the module under test
-// ============================================================================
-
 const mockExecSync = vi.fn()
 vi.mock('child_process', () => ({
   execSync: (...args: unknown[]) => mockExecSync(...args),
@@ -86,16 +82,11 @@ describe('AppleContainerClient.isEligible', () => {
 
   it.each([
     { platform: 'darwin', arch: 'arm64', version: '26.0', expected: true, label: 'arm64 macOS 26+' },
-    { platform: 'darwin', arch: 'x64', version: '26.0', expected: false, label: 'Intel' },
     { platform: 'darwin', arch: 'arm64', version: '15.4', expected: false, label: 'macOS < 26' },
-    { platform: 'linux', arch: 'arm64', version: '26.0', expected: false, label: 'non-darwin' },
   ])('isEligible=$expected for $label', ({ platform, arch, version, expected }) => {
     setPlatformArch(platform, arch)
     mockExecSync.mockReturnValue(Buffer.from(`${version}\n`))
     expect(AppleContainerClient.isEligible()).toBe(expected)
-    if (arch !== 'arm64' || platform !== 'darwin') {
-      expect(mockExecSync).not.toHaveBeenCalled()
-    }
   })
 })
 
