@@ -91,22 +91,11 @@ export function DockerSetupStep({ onCanProceedChange }: DockerSetupStepProps) {
 
   // Report to parent whether the selected runtime is available and not mid-provision
   const selectedRuntime = runtimeStatuses.find((r) => r.runner === effectiveSelected)
-  const readinessStatus = runtimeStatus?.runtimeReadiness?.status
+  const provisioningSelected =
+    !!selectedRuntime && startRunner.isProvisioning(selectedRuntime.runner)
   useEffect(() => {
-    const provisioningSelected =
-      startRunner.variables === selectedRuntime?.runner &&
-      (startRunner.isPending ||
-        readinessStatus === 'PULLING_IMAGE' ||
-        readinessStatus === 'CHECKING')
     onCanProceedChange?.(Boolean(selectedRuntime?.available) && !provisioningSelected)
-  }, [
-    selectedRuntime?.available,
-    selectedRuntime?.runner,
-    readinessStatus,
-    startRunner.variables,
-    startRunner.isPending,
-    onCanProceedChange,
-  ])
+  }, [selectedRuntime?.available, provisioningSelected, onCanProceedChange])
 
   const handleStartRunner = async (runner: string) => {
     startRunner.reset()
@@ -238,10 +227,7 @@ export function DockerSetupStep({ onCanProceedChange }: DockerSetupStepProps) {
                           )}
                           {runtime.installed ? `Start ${runtime.info.name}` : `Install ${runtime.info.name}`}
                         </Button>
-                        {startRunner.variables === runtime.runner &&
-                          (startRunner.isPending ||
-                            runtimeStatus?.runtimeReadiness?.status === 'CHECKING' ||
-                            runtimeStatus?.runtimeReadiness?.status === 'PULLING_IMAGE') && (
+                        {startRunner.isProvisioning(runtime.runner) && (
                           <RuntimeProvisionProgress
                             progress={runtimeStatus?.runtimeReadiness?.pullProgress}
                           />
@@ -294,13 +280,13 @@ export function DockerSetupStep({ onCanProceedChange }: DockerSetupStepProps) {
         </div>
       )}
 
-      {startRunner.error && getRunnerSetupPayload(startRunner.error) ? (
-        <RunnerSetupErrorPanel error={startRunner.error} />
+      {startRunner.displayError && getRunnerSetupPayload(startRunner.displayError) ? (
+        <RunnerSetupErrorPanel error={startRunner.displayError} />
       ) : (
-        <RequestError message={startRunner.error?.message ?? null} />
+        <RequestError message={startRunner.displayError?.message ?? null} />
       )}
 
-      {startRunner.isSuccess && startRunner.data?.message && (
+      {startRunner.isSuccess && startRunner.data?.message && !startRunner.displayError && (
         <p className="text-sm text-green-600 dark:text-green-400">
           {startRunner.data.message}
         </p>

@@ -2,7 +2,7 @@ import type { ContainerClient, ContainerConfig, ImagePullProgress } from './type
 import { captureException, addErrorBreadcrumb } from '@shared/lib/error-reporting'
 import { DockerContainerClient } from './docker-container-client'
 import { PodmanContainerClient } from './podman-container-client'
-import { AppleContainerClient, clearMacOSVersionCache, ensureAppleContainerReady } from './apple-container-client'
+import { AppleContainerClient, ensureAppleContainerReady } from './apple-container-client'
 import { LimaContainerClient, getNerdctlWrapperPath, ensureLimaReady, stopLimaVm } from './lima-container-client'
 import { WSL2ContainerClient, getWSL2NerdctlWrapperPath, ensureWSL2Ready, stopWSL2Distro, killWSL2PullProcesses } from './wsl2-container-client'
 import { PlatformK8sRuntimeClient } from './platform-k8s-runtime'
@@ -104,7 +104,7 @@ export let SUPPORTED_RUNNERS: ContainerRunner[] = ALL_RUNNERS
   .map((r) => r.name)
 
 function recomputeSupportedRunners(): void {
-  clearMacOSVersionCache()
+  // Probe failures are not cached; re-filter so Apple can appear after a transient sw_vers miss.
   SUPPORTED_RUNNERS = ALL_RUNNERS.filter((r) => r.isEligible()).map((r) => r.name)
 }
 

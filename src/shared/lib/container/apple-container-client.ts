@@ -50,11 +50,6 @@ function getMacOSMajorVersion(): number | null {
   }
 }
 
-/** Clear macOS version cache so eligibility can be re-probed (e.g. after a failed sw_vers). */
-export function clearMacOSVersionCache(): void {
-  cachedMacOSMajorVersion = undefined
-}
-
 async function hashFileSha256(filePath: string): Promise<string> {
   const hash = createHash('sha256')
   await pipeline(createReadStream(filePath), hash)

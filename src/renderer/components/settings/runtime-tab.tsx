@@ -374,13 +374,6 @@ export function RuntimeTab() {
   const runtimeSaveBlocked = hasRunningAgents
   const isRestarting = restartRunner.isPending || updateSettings.isPending
 
-  // Each surface owns a useStartRunner instance — a cancel here can linger after a
-  // later success in the setup dialog. Drop the error once that runner is available.
-  const startFailedRunner = startRunner.variables
-  const startErrorStale =
-    !!startFailedRunner && !!runnerAvailabilityMap.get(startFailedRunner)?.available
-  const startError = startErrorStale ? null : startRunner.error
-
   return (
     <div className="space-y-6">
       {/* No runners available warning */}
@@ -548,16 +541,16 @@ export function RuntimeTab() {
               Restarting {RUNNER_LABELS[containerRunner] || containerRunner}...
             </span>
           )}
-          {startError && getRunnerSetupPayload(startError) ? (
+          {startRunner.displayError && getRunnerSetupPayload(startRunner.displayError) ? (
             <div className="mt-2">
-              <RunnerSetupErrorPanel error={startError} />
+              <RunnerSetupErrorPanel error={startRunner.displayError} />
             </div>
-          ) : startError ? (
+          ) : startRunner.displayError ? (
             <span className="text-destructive block mt-1">
-              {startError.message}
+              {startRunner.displayError.message}
             </span>
           ) : null}
-          {startRunner.isSuccess && startRunner.data?.message && !startError && (
+          {startRunner.isSuccess && startRunner.data?.message && !startRunner.displayError && (
             <span className="text-green-600 dark:text-green-400 block mt-1">
               {startRunner.data.message}
             </span>

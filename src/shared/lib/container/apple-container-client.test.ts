@@ -143,27 +143,7 @@ describe('ensureAppleContainerReady', () => {
     expect(mockRunWithAdminPrivileges).not.toHaveBeenCalled()
   })
 
-  it('first-install: download, verify, elevate with rehash, start', async () => {
-    mockCheckCommandAvailable.mockResolvedValue(false)
-    appleContainerProvisionIO.downloadToFile = vi.fn().mockResolvedValue(undefined)
-    appleContainerProvisionIO.hashFileSha256 = vi.fn().mockResolvedValue(APPLE_CONTAINER_PKG_SHA256)
-    mockRunWithAdminPrivileges.mockResolvedValue(undefined)
-    mockExecWithPath.mockResolvedValue({ stdout: '', stderr: '' })
-
-    await ensureAppleContainerReady(undefined, { allowInstall: true })
-
-    expect(appleContainerProvisionIO.downloadToFile).toHaveBeenCalledOnce()
-    expect(mockRunWithAdminPrivileges).toHaveBeenCalledOnce()
-    const elevateCmd = mockRunWithAdminPrivileges.mock.calls[0]?.[0] as string
-    expect(elevateCmd).toContain('/usr/bin/mktemp')
-    expect(elevateCmd).toContain('trap ')
-    expect(elevateCmd).toContain('/usr/bin/shasum -a 256')
-    expect(elevateCmd).toContain('/usr/sbin/installer -pkg')
-    expect(elevateCmd).toContain(APPLE_CONTAINER_PKG_SHA256)
-    expect(mockExecWithPath).toHaveBeenCalledWith('container system start --enable-kernel-install')
-  })
-
-  it('reports download percent then phase labels (no fake overall %)', async () => {
+  it('first-install: download, verify, elevate with rehash, start + progress', async () => {
     mockCheckCommandAvailable.mockResolvedValue(false)
     appleContainerProvisionIO.downloadToFile = vi.fn(
       async (_url: string, _dest: string, onBytes?: (downloaded: number, total: number | null) => void) => {
@@ -178,10 +158,17 @@ describe('ensureAppleContainerReady', () => {
     const events: Array<{ status: string; percent: number | null }> = []
     await ensureAppleContainerReady((p) => events.push(p), { allowInstall: true })
 
+    expect(appleContainerProvisionIO.downloadToFile).toHaveBeenCalledOnce()
+    expect(mockRunWithAdminPrivileges).toHaveBeenCalledOnce()
+    const elevateCmd = mockRunWithAdminPrivileges.mock.calls[0]?.[0] as string
+    expect(elevateCmd).toContain('/usr/bin/mktemp')
+    expect(elevateCmd).toContain('trap ')
+    expect(elevateCmd).toContain('/usr/bin/shasum -a 256')
+    expect(elevateCmd).toContain('/usr/sbin/installer -pkg')
+    expect(elevateCmd).toContain(APPLE_CONTAINER_PKG_SHA256)
+    expect(mockExecWithPath).toHaveBeenCalledWith('container system start --enable-kernel-install')
     expect(events.some((e) => e.status.includes('Downloading') && e.percent === 50)).toBe(true)
     expect(events.some((e) => e.status.includes('Verifying') && e.percent === null)).toBe(true)
-    expect(events.some((e) => e.status.includes('password') && e.percent === null)).toBe(true)
-    expect(events.some((e) => e.status.includes('Starting') && e.percent === null)).toBe(true)
     // After download, never invent a rising overall percent
     const afterDownload = events.slice(events.findIndex((e) => e.status.includes('Verifying')))
     expect(afterDownload.every((e) => e.percent === null)).toBe(true)

@@ -84,18 +84,6 @@ export function ContainerSetupDialog({ open, onOpenChange }: ContainerSetupDialo
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const activeRunner = startRunner.variables
-  const readinessStatus = settings?.runtimeReadiness?.status
-  const isProvisioningRunner = (runner: string) =>
-    activeRunner === runner &&
-    (startRunner.isPending ||
-      readinessStatus === 'CHECKING' ||
-      readinessStatus === 'PULLING_IMAGE')
-  const startErrorStale =
-    !!activeRunner &&
-    !!settings?.runnerAvailability?.find((r) => r.runner === activeRunner)?.available
-  const startError = startErrorStale ? null : startRunner.error
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -173,7 +161,7 @@ export function ContainerSetupDialog({ open, onOpenChange }: ContainerSetupDialo
                       {runtime.info.description}
                     </p>
                     <div className="mt-2">
-                      {runtime.available && !isProvisioningRunner(runtime.runner) ? (
+                      {runtime.available && !startRunner.isProvisioning(runtime.runner) ? (
                         <Button
                           size="sm"
                           variant="outline"
@@ -183,7 +171,7 @@ export function ContainerSetupDialog({ open, onOpenChange }: ContainerSetupDialo
                           <Check className="h-3 w-3 mr-1" />
                           Ready to use
                         </Button>
-                      ) : runtime.canStart || isProvisioningRunner(runtime.runner) ? (
+                      ) : runtime.canStart || startRunner.isProvisioning(runtime.runner) ? (
                         <div className="space-y-2">
                           {runtime.canStart && (
                             <Button
@@ -193,7 +181,7 @@ export function ContainerSetupDialog({ open, onOpenChange }: ContainerSetupDialo
                               onClick={() => handleStartRunner(runtime.runner)}
                               disabled={startRunner.isPending}
                             >
-                              {startRunner.isPending && activeRunner === runtime.runner ? (
+                              {startRunner.isPending && startRunner.variables === runtime.runner ? (
                                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                               ) : runtime.installed ? (
                                 <Play className="h-3 w-3 mr-1" />
@@ -203,7 +191,7 @@ export function ContainerSetupDialog({ open, onOpenChange }: ContainerSetupDialo
                               {runtime.installed ? `Start ${runtime.info.name}` : `Install ${runtime.info.name}`}
                             </Button>
                           )}
-                          {isProvisioningRunner(runtime.runner) && (
+                          {startRunner.isProvisioning(runtime.runner) && (
                             <RuntimeProvisionProgress
                               progress={settings?.runtimeReadiness?.pullProgress}
                             />
@@ -227,15 +215,15 @@ export function ContainerSetupDialog({ open, onOpenChange }: ContainerSetupDialo
             </div>
           </div>
 
-          {startError && getRunnerSetupPayload(startError) ? (
-            <RunnerSetupErrorPanel error={startError} />
-          ) : startError ? (
+          {startRunner.displayError && getRunnerSetupPayload(startRunner.displayError) ? (
+            <RunnerSetupErrorPanel error={startRunner.displayError} />
+          ) : startRunner.displayError ? (
             <p className="text-sm text-destructive">
-              {startError.message}
+              {startRunner.displayError.message}
             </p>
           ) : null}
 
-          {startRunner.isSuccess && startRunner.data?.message && !startError && (
+          {startRunner.isSuccess && startRunner.data?.message && !startRunner.displayError && (
             <p className="text-sm text-green-600 dark:text-green-400">
               {startRunner.data.message}
             </p>

@@ -1153,18 +1153,6 @@ describe('containerManager.markRuntimeUnavailable', () => {
     expect(readiness.status).toBe('RUNTIME_UNAVAILABLE')
     expect(readiness.message).toMatch(/cancelled/i)
   })
-
-  it('does NOT override PULLING_IMAGE', () => {
-    ;(containerManager as any)._readiness = {
-      status: 'PULLING_IMAGE',
-      message: 'Pulling...',
-      pullProgress: { status: 'layer', percent: 10 },
-    }
-
-    containerManager.markRuntimeUnavailable('should be ignored')
-
-    expect(containerManager.getReadiness().status).toBe('PULLING_IMAGE')
-  })
 })
 
 describe('containerManager.updateStartProgress', () => {
@@ -1187,22 +1175,34 @@ describe('containerManager.updateStartProgress', () => {
     expect(readiness.pullProgress?.percent).toBe(40)
     expect(readiness.message).toMatch(/Downloading/)
   })
+})
 
-  it('does NOT override PULLING_IMAGE', () => {
+describe('containerManager start/fail guards vs PULLING_IMAGE', () => {
+  it.each([
+    {
+      label: 'markRuntimeUnavailable',
+      act: () => containerManager.markRuntimeUnavailable('should be ignored'),
+      assert: () => expect(containerManager.getReadiness().status).toBe('PULLING_IMAGE'),
+    },
+    {
+      label: 'updateStartProgress',
+      act: () =>
+        containerManager.updateStartProgress({
+          status: 'Downloading...',
+          percent: 50,
+          completedLayers: 0,
+          totalLayers: 0,
+        }),
+      assert: () => expect(containerManager.getReadiness().pullProgress?.percent).toBe(10),
+    },
+  ])('$label does NOT override PULLING_IMAGE', ({ act, assert }) => {
     ;(containerManager as any)._readiness = {
       status: 'PULLING_IMAGE',
       message: 'Pulling...',
       pullProgress: { status: 'layer', percent: 10, completedLayers: 1, totalLayers: 3 },
     }
-
-    containerManager.updateStartProgress({
-      status: 'Downloading...',
-      percent: 50,
-      completedLayers: 0,
-      totalLayers: 0,
-    })
-
-    expect(containerManager.getReadiness().pullProgress?.percent).toBe(10)
+    act()
+    assert()
   })
 })
 

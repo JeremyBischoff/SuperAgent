@@ -180,8 +180,9 @@ export function useRefreshAvailability() {
 
 export function useStartRunner() {
   const queryClient = useQueryClient()
+  const { data: settings } = useSettings()
 
-  return useMutation<StartRunnerResponse, Error, string>({
+  const mutation = useMutation<StartRunnerResponse, Error, string>({
     meta: { skipGlobalErrorToast: true },
     mutationFn: async (runner) => {
       const res = await apiFetch('/api/settings/start-runner', {
@@ -213,6 +214,24 @@ export function useStartRunner() {
       queryClient.invalidateQueries({ queryKey: ['settings'] })
     },
   })
+
+  const activeRunner = mutation.variables
+  const readinessStatus = settings?.runtimeReadiness?.status
+  const isProvisioning = (runner: string) =>
+    activeRunner === runner &&
+    (mutation.isPending ||
+      readinessStatus === 'CHECKING' ||
+      readinessStatus === 'PULLING_IMAGE')
+
+  // Each surface owns its own mutation instance — drop a stale cancel/fail once
+  // that runner is available (e.g. success happened in the setup dialog).
+  const displayError =
+    activeRunner &&
+    settings?.runnerAvailability?.some((r) => r.runner === activeRunner && r.available)
+      ? null
+      : mutation.error
+
+  return { ...mutation, isProvisioning, displayError }
 }
 
 export function useRestartRunner() {
