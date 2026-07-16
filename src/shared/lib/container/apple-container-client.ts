@@ -4,11 +4,14 @@ import { createReadStream, createWriteStream } from 'fs'
 import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { Readable } from 'stream'
+import { Readable, Transform } from 'stream'
 import { pipeline } from 'stream/promises'
 import { BaseContainerClient, checkCommandAvailable, execWithPath, CONTAINER_INTERNAL_PORT, shellEscape } from './base-container-client'
-import type { ContainerConfig, ContainerInfo, ContainerStats } from './types'
+import type { ContainerConfig, ContainerInfo, ContainerStats, ImagePullProgress } from './types'
 import { isAdminPrivilegeCancelError, runWithAdminPrivileges } from '@shared/lib/run-with-admin-privileges'
+
+/** Progress for install/start. Reuses ImagePullProgress so readiness UI can share the bar. */
+export type AppleContainerProvisionProgress = Pick<ImagePullProgress, 'status' | 'percent'>
 
 /** Pinned signed installer (bump deliberately; do not follow releases/latest). */
 const APPLE_CONTAINER_VERSION = '1.1.0'
@@ -24,6 +27,8 @@ let cachedMacOSMajorVersion: number | null | undefined = undefined
 
 /** Mutex: concurrent ensureAppleContainerReady callers share one in-flight promise. */
 let appleReadyPromise: Promise<void> | null = null
+/** Whether the in-flight ensure allows first-install (for join rules). */
+let appleReadyAllowsInstall = false
 
 function getMacOSMajorVersion(): number | null {
   if (cachedMacOSMajorVersion !== undefined) {
@@ -35,12 +40,19 @@ function getMacOSMajorVersion(): number | null {
   }
   try {
     const output = execSync('sw_vers -productVersion', { timeout: 5000 }).toString().trim()
-    cachedMacOSMajorVersion = parseInt(output.split('.')[0], 10)
-    return cachedMacOSMajorVersion
+    const major = parseInt(output.split('.')[0], 10)
+    // Don't cache probe failures — refresh can retry eligibility.
+    if (!Number.isFinite(major)) return null
+    cachedMacOSMajorVersion = major
+    return major
   } catch {
-    cachedMacOSMajorVersion = null
     return null
   }
+}
+
+/** Clear macOS version cache so eligibility can be re-probed (e.g. after a failed sw_vers). */
+export function clearMacOSVersionCache(): void {
+  cachedMacOSMajorVersion = undefined
 }
 
 async function hashFileSha256(filePath: string): Promise<string> {
@@ -49,7 +61,11 @@ async function hashFileSha256(filePath: string): Promise<string> {
   return hash.digest('hex')
 }
 
-async function downloadToFile(url: string, destPath: string): Promise<void> {
+async function downloadToFile(
+  url: string,
+  destPath: string,
+  onBytes?: (downloaded: number, total: number | null) => void,
+): Promise<void> {
   let response: Response
   try {
     response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
@@ -63,9 +79,19 @@ async function downloadToFile(url: string, destPath: string): Promise<void> {
   if (!response.ok || !response.body) {
     throw new Error(`Failed to download Apple Container installer (HTTP ${response.status}).`)
   }
+  const contentLength = Number(response.headers.get('content-length'))
+  const total = Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null
+  let downloaded = 0
   // Node fetch body is a web ReadableStream; bridge to Node for pipeline.
   const nodeStream = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
-  await pipeline(nodeStream, createWriteStream(destPath))
+  const progress = new Transform({
+    transform(chunk, _encoding, callback) {
+      downloaded += chunk.length
+      onBytes?.(downloaded, total)
+      callback(null, chunk)
+    },
+  })
+  await pipeline(nodeStream, progress, createWriteStream(destPath))
 }
 
 /** IO seam for unit tests (install path only). */
@@ -125,8 +151,11 @@ export class AppleContainerClient extends BaseContainerClient {
       // Handle both possible formats: single object or array of objects
       const info = Array.isArray(data) ? data[0] : data
 
-      // Extract running state (Apple uses top-level "status" field)
-      const isRunning = info?.status === 'running'
+      // Apple Container 1.x: status is `{ state: 'running', ... }`.
+      // Older shape used a string; accept both.
+      const state =
+        typeof info?.status === 'string' ? info.status : info?.status?.state
+      const isRunning = state === 'running'
 
       // Extract port mappings (Apple uses configuration.publishedPorts)
       let port: number | null = null
@@ -183,9 +212,9 @@ export class AppleContainerClient extends BaseContainerClient {
   }
 
   /**
-   * Apple Container uses `container image list --format json` + `container image remove`.
+   * Apple Container uses `container image list --format json` + `container image delete`.
+   * Prefer `displayReference` (Apple 1.x); fall back to repository:tag.
    */
-  // TODO test this
   static async removeOldImages(cliCommand: string, registry: string, currentTag: string): Promise<void> {
     try {
       const { stdout } = await execWithPath(`${cliCommand} image list --format json`)
@@ -194,18 +223,23 @@ export class AppleContainerClient extends BaseContainerClient {
 
       const currentImage = `${registry}:${currentTag}`
       const imagesToRemove = images
-        .filter((img: any) => {
-          const ref = `${img.repository}:${img.tag}`
-          return ref !== currentImage && ref.startsWith(registry + ':')
-        })
-        .map((img: any) => `${img.repository}:${img.tag}`)
+        .map((img: any) =>
+          typeof img.displayReference === 'string'
+            ? img.displayReference
+            : img.repository && img.tag
+              ? `${img.repository}:${img.tag}`
+              : null,
+        )
+        .filter((ref: string | null): ref is string =>
+          !!ref && ref !== currentImage && ref.startsWith(registry + ':'),
+        )
 
       if (imagesToRemove.length === 0) return
 
       console.log(`[ContainerManager] Removing ${imagesToRemove.length} old image(s):`, imagesToRemove)
       for (const img of imagesToRemove) {
         try {
-          await execWithPath(`${cliCommand} image remove ${img}`)
+          await execWithPath(`${cliCommand} image delete ${shellEscape(img)}`)
           console.log(`[ContainerManager] Removed ${img}`)
         } catch {
           console.warn(`[ContainerManager] Could not remove ${img} (may be in use)`)
@@ -214,6 +248,11 @@ export class AppleContainerClient extends BaseContainerClient {
     } catch (error) {
       console.warn('[ContainerManager] Failed to remove old images:', error)
     }
+  }
+
+  /** Apple has no `rmi`; corrupt-image recovery uses `image delete`. */
+  protected async removeCorruptImage(image: string): Promise<void> {
+    await execWithPath(`${this.getRunnerShellCommand()} image delete ${shellEscape(image)}`)
   }
 
   /**
@@ -236,7 +275,17 @@ export class AppleContainerClient extends BaseContainerClient {
   }
 }
 
-async function installAppleContainerPkg(): Promise<void> {
+function reportProgress(
+  onProgress: ((progress: AppleContainerProvisionProgress) => void) | undefined,
+  status: string,
+  percent: number | null,
+): void {
+  onProgress?.({ status, percent })
+}
+
+async function installAppleContainerPkg(
+  onProgress?: (progress: AppleContainerProvisionProgress) => void,
+): Promise<void> {
   const url =
     `https://github.com/apple/container/releases/download/${APPLE_CONTAINER_VERSION}` +
     `/container-${APPLE_CONTAINER_VERSION}-installer-signed.pkg`
@@ -245,8 +294,24 @@ async function installAppleContainerPkg(): Promise<void> {
 
   try {
     console.log(`[AppleContainer] Downloading signed installer ${APPLE_CONTAINER_VERSION}...`)
-    await appleContainerProvisionIO.downloadToFile(url, pkgPath)
+    reportProgress(onProgress, 'Downloading macOS Container installer...', 0)
+    let lastPercent = -1
+    let reportedIndeterminate = false
+    await appleContainerProvisionIO.downloadToFile(url, pkgPath, (downloaded, total) => {
+      if (total == null) {
+        if (!reportedIndeterminate) {
+          reportedIndeterminate = true
+          reportProgress(onProgress, 'Downloading macOS Container installer...', null)
+        }
+        return
+      }
+      const percent = Math.min(100, Math.floor((downloaded / total) * 100))
+      if (percent === lastPercent) return
+      lastPercent = percent
+      reportProgress(onProgress, 'Downloading macOS Container installer...', percent)
+    })
 
+    reportProgress(onProgress, 'Verifying installer...', null)
     const actualSha = await appleContainerProvisionIO.hashFileSha256(pkgPath)
     if (actualSha.toLowerCase() !== APPLE_CONTAINER_PKG_SHA256.toLowerCase()) {
       throw new Error(
@@ -254,8 +319,23 @@ async function installAppleContainerPkg(): Promise<void> {
       )
     }
 
+    // Elevate: copy to root tmp, re-hash, then install (closes same-UID TOCTOU
+    // between the Node verify above and privileged installer open).
+    reportProgress(onProgress, 'Installing - enter your password if prompted...', null)
+    const elevateScript = [
+      'set -e',
+      `SRC=${shellEscape(pkgPath)}`,
+      `EXPECTED=${shellEscape(APPLE_CONTAINER_PKG_SHA256)}`,
+      'TMP=$(/usr/bin/mktemp /tmp/superagent-container-XXXXXX.pkg)',
+      'trap \'/bin/rm -f "$TMP"\' EXIT',
+      '/bin/cp "$SRC" "$TMP"',
+      '/bin/chmod 400 "$TMP"',
+      'ACTUAL=$(/usr/bin/shasum -a 256 "$TMP" | /usr/bin/awk \'{print $1}\')',
+      '[ "$ACTUAL" = "$EXPECTED" ]',
+      '/usr/sbin/installer -pkg "$TMP" -target /',
+    ].join('\n')
     try {
-      await runWithAdminPrivileges(`installer -pkg ${shellEscape(pkgPath)} -target /`)
+      await runWithAdminPrivileges(elevateScript)
     } catch (error) {
       if (isAdminPrivilegeCancelError(error)) {
         throw new Error(
@@ -270,16 +350,23 @@ async function installAppleContainerPkg(): Promise<void> {
   }
 }
 
-async function ensureAppleContainerReadyImpl(): Promise<void> {
+async function ensureAppleContainerReadyImpl(
+  onProgress: ((progress: AppleContainerProvisionProgress) => void) | undefined,
+  allowInstall: boolean,
+): Promise<void> {
   if (!AppleContainerClient.isEligible()) {
     throw new Error('macOS Container requires macOS 26 or later on Apple silicon.')
   }
 
   const installed = await AppleContainerClient.isAvailable()
   if (!installed) {
-    await installAppleContainerPkg()
+    if (!allowInstall) {
+      throw new Error('macOS Container is not installed. Click Install to set it up.')
+    }
+    await installAppleContainerPkg(onProgress)
   }
 
+  reportProgress(onProgress, 'Starting macOS Container...', null)
   try {
     await execWithPath('container system start --enable-kernel-install')
   } catch (error: any) {
@@ -297,25 +384,40 @@ async function ensureAppleContainerReadyImpl(): Promise<void> {
 }
 
 /**
- * Ensure the Apple Container CLI is installed (first install only when missing)
- * and the system is started. Called by startRunner('apple-container') on explicit
- * Start/Install click. Serialized: concurrent calls share the same in-flight promise.
+ * Ensure the Apple Container CLI is installed (only when allowInstall) and the
+ * system is started. Install requires an explicit Start/Install click path.
+ * Serialized: concurrent callers share one in-flight promise when compatible.
  */
-export async function ensureAppleContainerReady(): Promise<void> {
-  if (appleReadyPromise) {
+export async function ensureAppleContainerReady(
+  onProgress?: (progress: AppleContainerProvisionProgress) => void,
+  options?: { allowInstall?: boolean },
+): Promise<void> {
+  const allowInstall = options?.allowInstall === true
+  // Join in-flight only if it already allows install, or we don't need install.
+  if (appleReadyPromise && (appleReadyAllowsInstall || !allowInstall)) {
     return appleReadyPromise
   }
-  appleReadyPromise = ensureAppleContainerReadyImpl()
+  if (appleReadyPromise) {
+    try {
+      await appleReadyPromise
+    } catch {
+      // Prior non-install attempt failed; fall through to start our own.
+    }
+  }
+  appleReadyAllowsInstall = allowInstall
+  appleReadyPromise = ensureAppleContainerReadyImpl(onProgress, allowInstall)
   try {
     await appleReadyPromise
   } finally {
     appleReadyPromise = null
+    appleReadyAllowsInstall = false
   }
 }
 
 export function resetAppleContainerClientForTests(): void {
   cachedMacOSMajorVersion = undefined
   appleReadyPromise = null
+  appleReadyAllowsInstall = false
   appleContainerProvisionIO.downloadToFile = downloadToFile
   appleContainerProvisionIO.hashFileSha256 = hashFileSha256
 }

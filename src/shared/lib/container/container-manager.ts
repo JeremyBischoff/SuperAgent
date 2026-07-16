@@ -823,6 +823,30 @@ class ContainerManager {
     })
   }
 
+  /**
+   * Broadcast start/install progress while status stays CHECKING.
+   * Reuses pullProgress so existing readiness UI can show phase + optional %.
+   * Skips no-op duplicates and never overrides an in-flight image pull.
+   */
+  updateStartProgress(progress: ImagePullProgress): void {
+    if (this._readiness.status === 'PULLING_IMAGE') {
+      return
+    }
+    const prev = this._readiness.pullProgress
+    if (
+      this._readiness.status === 'CHECKING' &&
+      prev?.status === progress.status &&
+      prev?.percent === progress.percent
+    ) {
+      return
+    }
+    this.setReadiness({
+      status: 'CHECKING',
+      message: progress.status,
+      pullProgress: progress,
+    })
+  }
+
   /** Update readiness state and broadcast change via SSE. */
   private setReadiness(readiness: RuntimeReadiness): void {
     this._readiness = readiness

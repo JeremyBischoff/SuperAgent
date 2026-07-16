@@ -1167,6 +1167,45 @@ describe('containerManager.markRuntimeUnavailable', () => {
   })
 })
 
+describe('containerManager.updateStartProgress', () => {
+  it('keeps CHECKING and stores pullProgress', () => {
+    ;(containerManager as any)._readiness = {
+      status: 'CHECKING',
+      message: 'Starting apple-container runtime...',
+      pullProgress: null,
+    }
+
+    containerManager.updateStartProgress({
+      status: 'Downloading macOS Container installer...',
+      percent: 40,
+      completedLayers: 0,
+      totalLayers: 0,
+    })
+
+    const readiness = containerManager.getReadiness()
+    expect(readiness.status).toBe('CHECKING')
+    expect(readiness.pullProgress?.percent).toBe(40)
+    expect(readiness.message).toMatch(/Downloading/)
+  })
+
+  it('does NOT override PULLING_IMAGE', () => {
+    ;(containerManager as any)._readiness = {
+      status: 'PULLING_IMAGE',
+      message: 'Pulling...',
+      pullProgress: { status: 'layer', percent: 10, completedLayers: 1, totalLayers: 3 },
+    }
+
+    containerManager.updateStartProgress({
+      status: 'Downloading...',
+      percent: 50,
+      completedLayers: 0,
+      totalLayers: 0,
+    })
+
+    expect(containerManager.getReadiness().pullProgress?.percent).toBe(10)
+  })
+})
+
 // ============================================================================
 // stopAll — timeout and error isolation
 // ============================================================================

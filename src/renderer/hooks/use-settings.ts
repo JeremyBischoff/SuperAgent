@@ -193,6 +193,12 @@ export function useStartRunner() {
       const data = await res.json()
 
       if (!res.ok) {
+        if (Array.isArray(data?.runnerAvailability)) {
+          queryClient.setQueryData(['settings'], (old: unknown) => {
+            if (!old || typeof old !== 'object') return old
+            return { ...old, runnerAvailability: data.runnerAvailability }
+          })
+        }
         if (data?.setupError) {
           throw new RunnerSetupFailedError(data.setupError)
         }

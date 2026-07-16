@@ -13,9 +13,12 @@ const mockCheckCommandAvailable = vi.fn()
 const mockExecWithPath = vi.fn()
 vi.mock('./base-container-client', () => ({
   BaseContainerClient: class {
-    config: unknown
-    constructor(config: unknown) {
+    config: { agentId: string }
+    constructor(config: { agentId: string }) {
       this.config = config
+    }
+    getContainerName() {
+      return `superagent-${this.config.agentId}`
     }
   },
   checkCommandAvailable: (...args: unknown[]) => mockCheckCommandAvailable(...args),
@@ -41,6 +44,25 @@ import {
   ensureAppleContainerReady,
   resetAppleContainerClientForTests,
 } from './apple-container-client'
+
+describe('AppleContainerClient.getInfoFromRuntime', () => {
+  it('treats status.state=running as running (Apple Container 1.x inspect shape)', async () => {
+    mockExecWithPath.mockResolvedValue({
+      stdout: JSON.stringify({
+        status: { state: 'running', networks: [] },
+        configuration: {
+          publishedPorts: [{ containerPort: 3000, hostPort: 5001, proto: 'tcp' }],
+        },
+      }),
+    })
+
+    const client = new AppleContainerClient({ agentId: 'abc123' })
+    await expect(client.getInfoFromRuntime()).resolves.toEqual({
+      status: 'running',
+      port: 5001,
+    })
+  })
+})
 
 describe('AppleContainerClient.isEligible', () => {
   const originalPlatform = process.platform
@@ -107,33 +129,69 @@ describe('ensureAppleContainerReady', () => {
     const fetchSpy = vi.fn()
     globalThis.fetch = fetchSpy as unknown as typeof fetch
 
-    await ensureAppleContainerReady()
+    await ensureAppleContainerReady(undefined, { allowInstall: true })
 
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(mockRunWithAdminPrivileges).not.toHaveBeenCalled()
     expect(mockExecWithPath).toHaveBeenCalledWith('container system start --enable-kernel-install')
   })
 
-  it('first-install: download, verify, elevate, start', async () => {
+  it('refuses first-install without allowInstall', async () => {
+    mockCheckCommandAvailable.mockResolvedValue(false)
+
+    await expect(ensureAppleContainerReady()).rejects.toThrow(/Click Install/i)
+    expect(mockRunWithAdminPrivileges).not.toHaveBeenCalled()
+  })
+
+  it('first-install: download, verify, elevate with rehash, start', async () => {
     mockCheckCommandAvailable.mockResolvedValue(false)
     appleContainerProvisionIO.downloadToFile = vi.fn().mockResolvedValue(undefined)
     appleContainerProvisionIO.hashFileSha256 = vi.fn().mockResolvedValue(APPLE_CONTAINER_PKG_SHA256)
     mockRunWithAdminPrivileges.mockResolvedValue(undefined)
     mockExecWithPath.mockResolvedValue({ stdout: '', stderr: '' })
 
-    await ensureAppleContainerReady()
+    await ensureAppleContainerReady(undefined, { allowInstall: true })
 
     expect(appleContainerProvisionIO.downloadToFile).toHaveBeenCalledOnce()
     expect(mockRunWithAdminPrivileges).toHaveBeenCalledOnce()
-    expect(mockRunWithAdminPrivileges.mock.calls[0]?.[0]).toMatch(/^installer -pkg '.*' -target \/$/)
+    const elevateCmd = mockRunWithAdminPrivileges.mock.calls[0]?.[0] as string
+    expect(elevateCmd).toContain('/usr/bin/mktemp')
+    expect(elevateCmd).toContain('trap ')
+    expect(elevateCmd).toContain('/usr/bin/shasum -a 256')
+    expect(elevateCmd).toContain('/usr/sbin/installer -pkg')
+    expect(elevateCmd).toContain(APPLE_CONTAINER_PKG_SHA256)
     expect(mockExecWithPath).toHaveBeenCalledWith('container system start --enable-kernel-install')
+  })
+
+  it('reports download percent then phase labels (no fake overall %)', async () => {
+    mockCheckCommandAvailable.mockResolvedValue(false)
+    appleContainerProvisionIO.downloadToFile = vi.fn(
+      async (_url: string, _dest: string, onBytes?: (downloaded: number, total: number | null) => void) => {
+        onBytes?.(50, 100)
+        onBytes?.(100, 100)
+      },
+    )
+    appleContainerProvisionIO.hashFileSha256 = vi.fn().mockResolvedValue(APPLE_CONTAINER_PKG_SHA256)
+    mockRunWithAdminPrivileges.mockResolvedValue(undefined)
+    mockExecWithPath.mockResolvedValue({ stdout: '', stderr: '' })
+
+    const events: Array<{ status: string; percent: number | null }> = []
+    await ensureAppleContainerReady((p) => events.push(p), { allowInstall: true })
+
+    expect(events.some((e) => e.status.includes('Downloading') && e.percent === 50)).toBe(true)
+    expect(events.some((e) => e.status.includes('Verifying') && e.percent === null)).toBe(true)
+    expect(events.some((e) => e.status.includes('password') && e.percent === null)).toBe(true)
+    expect(events.some((e) => e.status.includes('Starting') && e.percent === null)).toBe(true)
+    // After download, never invent a rising overall percent
+    const afterDownload = events.slice(events.findIndex((e) => e.status.includes('Verifying')))
+    expect(afterDownload.every((e) => e.percent === null)).toBe(true)
   })
 
   it('refuses to provision on ineligible machines', async () => {
     Object.defineProperty(process, 'arch', { value: 'x64', writable: true, configurable: true })
     resetAppleContainerClientForTests()
 
-    await expect(ensureAppleContainerReady()).rejects.toThrow(/Apple silicon|macOS 26/i)
+    await expect(ensureAppleContainerReady(undefined, { allowInstall: true })).rejects.toThrow(/Apple silicon|macOS 26/i)
     expect(mockRunWithAdminPrivileges).not.toHaveBeenCalled()
   })
 
@@ -148,10 +206,11 @@ describe('ensureAppleContainerReady', () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
+      headers: { get: () => null },
       body: badBody,
     }) as unknown as typeof fetch
 
-    await expect(ensureAppleContainerReady()).rejects.toThrow(/integrity check/i)
+    await expect(ensureAppleContainerReady(undefined, { allowInstall: true })).rejects.toThrow(/integrity check/i)
     expect(mockRunWithAdminPrivileges).not.toHaveBeenCalled()
   })
 
@@ -161,7 +220,7 @@ describe('ensureAppleContainerReady', () => {
     appleContainerProvisionIO.hashFileSha256 = vi.fn().mockResolvedValue(APPLE_CONTAINER_PKG_SHA256)
     mockRunWithAdminPrivileges.mockRejectedValue(new Error('User canceled. (-128)'))
 
-    await expect(ensureAppleContainerReady()).rejects.toThrow(/cancelled|canceled/i)
+    await expect(ensureAppleContainerReady(undefined, { allowInstall: true })).rejects.toThrow(/cancelled|canceled/i)
     expect(mockRunWithAdminPrivileges.mock.calls[0]?.[0]).not.toContain('http')
   })
 
@@ -176,8 +235,8 @@ describe('ensureAppleContainerReady', () => {
     })
     mockExecWithPath.mockResolvedValue({ stdout: '', stderr: '' })
 
-    const p1 = ensureAppleContainerReady()
-    const p2 = ensureAppleContainerReady()
+    const p1 = ensureAppleContainerReady(undefined, { allowInstall: true })
+    const p2 = ensureAppleContainerReady(undefined, { allowInstall: true })
     expect(availableCalls).toBe(1)
 
     resolveAvailable?.(true)

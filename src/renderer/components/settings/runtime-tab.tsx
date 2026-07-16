@@ -19,8 +19,9 @@ import {
 } from '@renderer/components/ui/select'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { useSettings, useUpdateSettings, useStartRunner, useRestartRunner, useRefreshAvailability } from '@renderer/hooks/use-settings'
-import { AlertCircle, AlertTriangle, Play, Loader2, RefreshCw, Plus, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Play, Download, Loader2, RefreshCw, Plus, X } from 'lucide-react'
 import { RunnerSetupErrorPanel, getRunnerSetupPayload } from '@renderer/components/settings/runner-setup-error-panel'
+import { RuntimeProvisionProgress } from '@renderer/components/runtime/runtime-provision-progress'
 import { DEFAULT_LIMA_VM_MEMORY, VALID_LIMA_VM_MEMORY_OPTIONS } from '@shared/lib/container/types'
 import { assessVmMemory } from '@shared/lib/container/vm-memory'
 import { findReservedEnvVarKeys } from '@shared/lib/container/reserved-env-vars'
@@ -186,28 +187,29 @@ export function RuntimeTab() {
     }))
   }, [settings?.runnerAvailability])
 
-  const handleStartRunner = async (runner: string) => {
-    try {
-      await startRunner.mutateAsync(runner)
-    } catch (error) {
-      console.error('Failed to start runner:', error)
-    }
-  }
-
-  // Initialize form values when settings load
+  // Sync each persisted field from its primitive value so availability-only
+  // settings refetches do not reset an in-progress dropdown selection.
   useEffect(() => {
-    if (settings) {
-      setContainerRunner(settings.container.containerRunner)
-      setAgentImage(settings.container.agentImage)
-      setCpuLimit(settings.container.resourceLimits.cpu.toString())
-      setMemoryLimit(settings.container.resourceLimits.memory)
-      if (!updateSettings.isPending) {
-        setCustomEnvVarsDraft(settings.customEnvVars ?? {})
-      }
-      setHasChanges(false)
-      setAutoSleepMinutes(null)
-    }
-  }, [settings])
+    if (!settings) return
+    setContainerRunner(settings.container.containerRunner)
+  }, [settings?.container.containerRunner])
+
+  useEffect(() => {
+    if (!settings) return
+    setAgentImage(settings.container.agentImage)
+    setCpuLimit(settings.container.resourceLimits.cpu.toString())
+    setMemoryLimit(settings.container.resourceLimits.memory)
+    setAutoSleepMinutes(null)
+  }, [
+    settings?.container.agentImage,
+    settings?.container.resourceLimits.cpu,
+    settings?.container.resourceLimits.memory,
+  ])
+
+  useEffect(() => {
+    if (!settings || updateSettings.isPending) return
+    setCustomEnvVarsDraft(settings.customEnvVars ?? {})
+  }, [settings?.customEnvVars, updateSettings.isPending])
 
   // Initialize runtime settings form when runner changes or settings load
   useEffect(() => {
@@ -219,11 +221,11 @@ export function RuntimeTab() {
       form[field.key] = saved[field.key] || field.defaultValue
     }
     setRuntimeSettingsForm(form)
-  }, [containerRunner, settings])
+  }, [containerRunner, settings?.container.runtimeSettings])
 
   // Check for changes (main settings only — runtime settings have their own save)
   useEffect(() => {
-    if (!settings) return
+    if (!settings || !containerRunner) return
 
     const changed =
       containerRunner !== settings.container.containerRunner ||
@@ -238,6 +240,16 @@ export function RuntimeTab() {
   const trimmedAgentImage = agentImage.trim()
   const agentImageMissing = !agentImageLocked && trimmedAgentImage.length === 0
   const isLatestAgentImage = trimmedAgentImage === latestAgentImage
+
+  const handleStartRunner = async (runner: string) => {
+    startRunner.reset()
+    try {
+      await startRunner.mutateAsync(runner)
+      setContainerRunner(runner)
+    } catch (error) {
+      console.error('Failed to start runner:', error)
+    }
+  }
 
   const handleSave = async () => {
     if (agentImageMissing) return
@@ -362,6 +374,13 @@ export function RuntimeTab() {
   const runtimeSaveBlocked = hasRunningAgents
   const isRestarting = restartRunner.isPending || updateSettings.isPending
 
+  // Each surface owns a useStartRunner instance — a cancel here can linger after a
+  // later success in the setup dialog. Drop the error once that runner is available.
+  const startFailedRunner = startRunner.variables
+  const startErrorStale =
+    !!startFailedRunner && !!runnerAvailabilityMap.get(startFailedRunner)?.available
+  const startError = startErrorStale ? null : startRunner.error
+
   return (
     <div className="space-y-6">
       {/* No runners available warning */}
@@ -385,8 +404,10 @@ export function RuntimeTab() {
                     >
                       {startRunner.isPending ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
+                      ) : r.installed ? (
                         <Play className="h-4 w-4 mr-2" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
                       )}
                       {r.installed ? 'Start' : 'Install'}{' '}
                       {RUNNER_LABELS[r.runner] || r.runner.charAt(0).toUpperCase() + r.runner.slice(1)}
@@ -401,21 +422,23 @@ export function RuntimeTab() {
         </Alert>
       )}
 
-      {/* Image pull progress */}
-      {settings?.runtimeReadiness?.status === 'PULLING_IMAGE' && (
+      {/* Image pull / runtime install progress */}
+      {(settings?.runtimeReadiness?.status === 'PULLING_IMAGE' ||
+        (settings?.runtimeReadiness?.status === 'CHECKING' && settings.runtimeReadiness.pullProgress)) && (
         <Alert>
           <Loader2 className="h-4 w-4 animate-spin" />
-          <AlertTitle>Pulling Agent Image</AlertTitle>
+          <AlertTitle>
+            {settings.runtimeReadiness.status === 'PULLING_IMAGE' ? 'Pulling Agent Image' : 'Setting Up Runtime'}
+          </AlertTitle>
           <AlertDescription className="space-y-2">
-            <p>{settings.runtimeReadiness.pullProgress?.status || 'Downloading...'}</p>
-            {settings.runtimeReadiness.pullProgress?.percent != null && (
-              <div className="mt-2 h-2 w-full bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${settings.runtimeReadiness.pullProgress.percent}%` }}
-                />
-              </div>
-            )}
+            <RuntimeProvisionProgress
+              progress={
+                settings.runtimeReadiness.pullProgress ?? {
+                  status: settings.runtimeReadiness.message || 'Working...',
+                  percent: null,
+                }
+              }
+            />
           </AlertDescription>
         </Alert>
       )}
@@ -433,13 +456,13 @@ export function RuntimeTab() {
         <div className="flex items-start gap-2 p-3 text-sm bg-yellow-500/10 border border-yellow-500/20 rounded-md">
           <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
           <p className="text-yellow-700 dark:text-yellow-400">
-            Some settings cannot be changed while agents are running. Stop all agents to modify container runner or resource limits.
+            Some settings cannot be changed while agents are running. Stop all agents to modify container runtime or resource limits.
           </p>
         </div>
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="container-runner">Container Runner</Label>
+        <Label htmlFor="container-runner">Container Runtime</Label>
         <div className="flex gap-2">
           <Select
             value={containerRunner}
@@ -447,7 +470,7 @@ export function RuntimeTab() {
             disabled={isLoading || hasRunningAgents}
           >
             <SelectTrigger id="container-runner" className={`flex-1 ${hasRunningAgents ? 'bg-muted' : ''}`}>
-              <SelectValue placeholder="Select a container runner" />
+              <SelectValue placeholder="Select a container runtime" />
             </SelectTrigger>
             <SelectContent>
               {containerRunners.map((runner) => {
@@ -494,8 +517,10 @@ export function RuntimeTab() {
             >
               {startRunner.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
+              ) : runnerAvailabilityMap.get(containerRunner)?.installed ? (
                 <Play className="h-4 w-4" />
+              ) : (
+                <Download className="h-4 w-4" />
               )}
             </Button>
           )}
@@ -523,16 +548,16 @@ export function RuntimeTab() {
               Restarting {RUNNER_LABELS[containerRunner] || containerRunner}...
             </span>
           )}
-          {startRunner.error && getRunnerSetupPayload(startRunner.error) ? (
+          {startError && getRunnerSetupPayload(startError) ? (
             <div className="mt-2">
-              <RunnerSetupErrorPanel error={startRunner.error} />
+              <RunnerSetupErrorPanel error={startError} />
             </div>
-          ) : startRunner.error ? (
+          ) : startError ? (
             <span className="text-destructive block mt-1">
-              {startRunner.error.message}
+              {startError.message}
             </span>
           ) : null}
-          {startRunner.isSuccess && startRunner.data?.message && (
+          {startRunner.isSuccess && startRunner.data?.message && !startError && (
             <span className="text-green-600 dark:text-green-400 block mt-1">
               {startRunner.data.message}
             </span>

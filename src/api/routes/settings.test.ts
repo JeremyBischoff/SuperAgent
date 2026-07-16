@@ -7,6 +7,7 @@ import { Hono } from 'hono'
 
 const mockGetSettings = vi.fn()
 const mockUpdateSettings = vi.fn()
+const mockMutateSettings = vi.fn()
 const mockClearSettingsCache = vi.fn()
 const mockGetAnthropicApiKeyStatus = vi.fn()
 const mockGetComposioApiKeyStatus = vi.fn()
@@ -50,6 +51,7 @@ vi.mock('@shared/lib/config/settings', () => ({
   // map it to the same seeded settings the tests already provide.
   loadSettingsStrict: (...args: unknown[]) => mockGetSettings(...args),
   updateSettings: (...args: unknown[]) => mockUpdateSettings(...args),
+  mutateSettings: (...args: unknown[]) => mockMutateSettings(...args),
   clearSettingsCache: (...args: unknown[]) => mockClearSettingsCache(...args),
   getAnthropicApiKeyStatus: (...args: unknown[]) => mockGetAnthropicApiKeyStatus(...args),
   getComposioApiKeyStatus: (...args: unknown[]) => mockGetComposioApiKeyStatus(...args),
@@ -73,6 +75,7 @@ const mockEnsureImageReady = vi.fn()
 const mockGetReadiness = vi.fn()
 const mockResetReadiness = vi.fn()
 const mockMarkRuntimeUnavailable = vi.fn()
+const mockUpdateStartProgress = vi.fn()
 
 vi.mock('@shared/lib/container/container-manager', () => ({
   containerManager: {
@@ -83,6 +86,7 @@ vi.mock('@shared/lib/container/container-manager', () => ({
     getReadiness: (...args: unknown[]) => mockGetReadiness(...args),
     resetReadiness: (...args: unknown[]) => mockResetReadiness(...args),
     markRuntimeUnavailable: (...args: unknown[]) => mockMarkRuntimeUnavailable(...args),
+    updateStartProgress: (...args: unknown[]) => mockUpdateStartProgress(...args),
     stopAll: vi.fn(),
   },
 }))
@@ -95,6 +99,8 @@ vi.mock('@shared/lib/container/client-factory', () => ({
   checkAllRunnersAvailability: (...args: unknown[]) => mockCheckAllRunnersAvailability(...args),
   refreshRunnerAvailability: (...args: unknown[]) => mockRefreshRunnerAvailability(...args),
   startRunner: (...args: unknown[]) => mockStartRunner(...args),
+  restartRunner: (...args: unknown[]) => mockStartRunner(...args),
+  getRunnerDisplayName: (runner: string) => runner,
   getContainerClientClass: (runner: string) => ({
     supportsCustomAgentImage: runner !== 'lambda-microvm',
   }),
@@ -221,6 +227,12 @@ function defaultSettings() {
 
 function setupDefaults() {
   mockGetSettings.mockReturnValue(defaultSettings())
+  mockMutateSettings.mockImplementation((mutator: (s: ReturnType<typeof defaultSettings>) => void) => {
+    const s = mockGetSettings()
+    mutator(s)
+    mockGetSettings.mockReturnValue(s)
+    return s
+  })
   mockHasRunningAgents.mockReturnValue(false)
   mockGetRunningAgentIds.mockResolvedValue([])
   mockCheckAllRunnersAvailability.mockResolvedValue([])
@@ -1910,6 +1922,25 @@ describe('settings route', () => {
         'Failed to start Docker Desktop. Is it installed?',
       )
       expect(mockRefreshRunnerAvailability).toHaveBeenCalled()
+    })
+
+    it('on success persists containerRunner', async () => {
+      vi.useFakeTimers()
+      mockStartRunner.mockResolvedValue({ success: true, message: 'ok' })
+      mockRefreshRunnerAvailability.mockResolvedValue([])
+
+      const pending = app.request('http://localhost/api/settings/start-runner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runner: 'podman' }),
+      })
+      await vi.advanceTimersByTimeAsync(2000)
+      const res = await pending
+      vi.useRealTimers()
+
+      expect(res.status).toBe(200)
+      expect(mockMutateSettings).toHaveBeenCalledOnce()
+      expect(mockGetSettings().container.containerRunner).toBe('podman')
     })
   })
 })

@@ -15,6 +15,7 @@ import {
   getSettings,
   loadSettingsStrict,
   updateSettings,
+  mutateSettings,
   clearSettingsCache,
   getBrowserbaseApiKeyStatus,
   getComposioApiKeyStatus,
@@ -42,7 +43,7 @@ import {
   resolveEffectiveWebVendor,
 } from '@shared/lib/web-provider'
 import { containerManager } from '@shared/lib/container/container-manager'
-import { checkAllRunnersAvailability, refreshRunnerAvailability, startRunner, restartRunner, getContainerClientClass, SUPPORTED_RUNNERS, type ContainerRunner } from '@shared/lib/container/client-factory'
+import { checkAllRunnersAvailability, refreshRunnerAvailability, startRunner, restartRunner, getContainerClientClass, getRunnerDisplayName, SUPPORTED_RUNNERS, type ContainerRunner } from '@shared/lib/container/client-factory'
 import { VALID_LIMA_VM_MEMORY_OPTIONS, EFFORT_LEVELS } from '@shared/lib/container/types'
 import { assessVmMemory } from '@shared/lib/container/vm-memory'
 import { customEnvVarsSchema } from '@shared/lib/container/reserved-env-vars'
@@ -645,11 +646,25 @@ settings.post('/start-runner', async (c) => {
     }
 
     // Immediately broadcast CHECKING state so the frontend shows the starting banner
-    containerManager.resetReadiness(`Starting ${runner} runtime...`)
+    containerManager.resetReadiness(`Starting ${getRunnerDisplayName(runner)} runtime...`)
 
-    const result = await startRunner(runner)
+    const result = await startRunner(
+      runner,
+      (progress) => {
+        containerManager.updateStartProgress(progress)
+      },
+      { allowInstall: true },
+    )
 
     if (result.success) {
+      // Make the started/installed runner the configured one (dropdown was snapping back).
+      if (!containerManager.hasRunningAgents() && getSettings().container.containerRunner !== runner) {
+        mutateSettings((s) => {
+          s.container.containerRunner = runner
+        })
+        containerManager.clearClients()
+      }
+
       // Wait a bit for the runtime to start, then refresh availability (clears cache first)
       await new Promise((resolve) => setTimeout(resolve, 2000))
       const runnerAvailability = await refreshRunnerAvailability()
@@ -665,13 +680,20 @@ settings.post('/start-runner', async (c) => {
       })
     }
 
-    // Failure: clear CHECKING and return fresh availability (install may have
-    // succeeded even when start failed — UI must not keep "Not installed").
-    const runnerAvailability = await refreshRunnerAvailability()
+    // Failure: clear CHECKING first so a hung availability probe cannot wedge the UI.
     containerManager.markRuntimeUnavailable(result.message)
+    let runnerAvailability: Awaited<ReturnType<typeof refreshRunnerAvailability>> = []
+    try {
+      runnerAvailability = await refreshRunnerAvailability()
+    } catch (refreshError) {
+      console.error('Failed to refresh runner availability after start failure:', refreshError)
+    }
     return c.json({ ...result, runnerAvailability }, 400)
   } catch (error) {
     console.error('Failed to start runner:', error)
+    containerManager.markRuntimeUnavailable(
+      error instanceof Error ? error.message : 'Failed to start runner',
+    )
     return c.json({ error: 'Failed to start runner' }, 500)
   }
 })
@@ -688,7 +710,7 @@ settings.post('/restart-runner', async (c) => {
 
     // Immediately broadcast CHECKING state so the frontend blocks agent creation
     // and shows the "restarting" banner before the actual restart begins
-    containerManager.resetReadiness(`Restarting ${runner} runtime...`)
+    containerManager.resetReadiness(`Restarting ${getRunnerDisplayName(runner)} runtime...`)
 
     const result = await restartRunner(runner)
 

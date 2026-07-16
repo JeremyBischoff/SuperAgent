@@ -190,12 +190,18 @@ describe('startRunner apple-container', () => {
     mockEnsureAppleContainerReady.mockResolvedValue(undefined)
   })
 
-  it('delegates to ensureAppleContainerReady', async () => {
-    const result = await startRunner('apple-container')
+  it('delegates to ensureAppleContainerReady with allowInstall', async () => {
+    const result = await startRunner('apple-container', undefined, { allowInstall: true })
 
-    expect(mockEnsureAppleContainerReady).toHaveBeenCalledOnce()
+    expect(mockEnsureAppleContainerReady).toHaveBeenCalledWith(undefined, { allowInstall: true })
     expect(result.success).toBe(true)
     expect(result.message).toMatch(/running/i)
+  })
+
+  it('auto-start path does not allow install', async () => {
+    await startRunner('apple-container')
+
+    expect(mockEnsureAppleContainerReady).toHaveBeenCalledWith(undefined, { allowInstall: false })
   })
 
   it('returns ensure failure message', async () => {
@@ -203,7 +209,7 @@ describe('startRunner apple-container', () => {
       new Error('Administrator password prompt was cancelled.'),
     )
 
-    const result = await startRunner('apple-container')
+    const result = await startRunner('apple-container', undefined, { allowInstall: true })
 
     expect(result.success).toBe(false)
     expect(result.message).toMatch(/cancelled/i)
